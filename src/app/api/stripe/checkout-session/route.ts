@@ -43,6 +43,7 @@ export async function POST(req: NextRequest) {
     const session = await stripe.checkout.sessions.create({
       mode: isSubscription ? "subscription" : "payment",
       line_items: [{ price: priceId, quantity: 1 }],
+      allow_promotion_codes: true,
       customer: billingProfile?.stripe_customer_id || undefined,
       customer_email: billingProfile?.stripe_customer_id ? undefined : user.email,
       client_reference_id: user.userId,
@@ -60,7 +61,7 @@ export async function POST(req: NextRequest) {
           }
         : undefined,
       success_url: `${siteUrl}/subscribe?checkout=success`,
-      cancel_url: `${siteUrl}/subscribe?checkout=cancel`,
+      cancel_url: `${siteUrl}/subscribe?checkout=failed`,
     });
 
     return NextResponse.json({ url: session.url });

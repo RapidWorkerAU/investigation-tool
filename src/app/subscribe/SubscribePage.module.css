@@ -1,151 +1,251 @@
 .page {
+  width: 100vw;
   min-height: 100dvh;
-  background: linear-gradient(135deg, #eff4fb 0%, #f8fbff 55%, #edf3ff 100%);
-  display: grid;
-  place-items: center;
-  padding: 28px;
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+  background: #eff3f8;
 }
 
 .shell {
-  width: min(1180px, 100%);
+  min-height: 100dvh;
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr);
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 24px 70px rgba(15, 32, 67, 0.14);
-  overflow: hidden;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 
 .panel {
-  padding: 44px 44px 40px;
   display: grid;
-  align-content: start;
-  gap: 22px;
+  align-content: center;
+  gap: 8px;
+  padding: 28px 48px;
+  background: linear-gradient(180deg, #f9fbfd 0%, #f1f5fa 100%);
 }
 
-.eyebrow {
-  margin: 0;
-  font-size: 0.78rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: #6a7788;
+.brandRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brandImage {
+  display: block;
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+}
+
+.brandText {
+  font-size: 1.8rem;
   font-weight: 700;
+  letter-spacing: -0.04em;
+  color: #101827;
 }
 
-.title {
+.copyBlock h1 {
   margin: 0;
-  font-size: clamp(2.4rem, 4vw, 4rem);
-  line-height: 0.98;
+  font-size: clamp(1.8rem, 2vw, 2.25rem);
+  line-height: 1;
   letter-spacing: -0.05em;
-  color: #151b24;
+  color: #111827;
+  font-weight: 600;
 }
 
-.copy {
-  margin: 0;
-  max-width: 760px;
-  color: #5f6b7b;
-  line-height: 1.65;
+.copyBlock p {
+  margin: 6px 0 0;
+  max-width: 580px;
+  color: #667180;
+  font-size: 0.84rem;
+  line-height: 1.38;
 }
 
 .notice {
-  border: 1px solid #7faeff;
-  background: #ffffff;
-  padding: 14px 16px;
-  color: #33517a;
+  display: grid;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(75, 143, 241, 0.48);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow:
+    0 10px 24px rgba(47, 119, 223, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.42);
+  color: #3e4b5b;
+  line-height: 1.6;
 }
 
-.grid {
+.checkoutState {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  justify-items: center;
+  text-align: center;
   gap: 18px;
+  padding: 64px 0 4px;
+}
+
+.checkoutStateIcon {
+  width: 88px;
+  height: 88px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(180deg, #4b8ff1 0%, #2f77df 100%);
+  color: #ffffff;
+  border-radius: 999px;
+  box-shadow:
+    0 18px 30px rgba(47, 119, 223, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.26);
+}
+
+.checkoutStateIcon span {
+  font-size: 2.1rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.checkoutStateIconMuted {
+  background: linear-gradient(180deg, #7d8796 0%, #5b6473 100%);
+  box-shadow:
+    0 18px 30px rgba(48, 56, 68, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+.checkoutStateCopy {
+  max-width: 560px;
+  display: grid;
+  gap: 12px;
+}
+
+.checkoutStateCopy h2 {
+  margin: 0;
+  font-size: 2rem;
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+  color: #111827;
+  font-weight: 600;
+}
+
+.checkoutStateCopy p {
+  margin: 0;
+  color: #607082;
+  line-height: 1.7;
+  font-size: 0.98rem;
+}
+
+.checkoutStateButton {
+  min-width: 240px;
+  min-height: 52px;
+  border: 1px solid rgba(47, 119, 223, 0.42);
+  background: rgba(255, 255, 255, 0.96);
+  color: #2f77df;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow:
+    0 12px 24px rgba(47, 119, 223, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.38);
+}
+
+.checkoutStateButton:hover:not(:disabled) {
+  background: #eef2ff;
+}
+
+.stack {
+  display: grid;
+  gap: 14px;
+  margin-top: 36px;
 }
 
 .tile {
-  border: 1px solid rgba(26, 36, 52, 0.12);
+  border: 0;
+  border-radius: 0;
   background: #ffffff;
-  padding: 22px 20px 20px;
+  padding: 12px 16px 12px;
   display: grid;
-  align-content: start;
-  gap: 14px;
-  box-shadow: 0 12px 24px rgba(18, 31, 55, 0.06);
+  gap: 10px;
+  box-shadow:
+    0 10px 18px rgba(27, 38, 59, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
 .tileFeatured {
-  border-color: #4b8ff1;
-  box-shadow: 0 16px 32px rgba(46, 118, 223, 0.14);
+  background: linear-gradient(90deg, #5369e8 0%, #7288ff 100%);
+  box-shadow:
+    0 14px 28px rgba(67, 94, 217, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.42);
 }
 
 .tileHead {
   display: grid;
-  gap: 6px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: start;
 }
 
 .tileHead h2 {
   margin: 0;
-  font-size: 1.35rem;
+  font-size: 1.05rem;
   color: #151b24;
-}
-
-.tileHead p {
-  margin: 0;
-  color: #6a7788;
-  line-height: 1.55;
+  font-weight: 600;
 }
 
 .price {
-  display: flex;
-  align-items: flex-end;
-  gap: 6px;
-  padding-top: 10px;
-  border-top: 1px solid rgba(26, 36, 52, 0.08);
-}
-
-.price strong {
-  font-size: 2.4rem;
-  line-height: 0.95;
+  font-size: 2rem;
+  line-height: 0.9;
   letter-spacing: -0.04em;
-  color: #151b24;
+  color: #3b55da;
+  font-weight: 700;
 }
 
-.price span {
-  color: #6a7788;
-  padding-bottom: 6px;
+.priceMeta {
+  color: #67748a;
+  font-size: 0.82rem;
+  white-space: nowrap;
 }
 
-.list {
-  margin: 0;
-  padding-left: 18px;
-  display: grid;
-  gap: 8px;
+.tileHead p {
+  margin: 6px 0 0;
   color: #4d5868;
-  line-height: 1.55;
+  font-size: 0.88rem;
+  line-height: 1.32;
+  max-width: 620px;
 }
 
 .actions {
   display: grid;
-  gap: 10px;
+  justify-content: start;
+  padding-top: 2px;
 }
 
 .primaryButton,
 .secondaryButton {
-  min-height: 46px;
+  min-height: 30px;
+  min-width: 112px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0 18px;
+  padding: 0 16px;
   font-weight: 700;
+  font-size: 0.78rem;
   text-decoration: none;
   cursor: pointer;
-  border: 1px solid #4b8ff1;
+  border: 1px solid rgba(86, 111, 220, 0.5);
+  border-radius: 0;
+  box-shadow:
+    0 8px 16px rgba(47, 119, 223, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.38);
 }
 
 .primaryButton {
-  background: linear-gradient(180deg, #4b8ff1 0%, #2e76df 100%);
-  color: #ffffff;
+  background: #ffffff;
+  color: #3b55da;
 }
 
 .secondaryButton {
-  background: #ffffff;
-  color: #2e76df;
+  background: linear-gradient(90deg, #4b8ff1 0%, #2f77df 100%);
+  color: #ffffff;
+}
+
+.secondaryButton:hover:not(:disabled) {
+  filter: brightness(1.03);
+}
+
+.primaryButton:hover:not(:disabled) {
+  background: #eef2ff;
 }
 
 .primaryButton:disabled,
@@ -154,59 +254,117 @@
   cursor: not-allowed;
 }
 
-.aside {
-  position: relative;
-  background: radial-gradient(circle at top left, rgba(91, 161, 255, 0.9), transparent 38%),
-    linear-gradient(180deg, #123d93 0%, #1b5bc8 40%, #2e76df 100%);
+.priceBlock {
+  display: grid;
+  justify-items: end;
+  align-content: start;
+  gap: 4px;
+  min-width: 132px;
+}
+
+.tileFeatured .tileHead h2,
+.tileFeatured .tileHead p,
+.tileFeatured .price,
+.tileFeatured .priceMeta {
   color: #ffffff;
-  padding: 38px 32px;
-  display: grid;
-  align-content: space-between;
 }
 
-.asideBlock {
-  display: grid;
-  gap: 14px;
+.tileFeatured .primaryButton {
+  background: #ffffff;
+  color: #3b55da;
+  border-color: rgba(255, 255, 255, 0.7);
 }
 
-.asideBlock h3 {
-  margin: 0;
-  font-size: 2rem;
-  line-height: 1.02;
-  letter-spacing: -0.04em;
+.tileFeatured .primaryButton:hover:not(:disabled) {
+  background: #f4f7ff;
 }
 
-.asideBlock p {
-  margin: 0;
-  color: rgba(255, 255, 255, 0.84);
-  line-height: 1.7;
+.visualPanel {
+  position: relative;
+  overflow: hidden;
+  min-height: 100dvh;
+  background:
+    radial-gradient(circle at 72% 18%, rgba(131, 180, 255, 0.95) 0, rgba(131, 180, 255, 0.18) 12%, transparent 24%),
+    radial-gradient(circle at 84% 68%, rgba(120, 169, 255, 0.88) 0, rgba(120, 169, 255, 0.1) 11%, transparent 22%),
+    linear-gradient(160deg, #08101c 0%, #05163a 38%, #0b2f7a 64%, #d9e7ff 100%);
 }
 
-.statusCard {
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.12);
-  padding: 18px;
-  display: grid;
-  gap: 8px;
+.visualGlow {
+  position: absolute;
+  inset: -12% -16% -10% 18%;
+  background:
+    radial-gradient(circle at 32% 12%, rgba(71, 127, 239, 0.94), transparent 20%),
+    radial-gradient(circle at 50% 46%, rgba(100, 154, 255, 0.72), transparent 17%),
+    radial-gradient(circle at 66% 78%, rgba(234, 242, 255, 0.9), transparent 14%);
+  filter: blur(28px);
+  opacity: 0.92;
 }
 
-.statusCard strong {
-  font-size: 0.86rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+.visualLines {
+  position: absolute;
+  inset: -10% -8% -10% 28%;
+  background:
+    radial-gradient(ellipse at 18% 14%, transparent 59%, rgba(17, 76, 189, 0.8) 60%, transparent 65%),
+    radial-gradient(ellipse at 34% 26%, transparent 58%, rgba(122, 170, 255, 0.74) 59%, transparent 64%),
+    radial-gradient(ellipse at 48% 48%, transparent 54%, rgba(20, 97, 255, 0.62) 55%, transparent 60%),
+    radial-gradient(ellipse at 62% 74%, transparent 52%, rgba(210, 227, 255, 0.9) 53%, transparent 58%);
+  transform: rotate(12deg) scale(1.3);
 }
 
-.statusCard span {
-  color: rgba(255, 255, 255, 0.9);
+.visualBadge {
+  position: absolute;
+  left: 50%;
+  bottom: 34px;
+  transform: translateX(-50%);
+  width: 90%;
+  max-width: none;
+  padding: 16px 22px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.14);
+  color: rgba(255, 255, 255, 0.88);
+  text-align: center;
   line-height: 1.55;
+  backdrop-filter: blur(18px);
+  box-shadow:
+    0 20px 40px rgba(3, 10, 24, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 
-@media (max-width: 1080px) {
+@media (max-width: 1100px) {
   .shell {
     grid-template-columns: 1fr;
   }
 
-  .grid {
+  .panel {
+    min-height: 100dvh;
+    padding: 28px 24px;
+  }
+
+  .visualPanel {
+    display: none;
+  }
+
+  .tileBody {
     grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .tileHead {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+}
+
+@media (max-width: 640px) {
+  .panel {
+    padding: 30px 18px;
+  }
+
+  .brandText {
+    font-size: 1.45rem;
+  }
+
+  .copyBlock h1 {
+    font-size: 2.2rem;
   }
 }

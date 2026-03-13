@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
@@ -14,6 +15,7 @@ function SubscribePageContent() {
   const [notice, setNotice] = useState<string | null>(null);
   const [processingTrial, setProcessingTrial] = useState(false);
   const [processingPaid, setProcessingPaid] = useState<"pass_30d" | "subscription_monthly" | null>(null);
+  const checkoutState = searchParams.get("checkout");
 
   useEffect(() => {
     const run = async () => {
@@ -34,10 +36,10 @@ function SubscribePageContent() {
           return;
         }
 
-        if (searchParams.get("checkout") === "success") {
-          setNotice("Payment received. Your access is being activated now.");
-        } else if (searchParams.get("checkout") === "cancel") {
-          setNotice("Checkout cancelled. Choose an access type when you are ready.");
+        if (checkoutState === "success") {
+          setNotice(null);
+        } else if (checkoutState === "failed") {
+          setNotice(null);
         }
       } catch (error) {
         setNotice(error instanceof Error ? error.message : "Unable to load access options.");
@@ -47,7 +49,7 @@ function SubscribePageContent() {
     };
 
     void run();
-  }, [router, searchParams, supabase]);
+  }, [checkoutState, router, searchParams, supabase]);
 
   async function startTrial() {
     setProcessingTrial(true);
@@ -117,31 +119,78 @@ function SubscribePageContent() {
     <div className={styles.page}>
       <div className={styles.shell}>
         <section className={styles.panel}>
-          <p className={styles.eyebrow}>Choose access type</p>
-          <h1 className={styles.title}>Select the access model that fits this investigation.</h1>
-          <p className={styles.copy}>
-            Start with a 7 day trial, buy a 30 day investigation pass for one full investigation, or enable ongoing monthly access
-            for unrestricted investigation workflow, collaboration, and export.
-          </p>
+          <div className={styles.brandRow}>
+            <Image
+              src="/images/investigation-tool.png"
+              alt=""
+              aria-hidden="true"
+              width={34}
+              height={34}
+              className={styles.brandImage}
+            />
+            <span className={styles.brandText}>Investigation Tool</span>
+          </div>
 
-          {notice ? <div className={styles.notice}>{notice}</div> : null}
+          <div className={styles.copyBlock}>
+            {checkoutState === "success" ? null : (
+              <>
+                <h1>{checkoutState === "failed" ? "Payment failed." : "Choose your access."}</h1>
+                <p>
+                  {checkoutState === "failed"
+                    ? "We could not complete your payment. Choose an access type and try again when you are ready."
+                    : "Start with a free trial, buy a single 30 day investigation pass, or enable ongoing monthly access for unrestricted incident investigation workflow, mapping, collaboration, and reporting."}
+                </p>
+              </>
+            )}
+          </div>
 
-          <div className={styles.grid}>
+          {checkoutState === "success" ? (
+            <div className={styles.checkoutState}>
+              <div className={styles.checkoutStateIcon} aria-hidden="true">
+                <span>✓</span>
+              </div>
+              <div className={styles.checkoutStateCopy}>
+                <h2>Payment Successful</h2>
+                <p>Your access purchase has been received and your account is being activated now. You can continue to your dashboard and begin working as soon as activation completes.</p>
+              </div>
+              <button type="button" className={styles.checkoutStateButton} onClick={() => router.push("/dashboard")}>
+                Go to dashboard
+              </button>
+            </div>
+          ) : checkoutState === "failed" ? (
+            <div className={styles.checkoutState}>
+              <div className={`${styles.checkoutStateIcon} ${styles.checkoutStateIconMuted}`} aria-hidden="true">
+                <span>!</span>
+              </div>
+              <div className={styles.checkoutStateCopy}>
+                <h2>Payment Failed</h2>
+                <p>Your payment did not complete, so access has not been activated yet.</p>
+                <p>Return to the access options below and try again when you are ready.</p>
+              </div>
+              <button
+                type="button"
+                className={styles.checkoutStateButton}
+                onClick={() => router.replace("/subscribe")}
+              >
+                Back to access options
+              </button>
+            </div>
+          ) : notice ? (
+            <div className={styles.notice}>{notice}</div>
+          ) : null}
+
+          {checkoutState ? null : <div className={styles.stack}>
             <article className={styles.tile}>
               <div className={styles.tileHead}>
-                <h2>7 Day Trial</h2>
-                <p>One map, no export, full editing for 7 days so the user can test the workflow.</p>
+                <div>
+                  <h2>Free Trial</h2>
+                  <p>7 days access to one investigation map with write access and no export.</p>
+                </div>
+                <div className={styles.priceBlock}>
+                  <span className={styles.price}>Free</span>
+                  <span className={styles.priceMeta}>7 day access</span>
+                </div>
               </div>
-              <div className={styles.price}>
-                <strong>Free</strong>
-                <span>for 7 days</span>
-              </div>
-              <ul className={styles.list}>
-                <li>One investigation map</li>
-                <li>Write access during the trial</li>
-                <li>No export</li>
-                <li>Expires automatically after 7 days</li>
-              </ul>
               <div className={styles.actions}>
                 <button type="button" className={styles.secondaryButton} onClick={startTrial} disabled={processingTrial || loading}>
                   {processingTrial ? "Activating..." : "Start free trial"}
@@ -151,19 +200,15 @@ function SubscribePageContent() {
 
             <article className={`${styles.tile} ${styles.tileFeatured}`}>
               <div className={styles.tileHead}>
-                <h2>30 Days Access</h2>
-                <p>One full investigation with write access for 30 days, then read-only retention after expiry.</p>
+                <div>
+                  <h2>30 Day Access</h2>
+                  <p>One new writable map with full investigation access for a single incident window.</p>
+                </div>
+                <div className={styles.priceBlock}>
+                  <span className={styles.price}>$49</span>
+                  <span className={styles.priceMeta}>AUD once-off</span>
+                </div>
               </div>
-              <div className={styles.price}>
-                <strong>$49</strong>
-                <span>AUD once-off</span>
-              </div>
-              <ul className={styles.list}>
-                <li>One new writable map per purchase</li>
-                <li>Export enabled during the access window</li>
-                <li>Old pass maps remain visible as read-only</li>
-                <li>Ideal for one-off investigations</li>
-              </ul>
               <div className={styles.actions}>
                 <button
                   type="button"
@@ -178,19 +223,15 @@ function SubscribePageContent() {
 
             <article className={styles.tile}>
               <div className={styles.tileHead}>
-                <h2>Ongoing Subscription</h2>
-                <p>Full access for teams that need continuous investigation software, collaboration, and reporting.</p>
+                <div>
+                  <h2>Ongoing Subscription</h2>
+                  <p>Unlimited investigation maps with full export, sharing, duplication, and reporting.</p>
+                </div>
+                <div className={styles.priceBlock}>
+                  <span className={styles.price}>$99</span>
+                  <span className={styles.priceMeta}>AUD / month</span>
+                </div>
               </div>
-              <div className={styles.price}>
-                <strong>$99</strong>
-                <span>AUD / month</span>
-              </div>
-              <ul className={styles.list}>
-                <li>Unlimited maps while active</li>
-                <li>Full export, share, duplicate, and editing</li>
-                <li>Read-only restriction if payment fails</li>
-                <li>Best for recurring investigations</li>
-              </ul>
               <div className={styles.actions}>
                 <button
                   type="button"
@@ -202,23 +243,15 @@ function SubscribePageContent() {
                 </button>
               </div>
             </article>
-          </div>
+          </div>}
         </section>
 
-        <aside className={styles.aside} aria-hidden="true">
-          <div className={styles.asideBlock}>
-            <h3>Access controls drive the workflow.</h3>
-            <p>
-              Trial, pass, and subscription access are tracked directly against the account so the app can switch between full access,
-              selection required, and read-only states automatically.
-            </p>
-          </div>
-
-          <div className={styles.statusCard}>
-            <strong>What happens next</strong>
-            <span>Free trial activates immediately in Supabase.</span>
-            <span>Paid access activates from Stripe webhook events.</span>
-            <span>Expired or failed billing moves maps into read-only mode.</span>
+        <aside className={styles.visualPanel} aria-hidden="true">
+          <div className={styles.visualGlow} />
+          <div className={styles.visualLines} />
+          <div className={styles.visualBadge}>
+            Start instantly with a free trial, choose a single investigation pass when you need focused access, or enable ongoing coverage
+            for your team.
           </div>
         </aside>
       </div>
