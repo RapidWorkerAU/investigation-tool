@@ -27,6 +27,6 @@ Minimal scaffold for www.investigationtool.com.au
 - custom 404
 
 ## Notes
-- Canvas is placeholder-only for incident investigation mode (no migrated hses canvas logic yet).
+- Canvas supports the migrated incident investigation mode.
 - Stripe checkout session route is included.
 - Supabase auth wiring is included for login/signup/reset/logout.

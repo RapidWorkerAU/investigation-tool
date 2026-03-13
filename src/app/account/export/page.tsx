@@ -1,6 +1,8 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
+import DashboardShell from "@/components/dashboard/DashboardShell";
+import styles from "@/components/dashboard/DashboardShell.module.css";
 
 export default function ExportPage() {
   const [msg, setMsg] = useState("");
@@ -19,10 +21,20 @@ export default function ExportPage() {
   }
 
   return (
-    <div className="mx-auto max-w-md space-y-3 rounded border bg-white p-4">
-      <h1 className="text-xl font-semibold">Download User Content</h1>
-      <button onClick={download} className="rounded bg-black px-3 py-2 text-white">Download</button>
-      {msg ? <p className="text-sm">{msg}</p> : null}
-    </div>
+    <DashboardShell
+      activeNav="export"
+      eyebrow="Account"
+      title="Download User Content"
+      subtitle="Export your account data without leaving the dashboard shell."
+    >
+      <section className={`${styles.contentCard} ${styles.contentCardCompact}`}>
+        <div className={styles.fieldStack}>
+          <div className={styles.actions}>
+            <button onClick={download} className={styles.button}>Download</button>
+          </div>
+          {msg ? <p className={styles.message}>{msg}</p> : null}
+        </div>
+      </section>
+    </DashboardShell>
   );
 }

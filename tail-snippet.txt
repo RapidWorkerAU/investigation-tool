@@ -1,0 +1,15 @@
+-topbar,
+  .investigation-panel-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .investigation-dashboard-usercard,
+  .investigation-search {
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+
+

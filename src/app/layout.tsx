@@ -1,6 +1,6 @@
-﻿import type { Metadata } from "next";
+import type { Metadata } from "next";
+import HashRedirector from "./HashRedirector";
 import "./globals.css";
-import SiteHeader from "@/components/SiteHeader";
 
 export const metadata: Metadata = {
   title: "Investigation Tool",
@@ -9,10 +9,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en-AU">
-      <body className="bg-slate-50 text-slate-900">
-        <SiteHeader />
-        <main className="mx-auto max-w-6xl px-4 py-6">{children}</main>
+    <html lang="en-AU" data-scroll-behavior="smooth">
+      <body>
+        <HashRedirector />
+        <main className="app-main-shell">{children}</main>
       </body>
     </html>
   );
