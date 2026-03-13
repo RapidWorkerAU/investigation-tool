@@ -1,7 +1,78 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { createSupabaseBrowser } from "@/lib/supabase/client";
+import { accessRequiresSelection, fetchAccessState } from "@/lib/access";
 
 export default function HomePage() {
+  const router = useRouter();
+  const supabase = useMemo(() => createSupabaseBrowser(), []);
+  const [isAuthed, setIsAuthed] = useState(false);
+  const [dashboardLoading, setDashboardLoading] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadSession = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (mounted) {
+        setIsAuthed(Boolean(session));
+      }
+    };
+
+    void loadSession();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAuthed(Boolean(session));
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [supabase]);
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    router.push("/login");
+    router.refresh();
+  }
+
+  async function goToWorkspace() {
+    if (dashboardLoading) return;
+
+    setDashboardLoading(true);
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      setDashboardLoading(false);
+      router.push("/login?returnTo=%2Fdashboard");
+      return;
+    }
+
+    try {
+      const accessState = await fetchAccessState(session.access_token);
+      router.push(accessRequiresSelection(accessState) ? "/subscribe" : "/dashboard");
+      router.refresh();
+    } catch {
+      router.push("/dashboard");
+      router.refresh();
+    } finally {
+      setDashboardLoading(false);
+    }
+  }
+
   return (
     <div className="landing-page">
       <header className="landing-header">
@@ -25,12 +96,37 @@ export default function HomePage() {
           </nav>
 
           <div className="landing-header-actions">
-            <Link href="/login" className="landing-text-link">
-              Sign in
-            </Link>
-            <Link href="/subscribe" className="landing-ghost-button">
-              Start free trial
-            </Link>
+            {isAuthed ? (
+              <>
+                <button
+                  type="button"
+                  className="landing-ghost-button landing-auth-action landing-auth-action--primary"
+                  onClick={() => void goToWorkspace()}
+                  disabled={dashboardLoading}
+                >
+                  <Image src="/icons/account.svg" alt="" aria-hidden="true" width={16} height={16} className="landing-auth-icon" />
+                  {dashboardLoading ? "Checking access..." : "Go to dashboard"}
+                </button>
+                <button
+                  type="button"
+                  className="landing-text-link landing-text-button landing-auth-action landing-auth-action--secondary"
+                  onClick={() => void handleLogout()}
+                  disabled={dashboardLoading}
+                >
+                  <Image src="/icons/logout.svg" alt="" aria-hidden="true" width={16} height={16} className="landing-auth-icon" />
+                  Logout
+                </button>
+              </>
+            ) : (
+              <>
+                <Link href="/login" className="landing-text-link">
+                  Sign in
+                </Link>
+                <Link href="/subscribe" className="landing-ghost-button">
+                  Start free trial
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -80,12 +176,37 @@ export default function HomePage() {
                 </p>
 
                 <div className="landing-hero-actions">
-                  <Link href="/subscribe" className="landing-primary-button">
-                    Start free trial
-                  </Link>
-                  <Link href="/login" className="landing-secondary-button">
-                    Sign in to your workspace
-                  </Link>
+                  {isAuthed ? (
+                    <>
+                      <button
+                        type="button"
+                        className="landing-primary-button landing-auth-action landing-auth-action--primary"
+                        onClick={() => void goToWorkspace()}
+                        disabled={dashboardLoading}
+                      >
+                        <Image src="/icons/account.svg" alt="" aria-hidden="true" width={16} height={16} className="landing-auth-icon" />
+                        {dashboardLoading ? "Checking access..." : "Go to dashboard"}
+                      </button>
+                      <button
+                        type="button"
+                        className="landing-secondary-button landing-secondary-action landing-auth-action landing-auth-action--secondary"
+                        onClick={() => void handleLogout()}
+                        disabled={dashboardLoading}
+                      >
+                        <Image src="/icons/logout.svg" alt="" aria-hidden="true" width={16} height={16} className="landing-auth-icon" />
+                        Logout
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <Link href="/subscribe" className="landing-primary-button">
+                        Start free trial
+                      </Link>
+                      <Link href="/login" className="landing-secondary-button">
+                        Sign in to your workspace
+                      </Link>
+                    </>
+                  )}
                 </div>
 
                 <p className="landing-hero-meta">
@@ -394,4 +515,3 @@ export default function HomePage() {
     </div>
   );
 }
-

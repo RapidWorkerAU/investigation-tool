@@ -13,8 +13,10 @@ function SubscribePageContent() {
   const supabase = useMemo(() => createSupabaseBrowser(), []);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string>("");
   const [processingTrial, setProcessingTrial] = useState(false);
   const [processingPaid, setProcessingPaid] = useState<"pass_30d" | "subscription_monthly" | null>(null);
+  const [routingToWorkspace, setRoutingToWorkspace] = useState(false);
   const checkoutState = searchParams.get("checkout");
 
   useEffect(() => {
@@ -27,6 +29,8 @@ function SubscribePageContent() {
         router.push("/login?returnTo=%2Fsubscribe");
         return;
       }
+
+      setUserEmail(session.user.email || "");
 
       try {
         const state = await fetchAccessState(session.access_token);
@@ -115,6 +119,33 @@ function SubscribePageContent() {
     window.location.href = data.url;
   }
 
+  async function goToWorkspace() {
+    if (routingToWorkspace) return;
+
+    setRoutingToWorkspace(true);
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      setRoutingToWorkspace(false);
+      router.push("/login?returnTo=%2Fdashboard");
+      return;
+    }
+
+    try {
+      const accessState = await fetchAccessState(session.access_token);
+      router.push(accessRequiresSelection(accessState) ? "/subscribe" : "/dashboard");
+      router.refresh();
+    } catch {
+      router.push("/dashboard");
+      router.refresh();
+    } finally {
+      setRoutingToWorkspace(false);
+    }
+  }
+
   return (
     <div className={styles.page}>
       <div className={styles.shell}>
@@ -134,7 +165,13 @@ function SubscribePageContent() {
           <div className={styles.copyBlock}>
             {checkoutState === "success" ? null : (
               <>
-                <h1>{checkoutState === "failed" ? "Payment failed." : "Choose your access."}</h1>
+                <h1>
+                  {checkoutState === "failed"
+                    ? "Payment failed."
+                    : userEmail
+                      ? `Choose your access for ${userEmail}.`
+                      : "Choose your access."}
+                </h1>
                 <p>
                   {checkoutState === "failed"
                     ? "We could not complete your payment. Choose an access type and try again when you are ready."
@@ -153,8 +190,8 @@ function SubscribePageContent() {
                 <h2>Payment Successful</h2>
                 <p>Your access purchase has been received and your account is being activated now. You can continue to your dashboard and begin working as soon as activation completes.</p>
               </div>
-              <button type="button" className={styles.checkoutStateButton} onClick={() => router.push("/dashboard")}>
-                Go to dashboard
+              <button type="button" className={styles.checkoutStateButton} onClick={() => void goToWorkspace()} disabled={routingToWorkspace}>
+                {routingToWorkspace ? "Checking access..." : "Go to dashboard"}
               </button>
             </div>
           ) : checkoutState === "failed" ? (

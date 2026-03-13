@@ -5949,6 +5949,14 @@ body.mobile-menu-open {
   font-size: 0.92rem;
 }
 
+.landing-text-button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+
 .landing-header-actions {
   display: flex;
   align-items: center;
@@ -5975,6 +5983,76 @@ body.mobile-menu-open {
 .landing-secondary-button {
   background: rgba(255, 255, 255, 0.94);
   color: #202733;
+}
+
+.landing-secondary-action {
+  cursor: pointer;
+}
+
+.landing-auth-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  padding: 0 22px;
+  width: 220px;
+  min-width: 220px;
+  gap: 10px;
+  white-space: nowrap;
+  flex-wrap: nowrap;
+  text-decoration: none;
+  font-weight: 700;
+  box-shadow:
+    0 10px 20px rgba(22, 28, 36, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.26);
+}
+
+.landing-auth-action--primary {
+  background: linear-gradient(180deg, #7b4dff 0%, #5b2fe0 100%);
+  border-color: #5b2fe0;
+  color: #ffffff;
+}
+
+.landing-auth-action--secondary {
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(91, 47, 224, 0.44);
+  color: #5b2fe0;
+}
+
+.landing-auth-action--secondary:hover {
+  background: #f4efff;
+}
+
+.landing-auth-icon {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.landing-auth-action--primary .landing-auth-icon {
+  filter: brightness(0) invert(1);
+}
+
+.landing-auth-action--secondary .landing-auth-icon {
+  filter: brightness(0) saturate(100%) invert(22%) sepia(89%) saturate(3122%) hue-rotate(253deg) brightness(93%) contrast(94%);
+}
+
+.landing-header-actions .landing-auth-action,
+.landing-hero-actions .landing-auth-action {
+  justify-content: center;
+}
+
+.landing-header-actions .landing-auth-action--primary,
+.landing-hero-actions .landing-auth-action--primary {
+  background: linear-gradient(180deg, #7b4dff 0%, #5b2fe0 100%);
+  border-color: #5b2fe0;
+  color: #ffffff;
+}
+
+.landing-header-actions .landing-auth-action--secondary,
+.landing-hero-actions .landing-auth-action--secondary {
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(91, 47, 224, 0.44);
+  color: #5b2fe0;
 }
 
 .landing-primary-button {
