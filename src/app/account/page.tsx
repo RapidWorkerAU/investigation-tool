@@ -1,27 +1,80 @@
-"use client";
+﻿"use client";
 
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import DashboardShell from "@/components/dashboard/DashboardShell";
 import styles from "@/components/dashboard/DashboardShell.module.css";
+import { type BillingAccessState, fetchAccessState } from "@/lib/access";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
 
-type AccountTab = "user-info" | "your-data" | "past-purchases" | "delete-account";
+type AccountSectionId = "user-info" | "my-access" | "delete-account";
 
-const tabs: Array<{ id: AccountTab; label: string }> = [
+const accountTabs: Array<{ id: AccountSectionId; label: string }> = [
   { id: "user-info", label: "User Info" },
-  { id: "your-data", label: "Your Data" },
-  { id: "past-purchases", label: "Past Purchases" },
+  { id: "my-access", label: "My Access" },
   { id: "delete-account", label: "Delete Account" },
 ];
 
+const formatDateTime = (value: string | null) =>
+  value
+    ? new Date(value).toLocaleString("en-AU", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "Not available";
+
+const formatAccessType = (value: BillingAccessState["currentAccessType"]) => {
+  switch (value) {
+    case "trial_7d":
+      return "7 Day Trial";
+    case "pass_30d":
+      return "30 Day Access";
+    case "subscription_monthly":
+      return "Ongoing Subscription";
+    default:
+      return "No access selected";
+  }
+};
+
+const formatAccessStatus = (value: BillingAccessState["currentAccessStatus"] | null) => {
+  if (!value) return "Unknown";
+  return value
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+};
+
+const getAccessStatusTone = (value: BillingAccessState["currentAccessStatus"] | null) => {
+  switch (value) {
+    case "active":
+      return styles.accessStatusPillGood;
+    case "selection_required":
+    case "checkout_required":
+    case "pending_activation":
+      return styles.accessStatusPillWarn;
+    case "expired":
+    case "payment_failed":
+    case "cancelled":
+    default:
+      return styles.accessStatusPillBad;
+  }
+};
+
 export default function AccountPage() {
+  const router = useRouter();
   const supabase = useMemo(() => createSupabaseBrowser(), []);
-  const [activeTab, setActiveTab] = useState<AccountTab>("user-info");
+  const [activeSection, setActiveSection] = useState<AccountSectionId>("user-info");
+  const [userInfoEditing, setUserInfoEditing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [downloading, setDownloading] = useState(false);
   const [message, setMessage] = useState("");
+  const [userInfoMessage, setUserInfoMessage] = useState("");
+  const [userInfoMessageType, setUserInfoMessageType] = useState<"error" | "success" | "">("");
+  const [userInfoErrorField, setUserInfoErrorField] = useState<"password" | "email" | null>(null);
 
   const [fullName, setFullName] = useState("");
   const [username, setUsername] = useState("");
@@ -32,24 +85,37 @@ export default function AccountPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [submitAttempted, setSubmitAttempted] = useState(false);
+  const [initialUserInfo, setInitialUserInfo] = useState({
+    fullName: "",
+    username: "",
+    email: "",
+  });
   const [deleteAcknowledged, setDeleteAcknowledged] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteStatus, setDeleteStatus] = useState<"idle" | "running" | "success" | "error">("idle");
   const [deleteProgress, setDeleteProgress] = useState(0);
   const [deleteProgressText, setDeleteProgressText] = useState("");
-  const passwordProvided = password.length > 0 || confirmPassword.length > 0;
+  const [accessState, setAccessState] = useState<BillingAccessState | null>(null);
+  const [openingBillingPortal, setOpeningBillingPortal] = useState(false);
+  const passwordProvided = password.trim().length > 0 || confirmPassword.trim().length > 0;
   const passwordsMatch = password === confirmPassword;
   const passwordTooShort = password.length > 0 && password.length < 8;
   const confirmPasswordNeedsValue = password.length > 0 && confirmPassword.length === 0;
   const emailsMatch = email.trim() === confirmEmail.trim();
-  const passwordHasError = submitAttempted && passwordProvided && (!passwordsMatch || passwordTooShort);
-  const confirmPasswordHasError = submitAttempted && passwordProvided && (!passwordsMatch || confirmPasswordNeedsValue);
-  const emailHasError = submitAttempted && !emailsMatch;
+  const passwordHasError =
+    (submitAttempted && passwordProvided && (!passwordsMatch || passwordTooShort)) || userInfoErrorField === "password";
+  const confirmPasswordHasError =
+    (submitAttempted && passwordProvided && (!passwordsMatch || confirmPasswordNeedsValue)) || userInfoErrorField === "password";
+  const emailHasError = (submitAttempted && !emailsMatch) || userInfoErrorField === "email";
 
   useEffect(() => {
     const loadUser = async () => {
       setLoading(true);
       setMessage("");
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
       const {
         data: { user },
@@ -79,6 +145,23 @@ export default function AccountPage() {
         }
       }
 
+      const resolvedFullName = profile?.full_name || authFullName;
+      const resolvedEmail = profile?.email || user.email || "";
+      setInitialUserInfo({
+        fullName: resolvedFullName,
+        username: authUsername,
+        email: resolvedEmail,
+      });
+
+      if (session?.access_token) {
+        try {
+          const nextAccessState = await fetchAccessState(session.access_token);
+          setAccessState(nextAccessState);
+        } catch (error) {
+          setMessage(error instanceof Error ? error.message : "Unable to load access details.");
+        }
+      }
+
       setLoading(false);
     };
 
@@ -87,25 +170,35 @@ export default function AccountPage() {
 
   const save = async () => {
     setSubmitAttempted(true);
+    setUserInfoMessage("");
+    setUserInfoMessageType("");
+    setUserInfoErrorField(null);
 
     if (!emailsMatch) {
-      setMessage("Email addresses do not match.");
+      setUserInfoErrorField("email");
+      setUserInfoMessage("Email addresses do not match.");
+      setUserInfoMessageType("error");
       return;
     }
 
     if (password || confirmPassword) {
       if (password !== confirmPassword) {
-        setMessage("Passwords do not match.");
+        setUserInfoErrorField("password");
+        setUserInfoMessage("Passwords do not match.");
+        setUserInfoMessageType("error");
         return;
       }
       if (password.length < 8) {
-        setMessage("Password must be at least 8 characters.");
+        setUserInfoErrorField("password");
+        setUserInfoMessage("Password must be at least 8 characters.");
+        setUserInfoMessageType("error");
         return;
       }
     }
 
     setSaving(true);
-    setMessage("");
+    setUserInfoMessage("");
+    setUserInfoMessageType("");
 
     try {
       const {
@@ -113,7 +206,8 @@ export default function AccountPage() {
       } = await supabase.auth.getUser();
 
       if (!user) {
-        setMessage("You are no longer signed in.");
+        setUserInfoMessage("You are no longer signed in.");
+        setUserInfoMessageType("error");
         return;
       }
 
@@ -138,7 +232,13 @@ export default function AccountPage() {
 
       const { error: authError } = await supabase.auth.updateUser(updatePayload);
       if (authError) {
-        setMessage(authError.message);
+        if (authError.message.toLowerCase().includes("password")) {
+          setUserInfoErrorField("password");
+        } else if (authError.message.toLowerCase().includes("email")) {
+          setUserInfoErrorField("email");
+        }
+        setUserInfoMessage(authError.message);
+        setUserInfoMessageType("error");
         return;
       }
 
@@ -154,37 +254,86 @@ export default function AccountPage() {
         );
 
       if (profileError) {
-        setMessage(profileError.message);
+        setUserInfoMessage(profileError.message);
+        setUserInfoMessageType("error");
         return;
       }
 
       setPassword("");
       setConfirmPassword("");
       setSubmitAttempted(false);
-      setMessage(updatePayload.email ? "Account updated. Check your email to confirm the email change." : "Account updated.");
+      setInitialUserInfo({
+        fullName: fullName.trim(),
+        username: username.trim(),
+        email: email.trim(),
+      });
+      setUserInfoEditing(false);
+      setUserInfoMessage(updatePayload.email ? "Account updated. Check your email to confirm the email change." : "Account updated.");
+      setUserInfoMessageType("success");
     } finally {
       setSaving(false);
     }
   };
 
-  const downloadData = async () => {
-    setDownloading(true);
-    setMessage("");
+  const cancelUserInfoEdit = () => {
+    setFullName(initialUserInfo.fullName);
+    setUsername(initialUserInfo.username);
+    setEmail(initialUserInfo.email);
+    setConfirmEmail(initialUserInfo.email);
+    setPassword("");
+    setConfirmPassword("");
+    setShowPassword(false);
+    setShowConfirmPassword(false);
+    setSubmitAttempted(false);
+    setUserInfoErrorField(null);
+    setUserInfoMessage("");
+    setUserInfoMessageType("");
+    setUserInfoEditing(false);
+  };
+
+  const openBillingPortal = async () => {
     try {
-      const res = await fetch("/api/account/export");
-      const data = await res.json();
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = "investigation-tool-export.json";
-      link.click();
-      URL.revokeObjectURL(url);
-      setMessage("Your account data export has downloaded.");
+      setOpeningBillingPortal(true);
+      setMessage("");
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        setMessage("You are no longer signed in.");
+        return;
+      }
+
+      const response = await fetch("/api/stripe/customer-portal", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      const data = (await response.json()) as { error?: string; url?: string };
+      if (!response.ok || !data.url) {
+        throw new Error(data.error || "Unable to open billing portal.");
+      }
+
+      window.location.href = data.url;
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to open billing portal.");
     } finally {
-      setDownloading(false);
+      setOpeningBillingPortal(false);
     }
   };
+
+  const canOpenBillingPortal =
+    accessState?.currentAccessType === "subscription_monthly" ||
+    accessState?.currentAccessStatus === "payment_failed";
+
+  const canPurchasePass30 =
+    accessState?.currentAccessType === "pass_30d" &&
+    accessState.currentAccessStatus !== "active";
+
+  const canChooseAccessType = accessState?.currentAccessType === "trial_7d";
 
   const handleDeleteAccount = async () => {
     setDeleteModalOpen(true);
@@ -248,185 +397,382 @@ export default function AccountPage() {
       subtitle="Manage your profile, account data and subscription history."
     >
       <section className={styles.accountCard}>
-        <div className={styles.accountTabs} role="tablist" aria-label="Account sections">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              aria-selected={activeTab === tab.id}
-              className={`${styles.accountTab} ${activeTab === tab.id ? styles.accountTabActive : ""}`}
-              onClick={() => setActiveTab(tab.id)}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {message ? (
+        {message && activeSection !== "user-info" ? (
           <p className={`${styles.message} ${message.toLowerCase().includes("unable") || message.toLowerCase().includes("do not") ? styles.messageError : ""}`}>
             {message}
           </p>
         ) : null}
 
-        {activeTab === "user-info" ? (
-          <div className={styles.accountSection}>
-            <div className={styles.accountFormGrid}>
-              <label className={styles.accountField}>
-                <span>Full Name</span>
-                <input className={styles.input} value={fullName} onChange={(event) => setFullName(event.target.value)} />
-              </label>
-              <label className={styles.accountField}>
-                <span>Username</span>
-                <input className={styles.input} value={username} onChange={(event) => setUsername(event.target.value)} />
-              </label>
-              <label className={styles.accountField}>
-                <span>Password</span>
-                <div className={styles.passwordField}>
-                <input
-                  className={`${styles.input} ${styles.passwordInput} ${passwordHasError ? styles.inputError : ""}`}
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  />
-                  <button
-                    type="button"
-                    className={styles.passwordToggle}
-                    aria-label={showPassword ? "Hide password" : "Show password"}
-                    onClick={() => setShowPassword((current) => !current)}
-                  >
-                    <Image
-                      src={showPassword ? "/icons/visible.svg" : "/icons/hidden.svg"}
-                      alt=""
-                      width={18}
-                      height={18}
-                      className={styles.passwordToggleIcon}
-                    />
-                  </button>
+        <div className={styles.reportLayout}>
+          <div className={styles.reportToggleBar}>
+            <div className={styles.reportToggleGroup} role="tablist" aria-label="Account sections">
+              {accountTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeSection === tab.id}
+                  className={`${styles.reportToggleButton} ${activeSection === tab.id ? styles.reportToggleButtonActive : ""}`}
+                  onClick={() => setActiveSection(tab.id)}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {activeSection === "user-info" ? (
+            <div className={styles.reportSection}>
+              <div className={styles.reportScopeBlock}>
+                {!userInfoEditing ? (
+                  <>
+                    <div className={styles.reportScopeSummaryGrid}>
+                      <div className={styles.reportScopeSummaryCard}>
+                        <span className={styles.reportScopeReadLabel}>Full Name</span>
+                        <span className={styles.reportScopeReadValue}>{fullName || "-"}</span>
+                      </div>
+                      <div className={styles.reportScopeSummaryCard}>
+                        <span className={styles.reportScopeReadLabel}>Username</span>
+                        <span className={styles.reportScopeReadValue}>{username || "-"}</span>
+                      </div>
+                      <div className={styles.reportScopeSummaryCard}>
+                        <span className={styles.reportScopeReadLabel}>Email Address</span>
+                        <span className={styles.reportScopeReadValue}>{email || "-"}</span>
+                      </div>
+                      <div className={styles.reportScopeSummaryCard}>
+                        <span className={styles.reportScopeReadLabel}>Password</span>
+                        <span className={styles.reportScopeReadValue}>••••••••</span>
+                      </div>
+                    </div>
+
+                    <div className={styles.reportScopeActions}>
+                      <span />
+                      <div className={styles.reportScopeActionButtons}>
+                        <button
+                          type="button"
+                          className={styles.button}
+                          onClick={() => {
+                            setPassword("");
+                            setConfirmPassword("");
+                            setShowPassword(false);
+                            setShowConfirmPassword(false);
+                            setSubmitAttempted(false);
+                            setUserInfoErrorField(null);
+                            setUserInfoMessage("");
+                            setUserInfoMessageType("");
+                            setUserInfoEditing(true);
+                          }}
+                          disabled={loading}
+                        >
+                          {loading ? "Loading..." : "Edit User Info"}
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className={styles.accountFormGrid}>
+                      <label className={styles.accountField}>
+                        <span>Full Name</span>
+                        <input className={styles.input} value={fullName} onChange={(event) => setFullName(event.target.value)} autoComplete="name" />
+                      </label>
+                      <label className={styles.accountField}>
+                        <span>Username</span>
+                        <input className={styles.input} value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" />
+                      </label>
+                      <label className={styles.accountField}>
+                        <span>Set New Password</span>
+                        <div className={styles.passwordField}>
+                          <input
+                            className={`${styles.input} ${styles.passwordInput} ${passwordHasError ? styles.inputError : ""}`}
+                            type={showPassword ? "text" : "password"}
+                            value={password}
+                            onChange={(event) => setPassword(event.target.value)}
+                            autoComplete="new-password"
+                            placeholder="Optional"
+                          />
+                          <button
+                            type="button"
+                            className={styles.passwordToggle}
+                            aria-label={showPassword ? "Hide password" : "Show password"}
+                            onClick={() => setShowPassword((current) => !current)}
+                          >
+                            <Image
+                              src={showPassword ? "/icons/visible.svg" : "/icons/hidden.svg"}
+                              alt=""
+                              width={18}
+                              height={18}
+                              className={styles.passwordToggleIcon}
+                            />
+                          </button>
+                        </div>
+                        <span className={`${styles.fieldStatusRight} ${styles.fieldStatusSpacer}`} aria-hidden="true">
+                          .
+                        </span>
+                      </label>
+                      <label className={styles.accountField}>
+                        <span>Confirm Password</span>
+                        <div className={styles.passwordField}>
+                          <input
+                            className={`${styles.input} ${styles.passwordInput} ${confirmPasswordHasError ? styles.inputError : ""}`}
+                            type={showConfirmPassword ? "text" : "password"}
+                            value={confirmPassword}
+                            onChange={(event) => setConfirmPassword(event.target.value)}
+                            autoComplete="new-password"
+                            placeholder={password.trim().length > 0 ? "Confirm new password" : ""}
+                            disabled={password.trim().length === 0}
+                          />
+                          <button
+                            type="button"
+                            className={styles.passwordToggle}
+                            aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+                            onClick={() => setShowConfirmPassword((current) => !current)}
+                          >
+                            <Image
+                              src={showConfirmPassword ? "/icons/visible.svg" : "/icons/hidden.svg"}
+                              alt=""
+                              width={18}
+                              height={18}
+                              className={styles.passwordToggleIcon}
+                            />
+                          </button>
+                        </div>
+                        <span
+                          className={`${styles.fieldStatusRight} ${
+                            passwordProvided
+                              ? passwordsMatch && !passwordTooShort
+                                ? styles.fieldHelpSuccess
+                                : styles.fieldHelpError
+                              : styles.fieldStatusSpacer
+                          }`}
+                          aria-hidden={passwordProvided ? undefined : "true"}
+                        >
+                          {passwordProvided ? (passwordsMatch && !passwordTooShort ? "Passwords Match." : "Passwords Do Not Match") : "."}
+                        </span>
+                      </label>
+                      <label className={styles.accountField}>
+                        <span>Email Address</span>
+                        <input
+                          className={`${styles.input} ${emailHasError ? styles.inputError : ""}`}
+                          type="email"
+                          value={email}
+                          onChange={(event) => setEmail(event.target.value)}
+                          autoComplete="email"
+                        />
+                      </label>
+                      <label className={styles.accountField}>
+                        <span>Confirm Email Address</span>
+                        <input
+                          className={`${styles.input} ${emailHasError ? styles.inputError : ""}`}
+                          type="email"
+                          value={confirmEmail}
+                          onChange={(event) => setConfirmEmail(event.target.value)}
+                          autoComplete="email"
+                        />
+                      </label>
+                    </div>
+
+                    <div className={styles.reportScopeActions}>
+                      <span
+                        className={`${styles.inlineFormMessage} ${
+                          userInfoMessageType === "error"
+                            ? styles.messageError
+                            : userInfoMessageType === "success"
+                              ? styles.messageSuccess
+                              : ""
+                        }`}
+                      >
+                        {userInfoMessage}
+                      </span>
+                      <div className={styles.reportScopeActionButtons}>
+                        <button type="button" className={styles.button} onClick={cancelUserInfoEdit} disabled={saving}>
+                          Cancel
+                        </button>
+                        <button type="button" className={`${styles.button} ${styles.accountPrimaryButton}`} onClick={() => void save()} disabled={saving || loading}>
+                          {loading ? "Loading..." : saving ? "Saving..." : "Update Info"}
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          ) : null}
+
+          {activeSection === "my-access" ? (
+            <div className={styles.reportSection}>
+              <div className={styles.reportScopeBlock}>
+                <div className={`${styles.tableWrap} ${styles.reportDataTableWrap} ${styles.accountAccessTableWrap}`}>
+                  <table className={`${styles.table} ${styles.reportDataTable} ${styles.accountAccessTable}`}>
+                    <colgroup>
+                      <col style={{ width: "16%" }} />
+                      <col style={{ width: "12%" }} />
+                      <col style={{ width: "18%" }} />
+                      <col style={{ width: "18%" }} />
+                      <col style={{ width: "36%" }} />
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <th>Access Type</th>
+                        <th>Status</th>
+                        <th>Started</th>
+                        <th>Expires</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>{formatAccessType(accessState?.currentAccessType ?? null)}</td>
+                        <td>
+                          <span
+                            className={`${styles.accessStatusPill} ${getAccessStatusTone(accessState?.currentAccessStatus ?? null)}`}
+                          >
+                            {formatAccessStatus(accessState?.currentAccessStatus ?? null)}
+                          </span>
+                        </td>
+                        <td>{formatDateTime(accessState?.currentPeriodStartsAt ?? null)}</td>
+                        <td>{formatDateTime(accessState?.currentPeriodEndsAt ?? null)}</td>
+                        <td>
+                          <div className={styles.accessActionGroup}>
+                            <button
+                              type="button"
+                              className={`${styles.button} ${styles.buttonSecondary} ${styles.accessActionButton}`}
+                              onClick={() => void openBillingPortal()}
+                              disabled={!canOpenBillingPortal || openingBillingPortal}
+                            >
+                              {openingBillingPortal && canOpenBillingPortal ? "Opening..." : "Open Billing Portal"}
+                            </button>
+                            <button
+                              type="button"
+                              className={`${styles.button} ${styles.buttonSecondary} ${styles.accessActionButton}`}
+                              onClick={() => router.push("/subscribe")}
+                              disabled={!canPurchasePass30}
+                            >
+                              Renew Access
+                            </button>
+                            <button
+                              type="button"
+                              className={`${styles.button} ${styles.buttonSecondary} ${styles.accessActionButton}`}
+                              onClick={() => router.push("/subscribe")}
+                              disabled={!canChooseAccessType}
+                            >
+                              Upgrade Access
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
-              </label>
-              <label className={styles.accountField}>
-                <span>Confirm Password</span>
-                <div className={styles.passwordField}>
-                  <input
-                    className={`${styles.input} ${styles.passwordInput} ${confirmPasswordHasError ? styles.inputError : ""}`}
-                    type={showConfirmPassword ? "text" : "password"}
-                    value={confirmPassword}
-                    onChange={(event) => setConfirmPassword(event.target.value)}
-                  />
-                  <button
-                    type="button"
-                    className={styles.passwordToggle}
-                    aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
-                    onClick={() => setShowConfirmPassword((current) => !current)}
-                  >
-                    <Image
-                      src={showConfirmPassword ? "/icons/visible.svg" : "/icons/hidden.svg"}
-                      alt=""
-                      width={18}
-                      height={18}
-                      className={styles.passwordToggleIcon}
-                    />
-                  </button>
+
+                <div className={styles.accountAccessMobileCard}>
+                  <div className={styles.accountAccessMobileGrid}>
+                    <div className={styles.accountAccessMobileItem}>
+                      <span className={styles.reportScopeReadLabel}>Access Type</span>
+                      <span className={styles.reportScopeReadValue}>{formatAccessType(accessState?.currentAccessType ?? null)}</span>
+                    </div>
+                    <div className={styles.accountAccessMobileItem}>
+                      <span className={styles.reportScopeReadLabel}>Status</span>
+                      <span className={styles.accountAccessMobileStatusWrap}>
+                        <span
+                          className={`${styles.accessStatusPill} ${getAccessStatusTone(accessState?.currentAccessStatus ?? null)}`}
+                        >
+                          {formatAccessStatus(accessState?.currentAccessStatus ?? null)}
+                        </span>
+                      </span>
+                    </div>
+                    <div className={styles.accountAccessMobileItem}>
+                      <span className={styles.reportScopeReadLabel}>Started</span>
+                      <span className={styles.reportScopeReadValue}>{formatDateTime(accessState?.currentPeriodStartsAt ?? null)}</span>
+                    </div>
+                    <div className={styles.accountAccessMobileItem}>
+                      <span className={styles.reportScopeReadLabel}>Expires</span>
+                      <span className={styles.reportScopeReadValue}>{formatDateTime(accessState?.currentPeriodEndsAt ?? null)}</span>
+                    </div>
+                  </div>
+
+                  <div className={styles.accountAccessMobileActions}>
+                    <button
+                      type="button"
+                      className={`${styles.button} ${styles.buttonSecondary} ${styles.accessActionButton}`}
+                      onClick={() => void openBillingPortal()}
+                      disabled={!canOpenBillingPortal || openingBillingPortal}
+                    >
+                      {openingBillingPortal && canOpenBillingPortal ? "Opening..." : "Open Billing Portal"}
+                    </button>
+                    <button
+                      type="button"
+                      className={`${styles.button} ${styles.buttonSecondary} ${styles.accessActionButton}`}
+                      onClick={() => router.push("/subscribe")}
+                      disabled={!canPurchasePass30}
+                    >
+                      Renew Access
+                    </button>
+                    <button
+                      type="button"
+                      className={`${styles.button} ${styles.buttonSecondary} ${styles.accessActionButton}`}
+                      onClick={() => router.push("/subscribe")}
+                      disabled={!canChooseAccessType}
+                    >
+                      Upgrade Access
+                    </button>
+                  </div>
                 </div>
-                {passwordProvided ? (
-                  <span
-                    className={`${styles.fieldStatusRight} ${
-                      passwordsMatch && !passwordTooShort ? styles.fieldHelpSuccess : styles.fieldHelpError
-                    }`}
-                  >
-                    {passwordsMatch && !passwordTooShort ? "Passwords Match." : "Passwords Do Not Match"}
-                  </span>
+
+                {accessState?.readOnlyReason ? (
+                  <div className={styles.accountDangerBox}>
+                    <strong>Access restriction</strong>
+                    <p>{accessState.readOnlyReason}</p>
+                  </div>
                 ) : null}
-              </label>
-              <label className={styles.accountField}>
-                <span>Email Address</span>
-                <input
-                  className={`${styles.input} ${emailHasError ? styles.inputError : ""}`}
-                  type="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                />
-              </label>
-              <label className={styles.accountField}>
-                <span>Confirm Email Address</span>
-                <input
-                  className={`${styles.input} ${emailHasError ? styles.inputError : ""}`}
-                  type="email"
-                  value={confirmEmail}
-                  onChange={(event) => setConfirmEmail(event.target.value)}
-                />
-              </label>
+              </div>
             </div>
+          ) : null}
 
-            <div className={styles.accountActions}>
-              <button type="button" className={`${styles.button} ${styles.accountPrimaryButton}`} onClick={() => void save()} disabled={saving || loading}>
-                {loading ? "Loading..." : saving ? "Saving..." : "Update Info"}
-              </button>
+          {activeSection === "delete-account" ? (
+            <div className={`${styles.reportSection} ${styles.accountDeleteSection}`}>
+              <div className={styles.reportScopeBlock}>
+                <div className={styles.accountDeleteSummary}>
+                  <strong>Delete your account</strong>
+                  <p className={styles.accountDeleteLead}>
+                    Deleting your account permanently removes your Investigation Tool access and starts a full cleanup of the data
+                    tied to that account. This is intended for cases where you no longer want the account, its maps, or the content
+                    created inside the workspace to remain in the system.
+                  </p>
+                  <p className={styles.accountDeleteLead}>
+                    Once the delete process starts, it cannot be cancelled or recovered. If you may need your account, investigation
+                    maps, or related content again, do not continue.
+                  </p>
+                  <strong>Summary</strong>
+                  <ul className={styles.accountDeleteList}>
+                    <li>Your login access will be removed</li>
+                    <li>Investigation maps you created will be deleted</li>
+                    <li>Content and records you created inside those maps will be removed</li>
+                    <li>This action is permanent and cannot be reversed</li>
+                  </ul>
+                </div>
+                <div className={styles.accountDeleteActions}>
+                  <label className={styles.accountCheckboxRow}>
+                    <input
+                      type="checkbox"
+                      checked={deleteAcknowledged}
+                      onChange={(event) => setDeleteAcknowledged(event.target.checked)}
+                    />
+                    <span>I understand this action is permanent and cannot be undone.</span>
+                  </label>
+                  <button
+                    type="button"
+                    className={`${styles.buttonDanger} ${styles.accountDeleteButton}`}
+                    disabled={!deleteAcknowledged || deleteStatus === "running"}
+                    onClick={() => void handleDeleteAccount()}
+                  >
+                    Delete Account
+                  </button>
+                </div>
+              </div>
             </div>
-          </div>
-        ) : null}
-
-        {activeTab === "your-data" ? (
-          <div className={styles.accountSection}>
-            <div className={styles.accountInfoBlock}>
-              <h3>Your Data</h3>
-              <p>Download a copy of the information associated with your Investigation Tool account.</p>
-            </div>
-            <div className={styles.accountActions}>
-              <button type="button" className={`${styles.button} ${styles.accountPrimaryButton}`} onClick={() => void downloadData()} disabled={downloading}>
-                {downloading ? "Preparing Export..." : "Download Your Data"}
-              </button>
-            </div>
-          </div>
-        ) : null}
-
-        {activeTab === "past-purchases" ? (
-          <div className={styles.accountSection}>
-            <div className={styles.accountInfoBlock}>
-              <h3>Past Purchases</h3>
-              <p>Your purchase history will appear here once billing history is connected to the account workspace.</p>
-            </div>
-            <div className={styles.accountEmptyBox}>No purchases recorded yet.</div>
-          </div>
-        ) : null}
-
-        {activeTab === "delete-account" ? (
-          <div className={styles.accountSection}>
-            <div className={styles.accountInfoBlock}>
-              <h3>Delete Account</h3>
-              <p>Deleting your account permanently removes your Investigation Tool access and the content you created.</p>
-            </div>
-            <div className={styles.accountDeleteSummary}>
-              <strong>What this means</strong>
-              <ul className={styles.accountDeleteList}>
-                <li>Your login access will be removed</li>
-                <li>Investigation maps you created will be deleted</li>
-                <li>Content you created inside maps will be removed</li>
-                <li>This action cannot be reversed</li>
-              </ul>
-            </div>
-            <div className={styles.accountActions}>
-              <label className={styles.accountCheckboxRow}>
-                <input
-                  type="checkbox"
-                  checked={deleteAcknowledged}
-                  onChange={(event) => setDeleteAcknowledged(event.target.checked)}
-                />
-                <span>I understand this action is permanent and cannot be undone.</span>
-              </label>
-              <button
-                type="button"
-                className={styles.buttonDanger}
-                disabled={!deleteAcknowledged || deleteStatus === "running"}
-                onClick={() => void handleDeleteAccount()}
-              >
-                Delete Account
-              </button>
-            </div>
-          </div>
-        ) : null}
-
+          ) : null}
+        </div>
         {deleteModalOpen ? (
           <div className={styles.modalBackdrop}>
             <div className={styles.modalCard}>
@@ -485,3 +831,5 @@ export default function AccountPage() {
     </DashboardShell>
   );
 }
+
+

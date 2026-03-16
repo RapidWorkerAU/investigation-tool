@@ -165,10 +165,22 @@ export function MobileAddRelationshipModal({
     (relationshipCategory === "other" && !relationshipCustomType.trim());
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4">
-      <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-2xl ring-1 ring-slate-200/70">
-        <h2 className="text-lg font-semibold">Add Relationship</h2>
-        <p className="mt-1 text-sm text-slate-600">From: {sourceLabel || "Unknown source"}</p>
+    <div className="fixed inset-0 z-[99] overflow-y-auto bg-white text-slate-900">
+      <div className="min-h-full px-5 pb-28 pt-5">
+        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+          <div>
+            <h2 className="text-lg font-semibold">Add Relationship</h2>
+            <p className="mt-1 text-sm text-slate-600">From: {sourceLabel || "Unknown source"}</p>
+          </div>
+          <button
+            type="button"
+            aria-label="Close add relationship"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-300 bg-white text-slate-900"
+            onClick={onCancel}
+          >
+            <span className="text-xl leading-none">x</span>
+          </button>
+        </div>
         <div className="mt-4 grid gap-3">
           {relationshipModeGrouping ? (
             <div className="relative">

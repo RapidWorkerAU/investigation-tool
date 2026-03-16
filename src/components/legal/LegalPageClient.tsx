@@ -2,7 +2,10 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { accessRequiresSelection, fetchAccessState } from "@/lib/access";
+import { createSupabaseBrowser } from "@/lib/supabase/client";
 import styles from "./LegalPage.module.css";
 
 export type LegalSection = {
@@ -22,10 +25,51 @@ export function LegalPageClient({
   effectiveDate,
   sections,
 }: LegalPageClientProps) {
+  const router = useRouter();
+  const supabase = useMemo(() => createSupabaseBrowser(), []);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [activeSection, setActiveSection] = useState(sections[0]?.id ?? "");
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isAuthed, setIsAuthed] = useState(false);
+  const [dashboardLoading, setDashboardLoading] = useState(false);
 
   const sectionIds = useMemo(() => sections.map((section) => section.id), [sections]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadSession = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (mounted) {
+        setIsAuthed(Boolean(session));
+      }
+    };
+
+    void loadSession();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAuthed(Boolean(session));
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [supabase]);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [mobileMenuOpen]);
 
   useEffect(() => {
     const root = containerRef.current;
@@ -65,6 +109,44 @@ export function LegalPageClient({
       behavior: "smooth",
       block: "start",
     });
+    setMobileMenuOpen(false);
+  }
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    setMobileMenuOpen(false);
+    router.push("/login");
+    router.refresh();
+  }
+
+  async function goToWorkspace() {
+    if (dashboardLoading) return;
+
+    setDashboardLoading(true);
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      setDashboardLoading(false);
+      setMobileMenuOpen(false);
+      router.push("/login?returnTo=%2Fdashboard");
+      return;
+    }
+
+    try {
+      const accessState = await fetchAccessState(session.access_token);
+      setMobileMenuOpen(false);
+      router.push(accessRequiresSelection(accessState) ? "/subscribe" : "/dashboard");
+      router.refresh();
+    } catch {
+      setMobileMenuOpen(false);
+      router.push("/dashboard");
+      router.refresh();
+    } finally {
+      setDashboardLoading(false);
+    }
   }
 
   return (
@@ -90,13 +172,49 @@ export function LegalPageClient({
           </nav>
 
           <div className={styles.headerActions}>
-            <Link href="/login" className={styles.textLink}>
-              Sign in
-            </Link>
-            <Link href="/subscribe" className={styles.ctaButton}>
-              Start free trial
-            </Link>
+            {isAuthed ? (
+              <>
+                <button type="button" className={styles.textButton} onClick={() => void handleLogout()} disabled={dashboardLoading}>
+                  Logout
+                </button>
+                <button type="button" className={styles.ctaButton} onClick={() => void goToWorkspace()} disabled={dashboardLoading}>
+                  {dashboardLoading ? "Checking access..." : "Go to dashboard"}
+                </button>
+              </>
+            ) : (
+              <>
+                <Link href="/login" className={styles.textLink}>
+                  Sign in
+                </Link>
+                <Link href="/subscribe" className={styles.ctaButton}>
+                  Start free trial
+                </Link>
+              </>
+            )}
           </div>
+
+          <button
+            type="button"
+            className={styles.menuButton}
+            aria-label="Open menu"
+            aria-expanded={mobileMenuOpen}
+            onClick={() => setMobileMenuOpen(true)}
+          >
+            <span
+              aria-hidden="true"
+              className={styles.menuButtonIcon}
+              style={{
+                WebkitMaskImage: "url('/icons/menu.svg')",
+                maskImage: "url('/icons/menu.svg')",
+                WebkitMaskRepeat: "no-repeat",
+                maskRepeat: "no-repeat",
+                WebkitMaskPosition: "center",
+                maskPosition: "center",
+                WebkitMaskSize: "contain",
+                maskSize: "contain",
+              }}
+            />
+          </button>
         </div>
 
         <div className={styles.headerCurve}>
@@ -106,6 +224,86 @@ export function LegalPageClient({
           </div>
         </div>
       </header>
+
+      {mobileMenuOpen ? (
+        <div className={styles.mobileMenu} role="dialog" aria-modal="true" aria-label="Mobile menu">
+          <div className={styles.mobileMenuHeader}>
+            <Link href="/" className={styles.brand} aria-label="Investigation Tool home" onClick={() => setMobileMenuOpen(false)}>
+              <Image
+                src="/images/investigation-tool.png"
+                alt=""
+                aria-hidden="true"
+                width={34}
+                height={34}
+                className={styles.brandImage}
+              />
+              <span>Investigation Tool</span>
+            </Link>
+
+            <button
+              type="button"
+              className={styles.mobileMenuClose}
+              aria-label="Close menu"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              <span
+                aria-hidden="true"
+                className={styles.mobileMenuCloseIcon}
+                style={{
+                  WebkitMaskImage: "url('/icons/close.svg')",
+                  maskImage: "url('/icons/close.svg')",
+                  WebkitMaskRepeat: "no-repeat",
+                  maskRepeat: "no-repeat",
+                  WebkitMaskPosition: "center",
+                  maskPosition: "center",
+                  WebkitMaskSize: "contain",
+                  maskSize: "contain",
+                }}
+              />
+            </button>
+          </div>
+
+          <nav className={styles.mobileMenuNav} aria-label="Mobile primary">
+            <Link href="/#features" onClick={() => setMobileMenuOpen(false)}>
+              Features
+            </Link>
+            <Link href="/#workflow" onClick={() => setMobileMenuOpen(false)}>
+              Workflow
+            </Link>
+            <Link href="/#pricing" onClick={() => setMobileMenuOpen(false)}>
+              Pricing
+            </Link>
+            <Link href="/privacy" onClick={() => setMobileMenuOpen(false)}>
+              Privacy Policy
+            </Link>
+            <Link href="/terms" onClick={() => setMobileMenuOpen(false)}>
+              Terms & Conditions
+            </Link>
+          </nav>
+
+          <div className={styles.mobileMenuActions}>
+            {isAuthed ? (
+              <>
+                <button type="button" className={styles.mobilePrimaryButton} onClick={() => void goToWorkspace()} disabled={dashboardLoading}>
+                  {dashboardLoading ? "Checking access..." : "Go to dashboard"}
+                </button>
+                <button type="button" className={styles.mobileSecondaryButton} onClick={() => void handleLogout()} disabled={dashboardLoading}>
+                  Logout
+                </button>
+              </>
+            ) : (
+              <>
+                <Link href="/subscribe" className={styles.mobilePrimaryButton} onClick={() => setMobileMenuOpen(false)}>
+                  Start free trial
+                </Link>
+                <Link href="/login" className={styles.mobileSecondaryButton} onClick={() => setMobileMenuOpen(false)}>
+                  Sign in
+                </Link>
+              </>
+            )}
+          </div>
+        </div>
+      ) : null}
 
       <main className={styles.main}>
         <div className={styles.mainInner}>

@@ -42,7 +42,7 @@ export function MapCanvasHeader({
     const category = (map.map_category || "").toLowerCase();
     if (category === "document_map") return "Document Map";
     if (category === "bow_tie") return "Bow Tie Builder";
-    if (category === "incident_investigation") return "Investigation Board";
+    if (category === "incident_investigation") return "Investigation Map";
     if (category === "org_chart") return "Org Chart Builder";
     if (category === "process_flow") return "Process Flow Builder";
     return "System Map";
@@ -50,13 +50,15 @@ export function MapCanvasHeader({
 
   return (
     <header className="site-header fixed inset-x-0 top-0 z-[90] md:sticky" style={{ backgroundColor: "#000000", borderBottomColor: "#0f172a" }}>
-      <div className="header-inner" style={{ paddingLeft: "12px", paddingRight: "20px", backgroundColor: "#000000" }}>
-        <div className="header-left flex items-center gap-8">
+      <div className="header-inner flex flex-col items-start gap-2 md:flex-row md:items-center md:justify-between" style={{ paddingLeft: "12px", paddingRight: "20px", backgroundColor: "#000000" }}>
+        <div className="header-left flex items-center gap-4 md:gap-8">
           <a href="/"><img src="/images/logo-white.png" alt="Investigation Tool" className="header-logo" /></a>
-          <span className="text-xl font-semibold uppercase tracking-[0.14em]" style={{ color: "#05c3dd" }}>{mapCategoryHeaderLabel}</span>
+          <span className="text-sm font-semibold uppercase tracking-[0.12em] sm:text-base md:text-xl md:tracking-[0.14em]" style={{ color: "#05c3dd" }}>
+            {mapCategoryHeaderLabel}
+          </span>
         </div>
-        <div className="header-actions flex items-center">
-          <div className="flex items-center gap-2">
+        <div className="header-actions flex w-full items-center md:w-auto">
+          <div className="flex w-full items-center gap-2 overflow-hidden md:w-auto">
             <span
               className="rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em]"
               style={{
@@ -66,11 +68,10 @@ export function MapCanvasHeader({
             >
               {mapRole === "full_write" ? "Full Write" : mapRole === "partial_write" ? "Partial Write" : "Read"}
             </span>
-            <span className="text-xs font-semibold uppercase tracking-[0.08em] text-white">Document Name:</span>
             {isEditingMapTitle ? (
               <input
                 autoFocus
-                className="min-w-[240px] rounded-md border border-[#a78bfa] bg-transparent px-3 py-1.5 text-sm font-semibold text-white outline-none ring-1 ring-[#a78bfa]/70"
+                className="min-w-0 flex-1 rounded-md border border-[#a78bfa] bg-transparent px-3 py-1.5 text-sm font-semibold text-white outline-none ring-1 ring-[#a78bfa]/70 md:min-w-[240px] md:flex-none"
                 value={mapTitleDraft}
                 onChange={(e) => setMapTitleDraft(e.target.value)}
                 onBlur={() => {
@@ -95,7 +96,7 @@ export function MapCanvasHeader({
             ) : (
               <button
                 type="button"
-                className="rounded-md border border-transparent px-2 py-1 text-sm font-semibold text-white hover:border-slate-600/60 hover:bg-slate-900/40"
+                className="min-w-0 flex-1 truncate rounded-md border border-transparent px-2 py-1 text-left text-sm font-semibold text-white hover:border-slate-600/60 hover:bg-slate-900/40 md:flex-none"
                 onClick={() => {
                   if (!canManageMapMetadata) {
                     setError("Only the map owner can rename this map.");
@@ -114,7 +115,7 @@ export function MapCanvasHeader({
               type="button"
               aria-label="Open map information"
               title="Map information"
-              className="ml-1 inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-600/60 bg-transparent text-white hover:bg-slate-900/50"
+              className="ml-1 hidden h-8 w-8 items-center justify-center rounded-md border border-slate-600/60 bg-transparent text-white hover:bg-slate-900/50 md:inline-flex"
               onClick={() => {
                 closeAllLeftAsides();
                 setShowMapInfoAside((prev) => {

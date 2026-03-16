@@ -117,6 +117,43 @@ type ProgressState = {
   status: "idle" | "running" | "success" | "error" | "aborted";
 };
 
+const formatSupabaseLikeError = (error: unknown, fallback: string) => {
+  if (!error || typeof error !== "object") return fallback;
+  const message = "message" in error && typeof error.message === "string" ? error.message.trim() : "";
+  const details = "details" in error && typeof error.details === "string" ? error.details.trim() : "";
+  const hint = "hint" in error && typeof error.hint === "string" ? error.hint.trim() : "";
+  const combined = [message, details, hint ? `Hint: ${hint}` : ""].filter(Boolean).join(" ");
+  return combined || fallback;
+};
+
+const supportContactMessage = "Please contact the Investigation Tool team at support@investigationtool.com.au.";
+
+const summarizeDashboardError = (error: unknown, fallback: string) => {
+  const raw = formatSupabaseLikeError(error, fallback);
+  const normalized = raw.toLowerCase();
+
+  if (normalized.includes("not authenticated")) {
+    return "Your session has expired. Please sign in again and try once more.";
+  }
+  if (normalized.includes("no active access period")) {
+    return `You do not currently have an active access period for creating investigations. ${supportContactMessage}`;
+  }
+  if (normalized.includes("map creation is not allowed for this access type")) {
+    return `Your current access type does not allow creating new investigations. ${supportContactMessage}`;
+  }
+  if (normalized.includes("no remaining map allocations")) {
+    return `You have used all investigation allocations included with your current access. ${supportContactMessage}`;
+  }
+  if (normalized.includes("active access period not found")) {
+    return `We could not confirm your current access period. ${supportContactMessage}`;
+  }
+  if (normalized.includes("invalid input syntax for type uuid")) {
+    return `We hit an internal setup issue while creating your investigation. ${supportContactMessage}`;
+  }
+
+  return `${fallback} ${supportContactMessage}`;
+};
+
 const formatDate = (value: string) =>
   new Date(value).toLocaleString("en-AU", {
     day: "2-digit",
@@ -125,6 +162,44 @@ const formatDate = (value: string) =>
     hour: "2-digit",
     minute: "2-digit",
   });
+
+const formatMobileDate = (value: string) =>
+  new Date(value).toLocaleDateString("en-AU", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+
+const formatAccessExpiry = (value: string) =>
+  new Date(value).toLocaleDateString("en-AU", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+
+const formatAccessStatus = (value: BillingAccessState["currentAccessStatus"] | null) => {
+  if (!value) return "Unknown";
+  return value
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+};
+
+const getAccessStatusToneClass = (value: BillingAccessState["currentAccessStatus"] | null) => {
+  switch (value) {
+    case "active":
+      return shellStyles.accessStatusPillGood;
+    case "selection_required":
+    case "checkout_required":
+    case "pending_activation":
+      return shellStyles.accessStatusPillWarn;
+    case "expired":
+    case "payment_failed":
+    case "cancelled":
+    default:
+      return shellStyles.accessStatusPillBad;
+  }
+};
 
 export default function DashboardWorkspace() {
   const router = useRouter();
@@ -162,6 +237,7 @@ export default function DashboardWorkspace() {
     status: "idle",
   });
   const [error, setError] = useState<string | null>(null);
+  const [expandedMobileMapId, setExpandedMobileMapId] = useState<string | null>(null);
 
   const loadMaps = useCallback(async () => {
     const {
@@ -290,6 +366,14 @@ export default function DashboardWorkspace() {
   const canShareMaps = accessState?.canShareMaps ?? false;
   const canDuplicateMaps = accessState?.canDuplicateMaps ?? false;
   const accessStatus = accessState?.currentAccessStatus ?? null;
+  const accountAccessSummary =
+    accessState?.currentAccessStatus === "active" &&
+    accessState.currentPeriodEndsAt &&
+    (accessState.currentAccessType === "trial_7d" || accessState.currentAccessType === "pass_30d")
+      ? `${
+          accessState.currentAccessType === "trial_7d" ? "7 Day Trial" : "30 Day Access"
+        } until ${formatAccessExpiry(accessState.currentPeriodEndsAt)}`
+      : null;
   const bulkDeleteEnabled = selectedOwnedMaps.length > 0 && !bulkDeleting && canEditMaps;
   const restrictedModalActionLabel = accessStatus === "payment_failed" ? "Update payment information" : "Choose access type";
   const restrictedModalText =
@@ -349,9 +433,9 @@ export default function DashboardWorkspace() {
       if (createError) throw createError;
       if (!data) throw new Error("Investigation created, but no map id was returned.");
 
-      router.push(`/investigations/${data}/canvas`);
+      router.push(`/investigations/${data}/canvas?welcome=1`);
     } catch (createError) {
-      setError(createError instanceof Error ? createError.message : "Unable to create investigation.");
+      setError(summarizeDashboardError(createError, "We could not create your investigation."));
     } finally {
       setCreating(false);
     }
@@ -783,8 +867,13 @@ export default function DashboardWorkspace() {
       subtitle="Manage your investigation maps from one central workspace."
       headerRight={
         <div className={shellStyles.accountSummary}>
-          <span className={shellStyles.accountSummaryLabel}>My account</span>
-          <strong>{userEmail ?? "Signed in"}</strong>
+          <div className={shellStyles.accountSummaryText}>
+            <div className={shellStyles.accountSummaryPrimary}>
+              <span className={shellStyles.accountSummaryLabel}>My account</span>
+              <strong>{userEmail ?? "Signed in"}</strong>
+            </div>
+            {accountAccessSummary ? <div className={shellStyles.accountSummaryMeta}>{accountAccessSummary}</div> : null}
+          </div>
         </div>
       }
     >
@@ -811,7 +900,8 @@ export default function DashboardWorkspace() {
                 disabled={!canShareMaps}
               >
                 <Image src="/icons/relationship.svg" alt="" width={18} height={18} className={shellStyles.buttonIconDark} />
-                Link Map Code
+                <span className={shellStyles.desktopToolbarLabel}>Link Map Code</span>
+                <span className={shellStyles.mobileToolbarLabel}>Link Map</span>
               </button>
               <button
                 type="button"
@@ -820,7 +910,8 @@ export default function DashboardWorkspace() {
                 disabled={creating || !canCreateMaps}
               >
                 <Image src="/icons/addcomponent.svg" alt="" width={18} height={18} className={shellStyles.buttonIcon} />
-                {creating ? "Creating..." : "Add Investigation"}
+                <span className={shellStyles.desktopToolbarLabel}>{creating ? "Creating..." : "Add Investigation"}</span>
+                <span className={shellStyles.mobileToolbarLabel}>{creating ? "Creating..." : "Add New"}</span>
               </button>
             </div>
 
@@ -849,17 +940,17 @@ export default function DashboardWorkspace() {
         {error ? <p className={`${shellStyles.message} ${shellStyles.messageError}`}>{error}</p> : null}
         {copiedMessage ? <p className={`${shellStyles.message} ${shellStyles.messageSuccess}`}>{copiedMessage}</p> : null}
 
-        <div className={`${shellStyles.tableWrap} ${shellStyles.dashboardTableWrap}`}>
-          <table className={`${shellStyles.table} ${shellStyles.dashboardGridTable}`}>
+        <div className={`${shellStyles.tableWrap} ${shellStyles.reportDataTableWrap}`}>
+          <table className={`${shellStyles.table} ${shellStyles.reportDataTable}`}>
             <colgroup>
               <col style={{ width: "4%" }} />
-              <col style={{ width: "20%" }} />
-              <col style={{ width: "15%" }} />
+              <col style={{ width: "22%" }} />
+              <col style={{ width: "14%" }} />
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "14%" }} />
+              <col style={{ width: "14%" }} />
+              <col style={{ width: "14%" }} />
               <col style={{ width: "10%" }} />
-              <col style={{ width: "15%" }} />
-              <col style={{ width: "15%" }} />
-              <col style={{ width: "15%" }} />
-              <col style={{ width: "6%" }} />
             </colgroup>
             <thead>
               <tr>
@@ -886,11 +977,18 @@ export default function DashboardWorkspace() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={8} className={shellStyles.emptyState}>Loading investigations...</td>
+                  <td colSpan={8} className={shellStyles.tableStateCell}>
+                    <div className={shellStyles.tableLoadingState}>
+                      <div className={shellStyles.tableLoadingBar} aria-hidden="true" />
+                      <span>Loading investigations...</span>
+                    </div>
+                  </td>
                 </tr>
               ) : maps.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className={shellStyles.emptyState}>Clear the search or create a new map.</td>
+                  <td colSpan={8} className={shellStyles.tableStateCell}>
+                    <div className={shellStyles.tableEmptyState}>Clear the search or create a new map.</div>
+                  </td>
                 </tr>
               ) : (
                 maps.map((map) => {
@@ -990,6 +1088,136 @@ export default function DashboardWorkspace() {
             </tbody>
           </table>
         </div>
+
+        <div className={shellStyles.dashboardMobileList}>
+          {loading ? (
+            <div className={shellStyles.dashboardMobileState}>
+              <div className={shellStyles.tableLoadingBar} aria-hidden="true" />
+              <span>Loading investigations...</span>
+            </div>
+          ) : maps.length === 0 ? (
+            <div className={shellStyles.dashboardMobileState}>Create a new map or link an existing one.</div>
+          ) : (
+            maps.map((map) => {
+              const canDelete = map.owner_id === userId && canEditMaps;
+              const canDuplicate = (Boolean(map.role) || map.owner_id === userId) && canDuplicateMaps;
+              const canCopy = Boolean(map.map_code);
+              const isSelected = selectedMapIds.includes(map.id);
+
+              return (
+                <article
+                  key={`mobile-${map.id}`}
+                  className={shellStyles.dashboardMobileCard}
+                >
+                  <button
+                    type="button"
+                    className={shellStyles.dashboardMobileCardToggle}
+                    aria-expanded={expandedMobileMapId === map.id}
+                    onClick={() =>
+                      setExpandedMobileMapId((current) => (current === map.id ? null : map.id))
+                    }
+                  >
+                    <div className={shellStyles.dashboardMobileCardHeader}>
+                      <label
+                        className={shellStyles.dashboardMobileCheckbox}
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <input
+                          type="checkbox"
+                          className={shellStyles.tableCheckbox}
+                          aria-label={`Select ${map.title}`}
+                          checked={isSelected}
+                          onChange={(event) => {
+                            setSelectedMapIds((current) =>
+                              event.target.checked ? [...current, map.id] : current.filter((id) => id !== map.id)
+                            );
+                          }}
+                        />
+                      </label>
+                      <div className={shellStyles.dashboardMobileCardTitleBlock}>
+                        <strong>{map.title}</strong>
+                        <span>{map.description || "No description"}</span>
+                      </div>
+                      <span className={shellStyles.dashboardMobileChevron} aria-hidden="true">
+                        {expandedMobileMapId === map.id ? "−" : "+"}
+                      </span>
+                    </div>
+                  </button>
+
+                  {expandedMobileMapId === map.id ? (
+                    <>
+                      <dl className={shellStyles.dashboardMobileMeta}>
+                        <div>
+                          <dt>Owner</dt>
+                          <dd>{map.owner_email ?? "Unknown"}</dd>
+                        </div>
+                        <div>
+                          <dt>Code</dt>
+                          <dd>{map.map_code ?? "-"}</dd>
+                        </div>
+                        <div className={shellStyles.dashboardMobileMetaDate}>
+                          <dt>Updated</dt>
+                          <dd>{formatMobileDate(map.updated_at)}</dd>
+                        </div>
+                        <div className={shellStyles.dashboardMobileMetaDate}>
+                          <dt>Created</dt>
+                          <dd>{formatMobileDate(map.created_at)}</dd>
+                        </div>
+                      </dl>
+
+                      <div className={shellStyles.dashboardMobilePrimaryAction}>
+                        <button
+                          type="button"
+                          className={`${shellStyles.button} ${shellStyles.buttonAccent}`}
+                          onClick={() => router.push(`/investigations/${map.id}`)}
+                        >
+                          Open Investigation
+                        </button>
+                      </div>
+
+                      <div className={shellStyles.dashboardMobileActions}>
+                        <button
+                          type="button"
+                          className={`${shellStyles.button} ${shellStyles.buttonSecondary} ${shellStyles.dashboardMobileActionButton}`}
+                          disabled={!canCopy}
+                          title={canCopy ? "Copy map code" : "No map code available"}
+                          onClick={() => void handleCopyCode(map)}
+                        >
+                          <Image src="/icons/structure.svg" alt="" width={16} height={16} className={shellStyles.actionIcon} />
+                          Copy Code
+                        </button>
+                        <button
+                          type="button"
+                          className={`${shellStyles.button} ${shellStyles.buttonSecondary} ${shellStyles.dashboardMobileActionButton}`}
+                          disabled={!canDuplicate || duplicatingMapId === map.id}
+                          title={canDuplicate ? "Duplicate map" : "You do not have permission to duplicate this map"}
+                          onClick={() => {
+                            setPendingDuplicateRow(map);
+                            setDuplicateProgress({ percent: 0, message: "", status: "idle" });
+                            setDuplicateCancelRequested(false);
+                          }}
+                        >
+                          <Image src="/icons/addcomponent.svg" alt="" width={16} height={16} className={shellStyles.actionIcon} />
+                          {duplicatingMapId === map.id ? "Duplicating..." : "Duplicate"}
+                        </button>
+                        <button
+                          type="button"
+                          className={`${shellStyles.button} ${shellStyles.buttonDanger} ${shellStyles.dashboardMobileActionButton}`}
+                          disabled={!canDelete || deletingMapId === map.id}
+                          title={canDelete ? "Delete map" : "Only the owner can delete this map"}
+                          onClick={() => setPendingDeleteRow(map)}
+                        >
+                          <Image src="/icons/delete.svg" alt="" width={16} height={16} className={shellStyles.actionIcon} />
+                          {deletingMapId === map.id ? "Deleting..." : "Delete"}
+                        </button>
+                      </div>
+                    </>
+                  ) : null}
+                </article>
+              );
+            })
+          )}
+        </div>
       </section>
 
       {showAccessRestrictedModal && accessState ? (
@@ -998,7 +1226,10 @@ export default function DashboardWorkspace() {
             <h3 className={shellStyles.modalTitle}>Read-only access</h3>
             <p className={shellStyles.modalText}>{restrictedModalText}</p>
             <p className={shellStyles.modalText}>
-              Current access status: <strong>{accessState.currentAccessStatus.replaceAll("_", " ")}</strong>
+              Current access status:{" "}
+              <span className={`${shellStyles.accessStatusPill} ${getAccessStatusToneClass(accessState.currentAccessStatus)}`}>
+                {formatAccessStatus(accessState.currentAccessStatus)}
+              </span>
             </p>
             <div className={shellStyles.modalActions}>
               <button

@@ -6,7 +6,9 @@ import type { MapMemberProfileRow, SystemMap } from "./canvasShared";
 import type { NodePaletteKind } from "./mapCategories";
 
 type CanvasActionButtonsProps = {
+  isMobile: boolean;
   showMapInfoAside: boolean;
+  onToggleMapInfo: () => void;
   rf: {
     fitView: (opts?: { duration?: number; padding?: number }) => void;
     setViewport: (v: { x: number; y: number; zoom: number }, opts?: { duration?: number }) => void;
@@ -22,6 +24,8 @@ type CanvasActionButtonsProps = {
   searchResults: Array<{ id: string; label: string; documentNumber: string | null; kind: string }>;
   onSelectSearchResult: (id: string) => void;
   canWriteMap: boolean;
+  canUseWizard: boolean;
+  onOpenWizard: () => void;
   canCreateSticky: boolean;
   handleAddBlankDocument: () => void;
   handleAddSystemCircle: () => void;
@@ -67,7 +71,9 @@ type CanvasActionButtonsProps = {
 };
 
 export function CanvasActionButtons({
+  isMobile,
   showMapInfoAside,
+  onToggleMapInfo,
   rf,
   setShowAddMenu,
   showAddMenu,
@@ -80,6 +86,8 @@ export function CanvasActionButtons({
   searchResults,
   onSelectSearchResult,
   canWriteMap,
+  canUseWizard,
+  onOpenWizard,
   canCreateSticky,
   handleAddBlankDocument,
   handleAddSystemCircle,
@@ -124,6 +132,347 @@ export function CanvasActionButtons({
   isPreparingPrint,
 }: CanvasActionButtonsProps) {
   const allowed = new Set<NodePaletteKind>(allowedNodeKinds);
+  const addItems: Array<{ key: string; label: string; onClick: () => void }> = [];
+  if (canWriteMap) {
+    if (allowed.has("document")) addItems.push({ key: "document", label: "Document", onClick: handleAddBlankDocument });
+    if (allowed.has("system")) addItems.push({ key: "system", label: "System", onClick: handleAddSystemCircle });
+    if (allowed.has("process")) addItems.push({ key: "process", label: "Process", onClick: handleAddProcessComponent });
+    if (allowed.has("person")) addItems.push({ key: "person", label: "Person", onClick: handleAddPerson });
+    if (allowed.has("category")) addItems.push({ key: "category", label: "Category", onClick: handleAddProcessHeading });
+    if (allowed.has("grouping_container")) {
+      addItems.push({ key: "grouping_container", label: "Grouping Container", onClick: handleAddGroupingContainer });
+    }
+    if (allowed.has("bowtie_hazard")) addItems.push({ key: "bowtie_hazard", label: "Hazard", onClick: handleAddBowtieHazard });
+    if (allowed.has("bowtie_top_event")) addItems.push({ key: "bowtie_top_event", label: "Top Event", onClick: handleAddBowtieTopEvent });
+    if (allowed.has("bowtie_threat")) addItems.push({ key: "bowtie_threat", label: "Threat", onClick: handleAddBowtieThreat });
+    if (allowed.has("bowtie_consequence")) {
+      addItems.push({ key: "bowtie_consequence", label: "Consequence", onClick: handleAddBowtieConsequence });
+    }
+    if (allowed.has("bowtie_control")) addItems.push({ key: "bowtie_control", label: "Control", onClick: handleAddBowtieControl });
+    if (allowed.has("bowtie_escalation_factor")) {
+      addItems.push({ key: "bowtie_escalation_factor", label: "Escalation Factor", onClick: handleAddBowtieEscalationFactor });
+    }
+    if (allowed.has("bowtie_recovery_measure")) {
+      addItems.push({ key: "bowtie_recovery_measure", label: "Recovery Measure", onClick: handleAddBowtieRecoveryMeasure });
+    }
+    if (allowed.has("bowtie_degradation_indicator")) {
+      addItems.push({
+        key: "bowtie_degradation_indicator",
+        label: "Degradation Indicator",
+        onClick: handleAddBowtieDegradationIndicator,
+      });
+    }
+    if (allowed.has("bowtie_risk_rating")) {
+      addItems.push({ key: "bowtie_risk_rating", label: "Risk Rating", onClick: handleAddBowtieRiskRating });
+    }
+    if (allowed.has("incident_sequence_step")) {
+      addItems.push({ key: "incident_sequence_step", label: "Sequence Step", onClick: handleAddIncidentSequenceStep });
+    }
+    if (allowed.has("incident_outcome")) {
+      addItems.push({ key: "incident_outcome", label: "Outcome", onClick: handleAddIncidentOutcome });
+    }
+    if (allowed.has("incident_task_condition")) {
+      addItems.push({ key: "incident_task_condition", label: "Task / Condition", onClick: handleAddIncidentTaskCondition });
+    }
+    if (allowed.has("incident_factor")) {
+      addItems.push({ key: "incident_factor", label: "Factor", onClick: handleAddIncidentFactor });
+    }
+    if (allowed.has("incident_system_factor")) {
+      addItems.push({ key: "incident_system_factor", label: "System Factor", onClick: handleAddIncidentSystemFactor });
+    }
+    if (allowed.has("incident_control_barrier")) {
+      addItems.push({ key: "incident_control_barrier", label: "Control / Barrier", onClick: handleAddIncidentControlBarrier });
+    }
+    if (allowed.has("incident_evidence")) {
+      addItems.push({ key: "incident_evidence", label: "Evidence", onClick: handleAddIncidentEvidence });
+    }
+    if (allowed.has("incident_finding")) {
+      addItems.push({ key: "incident_finding", label: "Finding", onClick: handleAddIncidentFinding });
+    }
+    if (allowed.has("incident_recommendation")) {
+      addItems.push({ key: "incident_recommendation", label: "Recommendation", onClick: handleAddIncidentRecommendation });
+    }
+    if (allowed.has("image_asset")) addItems.push({ key: "image_asset", label: "Image", onClick: handleStartAddImageAsset });
+    if (allowed.has("text_box")) addItems.push({ key: "text_box", label: "Text Box", onClick: handleAddTextBox });
+    if (allowed.has("table")) addItems.push({ key: "table", label: "Table", onClick: handleAddTable });
+    if (allowed.has("shape_rectangle")) {
+      addItems.push({ key: "shape_rectangle", label: "Rectangle", onClick: handleAddShapeRectangle });
+    }
+    if (allowed.has("shape_circle")) addItems.push({ key: "shape_circle", label: "Circle", onClick: handleAddShapeCircle });
+    if (allowed.has("shape_pill")) addItems.push({ key: "shape_pill", label: "Pill", onClick: handleAddShapePill });
+    if (allowed.has("shape_pentagon")) {
+      addItems.push({ key: "shape_pentagon", label: "Pentagon", onClick: handleAddShapePentagon });
+    }
+    if (allowed.has("shape_chevron_left")) {
+      addItems.push({ key: "shape_chevron_left", label: "Chevron", onClick: handleAddShapeChevronLeft });
+    }
+    if (allowed.has("shape_arrow")) addItems.push({ key: "shape_arrow", label: "Arrow", onClick: handleAddShapeArrow });
+  }
+  if (canCreateSticky && allowed.has("sticky_note")) {
+    addItems.push({ key: "sticky_note", label: "Sticky Note", onClick: handleAddStickyNote });
+  }
+
+  const renderMiniDocumentTile = (bannerBg: string, bannerText: string, typeLabel: string) => (
+    <div className="flex h-12 w-16 flex-col overflow-hidden rounded-[10px] border border-slate-300 bg-white shadow-[0_6px_16px_rgba(15,23,42,0.14)]">
+      <div className="flex h-3 items-center justify-center px-1 text-[4px] font-semibold uppercase tracking-[0.08em]" style={{ backgroundColor: bannerBg, color: bannerText }}>
+        {typeLabel}
+      </div>
+      <div className="flex flex-1 flex-col px-1.5 py-1">
+        <div className="h-1 rounded bg-slate-800/80" />
+        <div className="mt-1 h-1 w-2/3 rounded bg-slate-400" />
+        <div className="mt-auto rounded border border-slate-300 px-1 py-[2px]">
+          <div className="h-1 w-4/5 rounded bg-slate-300" />
+          <div className="mt-[2px] h-1 w-1/2 rounded bg-slate-200" />
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderMiniBowtieCard = (accent: string, background: string, border: string, labelBackground?: string, stripeHeader?: boolean) => (
+    <div className="relative flex h-14 w-16 overflow-hidden rounded-[12px] border shadow-[0_6px_16px_rgba(15,23,42,0.14)]" style={{ backgroundColor: background, borderColor: border }}>
+      <div className="w-1.5 shrink-0" style={{ backgroundColor: accent }} />
+      <div className="flex min-w-0 flex-1 flex-col">
+        {stripeHeader ? (
+          <div className="h-2.5 w-full border-b border-slate-700" style={{ backgroundImage: "repeating-linear-gradient(-45deg, #111827 0 6px, #facc15 6px 12px)" }} />
+        ) : (
+          <div className="h-3.5 border-b px-1" style={{ backgroundColor: labelBackground ?? accent, borderColor: "rgba(15,23,42,0.08)" }} />
+        )}
+        <div className="flex flex-1 items-center justify-center px-1.5">
+          <div className="w-full">
+            <div className="h-1 rounded bg-slate-800/75" />
+            <div className="mt-1 h-1 w-2/3 rounded bg-slate-400/80" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderAddItemPreview = (key: string) => {
+    switch (key) {
+      case "document":
+        return renderMiniDocumentTile("#111827", "#ffffff", "Procedure");
+      case "system":
+        return (
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#1e3a8a] px-2 text-[7px] font-semibold text-white shadow-[0_8px_20px_rgba(30,58,138,0.35)]">
+            SYS
+          </div>
+        );
+      case "process":
+        return (
+          <div className="relative h-12 w-16 overflow-hidden">
+            <svg viewBox="0 0 700 500" preserveAspectRatio="none" className="h-full w-full drop-shadow-[0_6px_16px_rgba(15,23,42,0.18)]">
+              <path
+                d="M0 0H700V500C640 458 560 450 486 485C435 510 389 509 338 484C260 447 186 446 112 479C74 496 37 503 0 500V0Z"
+                fill="#ff751f"
+              />
+            </svg>
+          </div>
+        );
+      case "incident_sequence_step":
+        return renderMiniDocumentTile("#bfdbfe", "#111827", "Step");
+      case "incident_outcome":
+        return renderMiniDocumentTile("#ef4444", "#ffffff", "Outcome");
+      case "incident_task_condition":
+        return renderMiniDocumentTile("#fb923c", "#111827", "Task");
+      case "incident_factor":
+        return renderMiniDocumentTile("#fde047", "#111827", "Factor");
+      case "incident_system_factor":
+        return renderMiniDocumentTile("#a78bfa", "#111827", "System");
+      case "incident_control_barrier":
+        return renderMiniDocumentTile("#4ade80", "#111827", "Barrier");
+      case "incident_evidence":
+        return renderMiniDocumentTile("#cbd5e1", "#111827", "Evidence");
+      case "incident_finding":
+        return renderMiniDocumentTile("#1d4ed8", "#ffffff", "Finding");
+      case "incident_recommendation":
+        return renderMiniDocumentTile("#14b8a6", "#111827", "Recommend");
+      case "person":
+        return (
+          <div className="flex h-14 w-14 items-center justify-center rounded-full border border-slate-300 bg-white shadow-[0_8px_20px_rgba(15,23,42,0.16)]">
+            <img src="/icons/account.svg" alt="" className="h-full w-full object-contain" />
+          </div>
+        );
+      case "category":
+        return (
+          <div className="flex h-12 w-16 flex-col border bg-[#249BC7] px-1 py-1 text-white shadow-[0_6px_20px_rgba(15,23,42,0.18)]" style={{ borderColor: "#249BC7" }}>
+            <div className="text-center text-[5px] font-semibold uppercase tracking-[0.14em]">Category</div>
+            <div className="flex flex-1 items-center justify-center">
+              <div className="h-1.5 w-8 rounded bg-white/80" />
+            </div>
+          </div>
+        );
+      case "grouping_container":
+        return (
+          <div className="relative h-12 w-16 rounded-[10px] border bg-transparent shadow-[0_6px_16px_rgba(15,23,42,0.12)]" style={{ borderColor: "#000000" }}>
+            <div className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2 rounded-full border border-black bg-white px-2 py-[2px] text-[5px] text-slate-800 shadow-[0_3px_8px_rgba(15,23,42,0.12)]">
+              Group
+            </div>
+          </div>
+        );
+      case "sticky_note":
+        return <div className="h-14 w-14 border border-[#facc15] bg-[#fef08a] shadow-[0_10px_24px_rgba(15,23,42,0.22)]" />;
+      case "image_asset":
+        return (
+          <div className="flex h-14 w-16 items-center justify-center overflow-hidden border border-slate-300 bg-white shadow-[0_6px_20px_rgba(15,23,42,0.12)]">
+            <img src="/icons/image.svg" alt="" className="h-8 w-8 object-contain opacity-70" />
+          </div>
+        );
+      case "text_box":
+        return (
+          <div className="flex h-14 w-16 items-center justify-center">
+            <img src="/icons/texticon.svg" alt="" className="h-10 w-10 object-contain" />
+          </div>
+        );
+      case "table":
+        return (
+          <div className="overflow-hidden rounded-lg border border-slate-300 bg-white shadow-[0_6px_16px_rgba(15,23,42,0.14)]">
+            <div className="h-3 w-full bg-[#249BC7]" />
+            <div className="grid h-11 w-16 grid-cols-3 grid-rows-3 gap-0 border-t border-slate-300 p-1">
+              {Array.from({ length: 9 }).map((_, index) => (
+                <span key={index} className="border border-slate-300 bg-white" />
+              ))}
+            </div>
+          </div>
+        );
+      case "shape_rectangle":
+        return <div className="h-10 w-16 bg-[#249BC7] shadow-[0_6px_16px_rgba(15,23,42,0.14)]" />;
+      case "shape_circle":
+        return <div className="h-12 w-12 rounded-full bg-[#249BC7] shadow-[0_6px_16px_rgba(15,23,42,0.14)]" />;
+      case "shape_pill":
+        return <div className="h-10 w-16 rounded-full bg-[#249BC7] shadow-[0_6px_16px_rgba(15,23,42,0.14)]" />;
+      case "shape_pentagon":
+        return <div className="h-12 w-14 bg-[#249BC7] shadow-[0_6px_16px_rgba(15,23,42,0.14)]" style={{ clipPath: "polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%)" }} />;
+      case "shape_chevron_left":
+        return <div className="h-10 w-16 bg-[#249BC7] shadow-[0_6px_16px_rgba(15,23,42,0.14)]" style={{ clipPath: "polygon(28% 0%, 100% 0%, 72% 50%, 100% 100%, 28% 100%, 0% 50%)" }} />;
+      case "shape_arrow":
+        return <div className="h-10 w-16 bg-[#249BC7] shadow-[0_6px_16px_rgba(15,23,42,0.14)]" style={{ clipPath: "polygon(0% 35%, 58% 35%, 58% 10%, 100% 50%, 58% 90%, 58% 65%, 0% 65%)" }} />;
+      case "bowtie_hazard":
+        return renderMiniBowtieCard("#facc15", "#f8fafc", "#334155", undefined, true);
+      case "bowtie_top_event":
+        return renderMiniBowtieCard("#22c55e", "#ecfdf5", "#16a34a", "#16a34a");
+      case "bowtie_threat":
+        return renderMiniBowtieCard("#f97316", "#fff7ed", "#fb923c", "#f97316");
+      case "bowtie_consequence":
+        return renderMiniBowtieCard("#ef4444", "#fef2f2", "#f87171", "#ef4444");
+      case "bowtie_escalation_factor":
+      case "bowtie_recovery_measure":
+      case "bowtie_degradation_indicator":
+      case "bowtie_risk_rating":
+        return renderMiniBowtieCard("#8b5cf6", "#f5f3ff", "#a78bfa", "#8b5cf6");
+      case "bowtie_control":
+        return renderMiniBowtieCard("#16a34a", "#ecfdf5", "#4ade80", "#16a34a");
+      default:
+        return <div className="h-12 w-12 rounded-2xl bg-slate-300 shadow-[0_6px_16px_rgba(15,23,42,0.14)]" />;
+    }
+  };
+
+  const floatingButtonClass =
+    "group flex h-[56px] w-[56px] items-center justify-center rounded-2xl border border-slate-200 bg-white text-black shadow-[0_10px_24px_rgba(15,23,42,0.14)] transition-all duration-150 hover:-translate-y-0.5 hover:bg-[#102a43] hover:text-white hover:shadow-[0_14px_28px_rgba(15,23,42,0.22)]";
+
+  if (isMobile) {
+    return (
+      <>
+        {showAddMenu && (canWriteMap || canCreateSticky) ? (
+          <div className="fixed inset-0 z-[97] md:hidden">
+            <div className="absolute inset-0 bg-white" />
+            <div className="absolute inset-0 overflow-y-auto px-5 pb-28 pt-5 text-slate-900">
+              <div className="mb-4 flex items-center justify-between">
+                <div>
+                  <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-slate-500">Add</p>
+                  <h2 className="text-lg font-semibold text-slate-950">New component</h2>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Close add menu"
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-300 bg-white text-slate-900"
+                  onClick={() => setShowAddMenu(() => false)}
+                >
+                  <span className="text-xl leading-none">x</span>
+                </button>
+              </div>
+              <div ref={addMenuRef} className="grid grid-cols-2 gap-3">
+                {addItems.map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    className="flex min-h-[112px] flex-col items-center justify-center px-3 py-3 text-center text-sm font-semibold text-slate-900 transition-transform duration-150 hover:-translate-y-0.5"
+                    onClick={() => {
+                      setShowAddMenu(() => false);
+                      item.onClick();
+                    }}
+                  >
+                    <span className="mb-3 flex h-16 items-center justify-center">{renderAddItemPreview(item.key)}</span>
+                    <span className="text-sm font-semibold leading-tight text-slate-900">{item.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="fixed inset-x-0 bottom-0 z-[95] px-3 pb-[calc(env(safe-area-inset-bottom,0px)+10px)] md:hidden">
+          <div className="mx-auto flex max-w-max items-center gap-2 rounded-[24px] border border-slate-300/80 bg-white/92 px-3 py-3 shadow-[0_18px_40px_rgba(15,23,42,0.22)] backdrop-blur">
+            <Link href="/dashboard" aria-label="Back to dashboard" title="Back" className={floatingButtonClass}>
+              <span
+                aria-hidden="true"
+                className="h-6 w-6 bg-current"
+                style={{ WebkitMaskImage: "url('/icons/back.svg')", maskImage: "url('/icons/back.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
+              />
+            </Link>
+            <button type="button" aria-label="Map information" title="Map information" className={floatingButtonClass} onClick={onToggleMapInfo}>
+              <span
+                aria-hidden="true"
+                className="h-6 w-6 bg-current"
+                style={{ WebkitMaskImage: "url('/icons/info.svg')", maskImage: "url('/icons/info.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
+              />
+            </button>
+            <button
+              type="button"
+              aria-label="Add component"
+              title="Add component"
+              onClick={() => setShowAddMenu((prev) => !prev)}
+              disabled={!canWriteMap && !canCreateSticky}
+              className={floatingButtonClass}
+            >
+              <span
+                aria-hidden="true"
+                className="h-6 w-6 bg-current"
+                style={{ WebkitMaskImage: "url('/icons/addcomponent.svg')", maskImage: "url('/icons/addcomponent.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
+              />
+            </button>
+            <button
+              type="button"
+              aria-label="Reset zoom"
+              title="Reset zoom"
+              onClick={() => rf?.setViewport({ x: 0, y: 0, zoom: 1 }, { duration: 300 })}
+              className={floatingButtonClass}
+            >
+              <span
+                aria-hidden="true"
+                className="h-6 w-6 bg-current"
+                style={{ WebkitMaskImage: "url('/icons/resetzoom.svg')", maskImage: "url('/icons/resetzoom.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
+              />
+            </button>
+            <button
+              type="button"
+              aria-label="Open wizard"
+              title={canUseWizard ? "Open wizard" : "Wizard is unavailable for this map"}
+              onClick={onOpenWizard}
+              disabled={!canUseWizard}
+              className="group flex h-[56px] w-[56px] items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#2563eb_0%,#6d28d9_52%,#db2777_100%)] text-white shadow-[0_14px_30px_rgba(79,70,229,0.26)] transition-all duration-150 hover:-translate-y-0.5 hover:bg-[linear-gradient(135deg,#1d4ed8_0%,#5b21b6_52%,#be185d_100%)] hover:shadow-[0_18px_36px_rgba(79,70,229,0.32)] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0 disabled:hover:shadow-[0_14px_30px_rgba(79,70,229,0.26)]"
+            >
+              <span
+                aria-hidden="true"
+                className="h-6 w-6 bg-current"
+                style={{ WebkitMaskImage: "url('/icons/wizard.svg')", maskImage: "url('/icons/wizard.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
+              />
+            </button>
+          </div>
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
       <Link
@@ -138,6 +487,20 @@ export function CanvasActionButtons({
           style={{ WebkitMaskImage: "url('/icons/back.svg')", maskImage: "url('/icons/back.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
         />
       </Link>
+      <button
+        type="button"
+        aria-label="Open wizard"
+        title={canUseWizard ? "Open wizard" : "Wizard is unavailable for this map"}
+        onClick={onOpenWizard}
+        disabled={!canUseWizard}
+        className="fixed left-[20px] top-[156px] z-[74] group flex h-[62px] w-[62px] items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#2563eb_0%,#6d28d9_52%,#db2777_100%)] text-white shadow-[0_14px_30px_rgba(79,70,229,0.26)] transition-all duration-150 hover:-translate-y-0.5 hover:bg-[linear-gradient(135deg,#1d4ed8_0%,#5b21b6_52%,#be185d_100%)] hover:shadow-[0_18px_36px_rgba(79,70,229,0.32)] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0 disabled:hover:shadow-[0_14px_30px_rgba(79,70,229,0.26)]"
+      >
+        <span
+          aria-hidden="true"
+          className="h-7 w-7 bg-current"
+          style={{ WebkitMaskImage: "url('/icons/wizard.svg')", maskImage: "url('/icons/wizard.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
+        />
+      </button>
       <div
         className="fixed top-[82px] z-[88] transition-[right] duration-300 ease-out"
         style={{ right: showMapInfoAside ? "315px" : "20px" }}
@@ -231,41 +594,20 @@ export function CanvasActionButtons({
             {canWriteMap ? (
               <>
                 {allowed.has("document") ? <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleAddBlankDocument}>Document</button> : null}
-                {allowed.has("system") ? <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleAddSystemCircle}>System</button> : null}
-                {allowed.has("process") ? <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleAddProcessComponent}>Process</button> : null}
-                {allowed.has("person") ? <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleAddPerson}>Person</button> : null}
-                {allowed.has("category") ? <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleAddProcessHeading}>Category</button> : null}
-                {allowed.has("grouping_container") ? <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleAddGroupingContainer}>Grouping Container</button> : null}
-                {allowed.has("bowtie_hazard") ? <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleAddBowtieHazard}>Hazard</button> : null}
-                {allowed.has("bowtie_top_event") ? <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleAddBowtieTopEvent}>Top Event</button> : null}
-                {allowed.has("bowtie_threat") ? <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleAddBowtieThreat}>Threat</button> : null}
-                {allowed.has("bowtie_consequence") ? <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleAddBowtieConsequence}>Consequence</button> : null}
-                {allowed.has("bowtie_control") ? <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleAddBowtieControl}>Control</button> : null}
-                {allowed.has("bowtie_escalation_factor") ? <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleAddBowtieEscalationFactor}>Escalation Factor</button> : null}
-                {allowed.has("bowtie_recovery_measure") ? <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleAddBowtieRecoveryMeasure}>Recovery Measure</button> : null}
-                {allowed.has("bowtie_degradation_indicator") ? <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleAddBowtieDegradationIndicator}>Degradation Indicator</button> : null}
-                {allowed.has("bowtie_risk_rating") ? <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleAddBowtieRiskRating}>Risk Rating</button> : null}
-                {allowed.has("incident_sequence_step") ? <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleAddIncidentSequenceStep}>Sequence Step</button> : null}
-                {allowed.has("incident_outcome") ? <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleAddIncidentOutcome}>Outcome</button> : null}
-                {allowed.has("incident_task_condition") ? <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleAddIncidentTaskCondition}>Task / Condition</button> : null}
-                {allowed.has("incident_factor") ? <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleAddIncidentFactor}>Factor</button> : null}
-                {allowed.has("incident_system_factor") ? <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleAddIncidentSystemFactor}>System Factor</button> : null}
-                {allowed.has("incident_control_barrier") ? <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleAddIncidentControlBarrier}>Control / Barrier</button> : null}
-                {allowed.has("incident_evidence") ? <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleAddIncidentEvidence}>Evidence</button> : null}
-                {allowed.has("incident_finding") ? <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleAddIncidentFinding}>Finding</button> : null}
-                {allowed.has("incident_recommendation") ? <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleAddIncidentRecommendation}>Recommendation</button> : null}
-                {allowed.has("image_asset") ? <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleStartAddImageAsset}>Image</button> : null}
-                {allowed.has("text_box") ? <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleAddTextBox}>Text Box</button> : null}
-                {allowed.has("table") ? <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleAddTable}>Table</button> : null}
-                {allowed.has("shape_rectangle") ? <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleAddShapeRectangle}>Rectangle</button> : null}
-                {allowed.has("shape_circle") ? <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleAddShapeCircle}>Circle</button> : null}
-                {allowed.has("shape_pill") ? <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleAddShapePill}>Pill</button> : null}
-                {allowed.has("shape_pentagon") ? <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleAddShapePentagon}>Pentagon</button> : null}
-                {allowed.has("shape_chevron_left") ? <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleAddShapeChevronLeft}>Chevron</button> : null}
-                {allowed.has("shape_arrow") ? <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleAddShapeArrow}>Arrow</button> : null}
+                {addItems
+                  .filter((item) => item.key !== "sticky_note")
+                  .map((item) => (
+                    <button
+                      key={item.key}
+                      className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100"
+                      onClick={item.onClick}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
               </>
             ) : null}
-            {canCreateSticky && allowed.has("sticky_note") ? (
+            {addItems.some((item) => item.key === "sticky_note") ? (
               <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleAddStickyNote}>Sticky Note</button>
             ) : null}
           </div>
@@ -313,6 +655,7 @@ export function CanvasActionButtons({
 }
 
 type MapInfoAsideProps = {
+  isMobile: boolean;
   showMapInfoAside: boolean;
   mapInfoAsideRef: RefObject<HTMLDivElement | null>;
   handleCloseMapInfoAside: () => void;
@@ -339,6 +682,7 @@ type MapInfoAsideProps = {
 };
 
 export function MapInfoAside({
+  isMobile,
   showMapInfoAside,
   mapInfoAsideRef,
   handleCloseMapInfoAside,
@@ -367,9 +711,13 @@ export function MapInfoAside({
   return (
     <aside
       ref={mapInfoAsideRef}
-      className="fixed bottom-0 right-0 top-[70px] z-[79] w-full max-w-[294px] border-l border-slate-300 bg-white shadow-[-16px_0_30px_rgba(15,23,42,0.26),0_8px_22px_rgba(15,23,42,0.14)]"
+      className={
+        isMobile
+          ? "fixed inset-0 z-[98] w-full bg-white text-slate-900"
+          : "fixed bottom-0 right-0 top-[70px] z-[79] w-full max-w-[294px] border-l border-slate-300 bg-white shadow-[-16px_0_30px_rgba(15,23,42,0.26),0_8px_22px_rgba(15,23,42,0.14)]"
+      }
     >
-      <div className="flex h-full flex-col overflow-auto p-4">
+      <div className={`flex h-full flex-col overflow-auto ${isMobile ? "px-5 pb-28 pt-5" : "p-4"}`}>
         <div className="flex items-center justify-between border-b border-slate-300 pb-3">
           <h2 className="text-base font-semibold text-slate-900">Map Information</h2>
           <button

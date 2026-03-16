@@ -57,10 +57,38 @@
   font-size: 0.94rem;
 }
 
+.textButton {
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 0.94rem;
+  cursor: pointer;
+}
+
 .headerActions {
   display: flex;
   align-items: center;
   gap: 18px;
+}
+
+.menuButton {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  box-shadow:
+    0 14px 28px rgba(16, 38, 95, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.menuButtonIcon {
+  width: 20px;
+  height: 20px;
+  background: currentColor;
 }
 
 .ctaButton {
@@ -191,7 +219,7 @@
   min-height: 0;
   height: 100%;
   overflow-y: auto;
-  padding: 26px 34px;
+  padding: 30px 42px;
   border: 1px solid rgba(28, 35, 52, 0.08);
   background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
   box-shadow:
@@ -271,6 +299,10 @@
   font-size: 0.86rem;
 }
 
+.mobileMenu {
+  display: none;
+}
+
 @media (max-width: 1080px) {
   .headerInner {
     grid-template-columns: 1fr;
@@ -302,7 +334,7 @@
   .viewport {
     min-height: 0;
     height: 100%;
-    padding: 22px 22px;
+    padding: 26px 28px;
   }
 
   .section {
@@ -311,12 +343,72 @@
 }
 
 @media (max-width: 720px) {
+  .page {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
+  .headerInner {
+    grid-template-columns: auto 1fr auto;
+    justify-items: stretch;
+    padding: 14px 16px;
+    gap: 14px;
+  }
+
+  .brand {
+    min-width: 0;
+    font-size: 1rem;
+  }
+
+  .brand span {
+    white-space: nowrap;
+  }
+
+  .nav,
+  .headerActions {
+    display: none;
+  }
+
+  .menuButton {
+    display: inline-flex;
+    justify-self: end;
+  }
+
   .headerCurve {
-    padding: 28px 16px 110px;
+    margin-top: 0;
+    padding: 18px 16px 92px;
+  }
+
+  .headerCurve::after {
+    bottom: -144px;
+    height: 230px;
+  }
+
+  .headerCurveInner h1 {
+    font-size: clamp(2.6rem, 14vw, 3.6rem);
+  }
+
+  .effectiveDate {
+    margin-top: 12px;
+    padding-bottom: 12px;
   }
 
   .main {
+    margin-top: -52px;
     padding: 0 16px 16px;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .mainInner {
+    height: auto;
+    min-height: 0;
+  }
+
+  .menu {
+    display: none;
   }
 
   .menuList {
@@ -324,11 +416,106 @@
   }
 
   .viewport {
-    padding: 22px 18px;
+    height: auto;
+    min-height: 0;
+    padding: 20px 20px 28px;
+    border-radius: 18px;
+    scroll-snap-type: none;
+  }
+
+  .section {
+    min-height: auto;
+    gap: 14px;
+    padding-bottom: 22px;
+    scroll-snap-align: none;
+    scroll-snap-stop: normal;
+  }
+
+  .section p {
+    font-size: 1rem;
+    line-height: 1.75;
   }
 
   .footerInner {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .mobileMenu {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    padding: 18px 16px 28px;
+    background: linear-gradient(180deg, #1747b9 0%, #2f77df 42%, #5ba1ff 100%);
+    color: #ffffff;
+  }
+
+  .mobileMenuHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .mobileMenuClose {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 52px;
+    border: 1px solid rgba(255, 255, 255, 0.24);
+    background: rgba(255, 255, 255, 0.14);
+    color: #ffffff;
+    box-shadow:
+      0 14px 28px rgba(16, 38, 95, 0.18),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  }
+
+  .mobileMenuCloseIcon {
+    width: 20px;
+    height: 20px;
+    background: currentColor;
+  }
+
+  .mobileMenuNav {
+    margin-top: 36px;
+    display: grid;
+    gap: 18px;
+  }
+
+  .mobileMenuNav a {
+    color: #ffffff;
+    text-decoration: none;
+    font-size: 1.2rem;
+    font-weight: 700;
+  }
+
+  .mobileMenuActions {
+    margin-top: auto;
+    display: grid;
+    gap: 12px;
+  }
+
+  .mobilePrimaryButton,
+  .mobileSecondaryButton {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 50px;
+    text-decoration: none;
+    font-weight: 700;
+  }
+
+  .mobilePrimaryButton {
+    background: #ffffff;
+    color: #173b8f;
+  }
+
+  .mobileSecondaryButton {
+    border: 1px solid rgba(255, 255, 255, 0.34);
+    background: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
   }
 }

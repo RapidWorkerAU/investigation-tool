@@ -154,6 +154,7 @@ import { MobileAddRelationshipModal, MobileNodeActionSheet } from "./canvasMobil
 import { CanvasDrilldownOverlays } from "./canvasDrilldownAsides";
 import { CanvasConfirmDialogs } from "./canvasDialogs";
 import { CanvasElementPropertyOverlays } from "./canvasPropertyOverlays";
+import { SystemMapWelcomeModal } from "./SystemMapWelcomeModal";
 import { defaultMapCategoryId, getAllowedNodeKindsForCategory, type MapCategoryId } from "./mapCategories";
 import { useCanvasRelationNodeActions } from "./useCanvasRelationNodeActions";
 import { useCanvasElementActions } from "./useCanvasElementActions";
@@ -165,6 +166,10 @@ import { useCanvasNodeDragStop } from "./useCanvasNodeDragStop";
 import { useCanvasRelationshipDerived } from "./useCanvasRelationshipDerived";
 import { useCanvasImageUpload } from "./useCanvasImageUpload";
 import { handleCanvasNodeClick } from "./canvasNodeClickHandler";
+import {
+  SystemMapWizardModal,
+  type SystemMapWizardCommitPayload,
+} from "./SystemMapWizardModal";
 import {
   buildDocumentFlowNodes,
   buildGroupingFlowNodes,
@@ -187,7 +192,47 @@ const canvasElementSelectColumns =
 const isMethodologyElementType = (elementType: string) =>
   elementType.startsWith("bowtie_") || elementType.startsWith("incident_");
 
-function SystemMapCanvasInner({ mapId }: { mapId: string }) {
+type CanvasElementInsertPayload = {
+  map_id: string;
+  element_type: string;
+  heading: string;
+  color_hex: string | null;
+  created_by_user_id: string | null;
+  element_config?: Record<string, unknown> | null;
+  pos_x: number;
+  pos_y: number;
+  width: number;
+  height: number;
+};
+
+type CanvasElementUpdatePayload = {
+  id: string;
+  fields: Partial<Pick<CanvasElementRow, "heading" | "element_config" | "pos_x" | "pos_y" | "width" | "height">>;
+};
+
+const stepGroupHeadingByWizardStep: Record<SystemMapWizardCommitPayload["step"], string> = {
+  sequence: "Sequence",
+  people: "People",
+  "task-condition": "Task / Condition",
+  factors: "Factors",
+  "control-barrier": "Controls / Barriers",
+  evidence: "Evidence",
+  finding: "Findings",
+  recommendation: "Recommendations",
+};
+
+const stepElementTypesByWizardStep: Record<SystemMapWizardCommitPayload["step"], string[]> = {
+  sequence: ["incident_sequence_step"],
+  people: ["person"],
+  "task-condition": ["incident_task_condition"],
+  factors: ["incident_factor", "incident_system_factor"],
+  "control-barrier": ["incident_control_barrier"],
+  evidence: ["incident_evidence"],
+  finding: ["incident_finding"],
+  recommendation: ["incident_recommendation"],
+};
+
+function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; showWelcomeOnLoad: boolean }) {
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const relationshipPopupRef = useRef<HTMLDivElement | null>(null);
   const addMenuRef = useRef<HTMLDivElement | null>(null);
@@ -241,6 +286,9 @@ function SystemMapCanvasInner({ mapId }: { mapId: string }) {
   const [pendingViewport, setPendingViewport] = useState<Viewport | null>(null);
 
   const [showAddMenu, setShowAddMenu] = useState(false);
+  const [showWizardModal, setShowWizardModal] = useState(false);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  const [wizardSaving, setWizardSaving] = useState(false);
   const [isNodeDragActive, setIsNodeDragActive] = useState(false);
   const [showSearchMenu, setShowSearchMenu] = useState(false);
   const [showPrintMenu, setShowPrintMenu] = useState(false);
@@ -278,11 +326,35 @@ function SystemMapCanvasInner({ mapId }: { mapId: string }) {
   );
   const [searchQuery, setSearchQuery] = useState("");
   const snapToMinorGrid = useCallback((v: number) => Math.round(v / minorGridSize) * minorGridSize, []);
+  const getCanvasFlowCenter = useCallback(() => {
+    if (!rf || !canvasRef.current) return null;
+    const bounds = canvasRef.current.getBoundingClientRect();
+    const flowPoint = rf.screenToFlowPosition({
+      x: bounds.left + bounds.width / 2,
+      y: bounds.top + bounds.height / 2,
+    });
+    return {
+      x: snapToMinorGrid(flowPoint.x),
+      y: snapToMinorGrid(flowPoint.y),
+    };
+  }, [rf, snapToMinorGrid]);
   const canWriteMap = mapRole === "partial_write" || mapRole === "full_write";
   const canManageMapMetadata = mapRole === "full_write" && !!map && !!userId && map.owner_id === userId;
   const canUseContextMenu = mapRole !== "read";
   const canCreateSticky = !!userId;
   const allowedNodeKinds = useMemo(() => getAllowedNodeKindsForCategory(mapCategoryId), [mapCategoryId]);
+  const canUseWizard = canWriteMap && allowedNodeKinds.some((kind) => kind.startsWith("incident_"));
+  useEffect(() => {
+    if (!showWelcomeOnLoad) return;
+    setShowWelcomeModal(true);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get("welcome") === "1") {
+        url.searchParams.delete("welcome");
+        window.history.replaceState({}, "", url.pathname + url.search + url.hash);
+      }
+    }
+  }, [showWelcomeOnLoad]);
   const relationshipCategoryOptions = useMemo(() => getRelationshipCategoryOptions(mapCategoryId), [mapCategoryId]);
   const canEditElement = useCallback(
     (element: CanvasElementRow) =>
@@ -3020,6 +3092,456 @@ function SystemMapCanvasInner({ mapId }: { mapId: string }) {
     setShowAddMenu,
     handleAddImageAsset,
   });
+  const insertCanvasElements = useCallback(
+    async (payloads: CanvasElementInsertPayload[]) => {
+      if (!payloads.length) return [];
+      const { data, error: insertError } = await supabaseBrowser
+        .schema("ms")
+        .from("canvas_elements")
+        .insert(payloads)
+        .select(canvasElementSelectColumns);
+      if (insertError) throw insertError;
+      const insertedRows = (data as CanvasElementRow[] | null) ?? [];
+      if (insertedRows.length) {
+        setElements((current) => [...current, ...insertedRows]);
+      }
+      return insertedRows;
+    },
+    [setElements]
+  );
+  const updateCanvasElements = useCallback(
+    async (updates: CanvasElementUpdatePayload[]) => {
+      if (!updates.length) return;
+      await Promise.all(
+        updates.map(async ({ id, fields }) => {
+          const { error: updateError } = await supabaseBrowser
+            .schema("ms")
+            .from("canvas_elements")
+            .update(fields)
+            .eq("id", id);
+          if (updateError) throw updateError;
+        })
+      );
+      setElements((current) =>
+        current.map((element) => {
+          const match = updates.find((update) => update.id === element.id);
+          return match ? { ...element, ...match.fields } : element;
+        })
+      );
+    },
+    [setElements]
+  );
+  const buildWizardGroupLayout = useCallback(
+    (itemCount: number, itemWidth: number, itemHeight: number) => {
+      const columns = itemCount <= 1 ? 1 : itemCount <= 4 ? 2 : 3;
+      const rows = Math.max(1, Math.ceil(itemCount / columns));
+      const edgePadding = minorGridSize * 2;
+      const gap = minorGridSize;
+      return {
+        columns,
+        rows,
+        gap,
+        itemWidth,
+        itemHeight,
+        horizontalPadding: edgePadding,
+        topPadding: edgePadding,
+        bottomPadding: edgePadding,
+        width: Math.max(
+          groupingMinWidth,
+          edgePadding * 2 + columns * itemWidth + Math.max(0, columns - 1) * gap
+        ),
+        height: Math.max(
+          groupingMinHeight,
+          edgePadding + rows * itemHeight + Math.max(0, rows - 1) * gap + edgePadding
+        ),
+      };
+    },
+    [groupingMinHeight, groupingMinWidth]
+  );
+  const findWizardGroupElements = useCallback(
+    (groupElement: CanvasElementRow, step: SystemMapWizardCommitPayload["step"]) => {
+      const allowedTypes = new Set(stepElementTypesByWizardStep[step]);
+      const rightEdge = groupElement.pos_x + (groupElement.width || groupingDefaultWidth);
+      const bottomEdge = groupElement.pos_y + (groupElement.height || groupingDefaultHeight);
+      return elements
+        .filter((element) => {
+          if (!allowedTypes.has(element.element_type)) return false;
+          const elementRight = element.pos_x + (element.width || 0);
+          const elementBottom = element.pos_y + (element.height || 0);
+          return (
+            element.pos_x >= groupElement.pos_x &&
+            element.pos_y >= groupElement.pos_y &&
+            elementRight <= rightEdge &&
+            elementBottom <= bottomEdge
+          );
+        })
+        .sort((a, b) => (a.pos_y === b.pos_y ? a.pos_x - b.pos_x : a.pos_y - b.pos_y));
+    },
+    [elements, groupingDefaultHeight, groupingDefaultWidth]
+  );
+  const findExistingWizardGroup = useCallback(
+    (heading: string) =>
+      elements
+        .filter(
+          (element) =>
+            element.element_type === "grouping_container" &&
+            (element.heading || "").trim().toLowerCase() === heading.trim().toLowerCase()
+        )
+        .sort((a, b) => (a.pos_x === b.pos_x ? a.pos_y - b.pos_y : a.pos_x - b.pos_x))[0] ?? null,
+    [elements]
+  );
+  const getNextWizardGroupPosition = useCallback(
+    (groupWidth: number, groupHeight: number) => {
+      const groupingElements = elements.filter((element) => element.element_type === "grouping_container");
+      if (groupingElements.length) {
+        const rightmostGroup = groupingElements.reduce((best, current) => {
+          const bestEdge = best.pos_x + (best.width || groupingDefaultWidth);
+          const currentEdge = current.pos_x + (current.width || groupingDefaultWidth);
+          return currentEdge > bestEdge ? current : best;
+        });
+        return {
+          x: snapToMinorGrid(rightmostGroup.pos_x + (rightmostGroup.width || groupingDefaultWidth) + majorGridSize),
+          y: snapToMinorGrid(rightmostGroup.pos_y),
+        };
+      }
+      const center = getCanvasFlowCenter();
+      if (!center) {
+        return {
+          x: snapToMinorGrid(majorGridSize),
+          y: snapToMinorGrid(majorGridSize),
+        };
+      }
+      return {
+        x: snapToMinorGrid(center.x - groupWidth / 2),
+        y: snapToMinorGrid(center.y - groupHeight / 2),
+      };
+    },
+    [elements, getCanvasFlowCenter, groupingDefaultWidth, majorGridSize, snapToMinorGrid]
+  );
+  const handleWizardCommitStep = useCallback(
+    async (payload: SystemMapWizardCommitPayload) => {
+      if (!canUseWizard || !userId) return;
+      const createGroupAndInsert = async (
+        step: SystemMapWizardCommitPayload["step"],
+        heading: string,
+        itemWidth: number,
+        itemHeight: number,
+        nodeBuilder: (origin: { x: number; y: number }, index: number) => CanvasElementInsertPayload | null,
+        meaningfulCount: number
+      ) => {
+        if (!meaningfulCount) return;
+        const existingGroup = findExistingWizardGroup(heading);
+        const existingNodes = existingGroup ? findWizardGroupElements(existingGroup, step) : [];
+        const totalCount = existingNodes.length + meaningfulCount;
+        const layout = buildWizardGroupLayout(totalCount, itemWidth, itemHeight);
+        const groupPosition = existingGroup
+          ? {
+              x: snapToMinorGrid(existingGroup.pos_x),
+              y: snapToMinorGrid(existingGroup.pos_y),
+            }
+          : getNextWizardGroupPosition(layout.width, layout.height);
+        const relayoutUpdates: CanvasElementUpdatePayload[] = [];
+        existingNodes.forEach((node, index) => {
+          const column = index % layout.columns;
+          const row = Math.floor(index / layout.columns);
+          const origin = {
+            x: snapToMinorGrid(groupPosition.x + layout.horizontalPadding + column * (layout.itemWidth + layout.gap)),
+            y: snapToMinorGrid(groupPosition.y + layout.topPadding + row * (layout.itemHeight + layout.gap)),
+          };
+          relayoutUpdates.push({
+            id: node.id,
+            fields: {
+              pos_x: origin.x,
+              pos_y: origin.y,
+              width: layout.itemWidth,
+              height: layout.itemHeight,
+            },
+          });
+        });
+        const nodePayloads: CanvasElementInsertPayload[] = [];
+        for (let index = 0; index < meaningfulCount; index += 1) {
+          const absoluteIndex = existingNodes.length + index;
+          const column = absoluteIndex % layout.columns;
+          const row = Math.floor(absoluteIndex / layout.columns);
+          const origin = {
+            x: snapToMinorGrid(groupPosition.x + layout.horizontalPadding + column * (layout.itemWidth + layout.gap)),
+            y: snapToMinorGrid(groupPosition.y + layout.topPadding + row * (layout.itemHeight + layout.gap)),
+          };
+          const nodePayload = nodeBuilder(origin, index);
+          if (nodePayload) nodePayloads.push(nodePayload);
+        }
+        if (existingGroup) {
+          await updateCanvasElements([
+            {
+              id: existingGroup.id,
+              fields: {
+                pos_x: groupPosition.x,
+                pos_y: groupPosition.y,
+                width: layout.width,
+                height: layout.height,
+              },
+            },
+            ...relayoutUpdates,
+          ]);
+          await insertCanvasElements(nodePayloads);
+          return;
+        }
+        const groupPayload: CanvasElementInsertPayload = {
+          map_id: mapId,
+          element_type: "grouping_container",
+          heading,
+          color_hex: null,
+          created_by_user_id: userId,
+          pos_x: groupPosition.x,
+          pos_y: groupPosition.y,
+          width: layout.width,
+          height: layout.height,
+        };
+        await insertCanvasElements([groupPayload, ...nodePayloads]);
+      };
+
+      const isFilled = (value: string) => value.trim().length > 0;
+
+      if (payload.step === "sequence") {
+        const items = payload.items.filter((item) => isFilled(item.heading) || isFilled(item.description) || isFilled(item.timestamp) || isFilled(item.location));
+        await createGroupAndInsert("sequence", stepGroupHeadingByWizardStep.sequence, bowtieDefaultWidth, bowtieControlHeight, (origin, index) => {
+          const item = items[index];
+          return {
+            map_id: mapId,
+            element_type: "incident_sequence_step",
+            heading: item.heading.trim() || `Sequence Step ${index + 1}`,
+            color_hex: "#bfdbfe",
+            created_by_user_id: userId,
+            element_config: {
+              description: item.description.trim(),
+              timestamp: item.timestamp.trim(),
+              location: item.location.trim(),
+            },
+            pos_x: origin.x,
+            pos_y: origin.y,
+            width: bowtieDefaultWidth,
+            height: bowtieControlHeight,
+          };
+        }, items.length);
+        return;
+      }
+
+      if (payload.step === "people") {
+        const items = payload.items.filter((item) => isFilled(item.roleName) || isFilled(item.occupantName));
+        await createGroupAndInsert("people", stepGroupHeadingByWizardStep.people, personElementWidth, personElementHeight, (origin, index) => {
+          const item = items[index];
+          return {
+            map_id: mapId,
+            element_type: "person",
+            heading: buildPersonHeading(item.roleName.trim() || "Role Name", item.occupantName.trim() || "Occupant Name"),
+            color_hex: null,
+            created_by_user_id: userId,
+            element_config: {
+              position_title: item.roleName.trim(),
+              role_id: "",
+              department: "",
+              occupant_name: item.occupantName.trim(),
+              start_date: "",
+              employment_type: "fte",
+              acting_name: "",
+              acting_start_date: "",
+              recruiting: false,
+              contractor_role: false,
+              proposed_role: false,
+            },
+            pos_x: origin.x,
+            pos_y: origin.y,
+            width: personElementWidth,
+            height: personElementHeight,
+          };
+        }, items.length);
+        return;
+      }
+
+      if (payload.step === "task-condition") {
+        const items = payload.items.filter((item) => isFilled(item.heading) || isFilled(item.description) || isFilled(item.environmentalContext));
+        await createGroupAndInsert("task-condition", stepGroupHeadingByWizardStep["task-condition"], bowtieDefaultWidth, bowtieControlHeight, (origin, index) => {
+          const item = items[index];
+          return {
+            map_id: mapId,
+            element_type: "incident_task_condition",
+            heading: item.heading.trim() || `Task / Condition ${index + 1}`,
+            color_hex: "#fb923c",
+            created_by_user_id: userId,
+            element_config: {
+              description: item.description.trim(),
+              state: item.state,
+              environmental_context: item.environmentalContext.trim(),
+            },
+            pos_x: origin.x,
+            pos_y: origin.y,
+            width: bowtieDefaultWidth,
+            height: bowtieControlHeight,
+          };
+        }, items.length);
+        return;
+      }
+
+      if (payload.step === "factors") {
+        const items = payload.items.filter((item) => isFilled(item.heading) || isFilled(item.description) || isFilled(item.category));
+        await createGroupAndInsert("factors", stepGroupHeadingByWizardStep.factors, bowtieDefaultWidth, bowtieControlHeight, (origin, index) => {
+          const item = items[index];
+          if (item.kind === "incident_system_factor") {
+            return {
+              map_id: mapId,
+              element_type: "incident_system_factor",
+              heading: item.heading.trim() || `System Factor ${index + 1}`,
+              color_hex: "#a78bfa",
+              created_by_user_id: userId,
+              element_config: {
+                description: item.description.trim(),
+                category: item.category.trim(),
+                cause_level: item.classification,
+              },
+              pos_x: origin.x,
+              pos_y: origin.y,
+              width: bowtieDefaultWidth,
+              height: bowtieControlHeight,
+            };
+          }
+          return {
+            map_id: mapId,
+            element_type: "incident_factor",
+            heading: item.heading.trim() || `Factor ${index + 1}`,
+            color_hex: "#fde047",
+            created_by_user_id: userId,
+            element_config: {
+              factor_presence: item.presence,
+              factor_classification: item.classification,
+              influence_type: item.category.trim(),
+              description: item.description.trim(),
+            },
+            pos_x: origin.x,
+            pos_y: origin.y,
+            width: bowtieDefaultWidth,
+            height: bowtieControlHeight,
+          };
+        }, items.length);
+        return;
+      }
+
+      if (payload.step === "control-barrier") {
+        const items = payload.items.filter((item) => isFilled(item.heading) || isFilled(item.description) || isFilled(item.controlType) || isFilled(item.ownerText));
+        await createGroupAndInsert("control-barrier", stepGroupHeadingByWizardStep["control-barrier"], bowtieDefaultWidth, bowtieControlHeight, (origin, index) => {
+          const item = items[index];
+          return {
+            map_id: mapId,
+            element_type: "incident_control_barrier",
+            heading: item.heading.trim() || `Control / Barrier ${index + 1}`,
+            color_hex: "#4ade80",
+            created_by_user_id: userId,
+            element_config: {
+              barrier_state: item.barrierState,
+              barrier_role: item.barrierRole,
+              description: item.description.trim(),
+              control_type: item.controlType.trim(),
+              owner_text: item.ownerText.trim(),
+              verification_method: "",
+              verification_frequency: "",
+            },
+            pos_x: origin.x,
+            pos_y: origin.y,
+            width: bowtieDefaultWidth,
+            height: bowtieControlHeight,
+          };
+        }, items.length);
+        return;
+      }
+
+      if (payload.step === "evidence") {
+        const items = payload.items.filter((item) => isFilled(item.heading) || isFilled(item.description) || isFilled(item.evidenceType) || isFilled(item.source));
+        await createGroupAndInsert("evidence", stepGroupHeadingByWizardStep.evidence, bowtieDefaultWidth, bowtieControlHeight, (origin, index) => {
+          const item = items[index];
+          return {
+            map_id: mapId,
+            element_type: "incident_evidence",
+            heading: item.heading.trim() || `Evidence ${index + 1}`,
+            color_hex: "#cbd5e1",
+            created_by_user_id: userId,
+            element_config: {
+              evidence_type: item.evidenceType.trim(),
+              description: item.description.trim(),
+              source: item.source.trim(),
+              show_canvas_preview: false,
+              media_storage_path: "",
+              media_mime: "",
+              media_name: "",
+              media_rotation_deg: 0,
+            },
+            pos_x: origin.x,
+            pos_y: origin.y,
+            width: bowtieDefaultWidth,
+            height: bowtieControlHeight,
+          };
+        }, items.length);
+        return;
+      }
+
+      if (payload.step === "finding") {
+        const items = payload.items.filter((item) => isFilled(item.heading) || isFilled(item.description));
+        await createGroupAndInsert("finding", stepGroupHeadingByWizardStep.finding, bowtieDefaultWidth, bowtieControlHeight, (origin, index) => {
+          const item = items[index];
+          return {
+            map_id: mapId,
+            element_type: "incident_finding",
+            heading: item.heading.trim() || `Finding ${index + 1}`,
+            color_hex: "#1d4ed8",
+            created_by_user_id: userId,
+            element_config: {
+              description: item.description.trim(),
+              confidence_level: item.confidenceLevel,
+            },
+            pos_x: origin.x,
+            pos_y: origin.y,
+            width: bowtieDefaultWidth,
+            height: bowtieControlHeight,
+          };
+        }, items.length);
+        return;
+      }
+
+      const items = payload.items.filter((item) => isFilled(item.heading) || isFilled(item.description) || isFilled(item.ownerText) || isFilled(item.dueDate));
+      await createGroupAndInsert("recommendation", stepGroupHeadingByWizardStep.recommendation, bowtieDefaultWidth, bowtieControlHeight, (origin, index) => {
+        const item = items[index];
+        return {
+          map_id: mapId,
+          element_type: "incident_recommendation",
+          heading: item.heading.trim() || `Recommendation ${index + 1}`,
+          color_hex: "#14b8a6",
+          created_by_user_id: userId,
+          element_config: {
+            action_type: item.actionType,
+            owner_text: item.ownerText.trim(),
+            due_date: item.dueDate.trim(),
+            description: item.description.trim(),
+          },
+          pos_x: origin.x,
+          pos_y: origin.y,
+          width: bowtieDefaultWidth,
+          height: bowtieControlHeight,
+        };
+      }, items.length);
+    },
+    [
+      bowtieControlHeight,
+      bowtieDefaultWidth,
+      buildPersonHeading,
+      buildWizardGroupLayout,
+      canUseWizard,
+      getNextWizardGroupPosition,
+      insertCanvasElements,
+      mapId,
+      personElementHeight,
+      personElementWidth,
+      snapToMinorGrid,
+      userId,
+    ]
+  );
   const {
     relatedRows,
     relatedGroupingRows,
@@ -3400,6 +3922,14 @@ function SystemMapCanvasInner({ mapId }: { mapId: string }) {
     closeDesktopDrilldownPanels();
     setMobileNodeMenuId(null);
   }, [closeDesktopDrilldownPanels]);
+  const handleToggleMapInfoAside = useCallback(() => {
+    closeAllLeftAsides();
+    setShowMapInfoAside((prev) => {
+      const next = !prev;
+      if (next) setIsEditingMapInfo(false);
+      return next;
+    });
+  }, [closeAllLeftAsides]);
 
   const openAddRelationshipFromSource = useCallback(
     (source: { nodeId?: string | null; systemId?: string | null; groupingId?: string | null }) => {
@@ -3712,7 +4242,9 @@ function SystemMapCanvasInner({ mapId }: { mapId: string }) {
       />
 
       <CanvasActionButtons
+        isMobile={isMobile}
         showMapInfoAside={showMapInfoAside}
+        onToggleMapInfo={handleToggleMapInfoAside}
         rf={rf}
         setShowAddMenu={setShowAddMenu}
         showAddMenu={showAddMenu}
@@ -3725,6 +4257,11 @@ function SystemMapCanvasInner({ mapId }: { mapId: string }) {
         searchResults={searchResults}
         onSelectSearchResult={handleSelectSearchResult}
         canWriteMap={canWriteMap}
+        canUseWizard={canUseWizard}
+        onOpenWizard={() => {
+          if (!canUseWizard) return;
+          setShowWizardModal(true);
+        }}
         canCreateSticky={canCreateSticky}
         handleAddBlankDocument={handleAddBlankDocument}
         handleAddSystemCircle={handleAddSystemCircle}
@@ -3768,8 +4305,32 @@ function SystemMapCanvasInner({ mapId }: { mapId: string }) {
         onPrintSelectArea={handlePrintSelectArea}
         isPreparingPrint={isPreparingPrint}
       />
+      <SystemMapWelcomeModal
+        open={showWelcomeModal}
+        isMobile={isMobile}
+        onStartManual={() => setShowWelcomeModal(false)}
+        onStartWizard={() => {
+          setShowWelcomeModal(false);
+          if (canUseWizard) setShowWizardModal(true);
+        }}
+      />
+      <SystemMapWizardModal
+        open={showWizardModal}
+        isMobile={isMobile}
+        onClose={() => setShowWizardModal(false)}
+        isSaving={wizardSaving}
+        onCommitStep={async (payload) => {
+          setWizardSaving(true);
+          try {
+            await handleWizardCommitStep(payload);
+          } finally {
+            setWizardSaving(false);
+          }
+        }}
+      />
 
       <MapInfoAside
+        isMobile={isMobile}
         showMapInfoAside={showMapInfoAside}
         mapInfoAsideRef={mapInfoAsideRef}
         handleCloseMapInfoAside={handleCloseMapInfoAside}
@@ -3795,7 +4356,7 @@ function SystemMapCanvasInner({ mapId }: { mapId: string }) {
         mapRoleLabel={mapRoleLabel}
       />
 
-      <main className="relative min-h-0 flex-1 overflow-hidden">
+      <main className="relative min-h-0 flex-1 overflow-hidden pb-[76px] md:pb-0">
         <div
           ref={canvasRef}
           className="h-full w-full bg-stone-50"
@@ -4683,7 +5244,13 @@ function SystemMapCanvasInner({ mapId }: { mapId: string }) {
   );
 }
 
-export default function SystemMapCanvasClient({ mapId }: { mapId: string }) {
+export default function SystemMapCanvasClient({
+  mapId,
+  showWelcomeOnLoad = false,
+}: {
+  mapId: string;
+  showWelcomeOnLoad?: boolean;
+}) {
   useEffect(() => {
     const body = document.body;
     const main = document.querySelector("body > main");
@@ -4699,7 +5266,7 @@ export default function SystemMapCanvasClient({ mapId }: { mapId: string }) {
 
   return (
     <ReactFlowProvider>
-      <SystemMapCanvasInner mapId={mapId} />
+      <SystemMapCanvasInner mapId={mapId} showWelcomeOnLoad={showWelcomeOnLoad} />
     </ReactFlowProvider>
   );
 }

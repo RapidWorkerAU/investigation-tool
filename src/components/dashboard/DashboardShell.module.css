@@ -17,31 +17,36 @@
   --shell-bg:
     radial-gradient(circle at top left, rgba(255, 255, 255, 0.06), transparent 20%),
     linear-gradient(180deg, #3a3a36 0%, #252523 100%);
-  min-height: 100vh;
+  height: 100dvh;
+  min-height: 100dvh;
   padding: 0;
   background: var(--shell-bg);
+  overflow: hidden;
 }
 
 .deviceShell {
   width: 100%;
-  min-height: 100vh;
+  height: 100dvh;
+  min-height: 100dvh;
   margin: 0;
   padding: 28px 28px 28px 8px;
   background: var(--shell-bg);
+  overflow: hidden;
 }
 
 .deviceBezel {
   display: grid;
   grid-template-columns: 68px minmax(0, 1fr);
-  min-height: calc(100vh - 56px);
+  height: calc(100dvh - 56px);
+  min-height: calc(100dvh - 56px);
   position: relative;
 }
 
 .sidebar {
-  padding: 24px 7px;
+  padding: 6px 7px 24px;
   display: grid;
   grid-template-rows: auto 1fr auto;
-  gap: 28px;
+  gap: 12px;
   justify-items: center;
   position: relative;
   z-index: 1;
@@ -51,7 +56,7 @@
 .brand {
   width: 52px;
   height: 52px;
-  margin: 8px auto 0;
+  margin: 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -185,6 +190,8 @@
 }
 
 .canvas {
+  display: flex;
+  flex-direction: column;
   padding: 22px 24px 24px;
   overflow: hidden;
   border-radius: 34px;
@@ -210,6 +217,10 @@
   gap: 12px;
   padding-left: 0;
   padding-top: 12px;
+}
+
+.headerLead {
+  margin: 0 0 10px;
 }
 
 .eyebrow {
@@ -272,10 +283,20 @@
 
 .accountSummary {
   display: inline-flex;
-  align-items: center;
-  gap: 10px;
+  align-items: flex-start;
   padding: 10px 14px;
   font-size: 0.88rem;
+}
+
+.accountSummaryText {
+  display: grid;
+  gap: 4px;
+}
+
+.accountSummaryPrimary {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .accountSummaryLabel {
@@ -283,9 +304,19 @@
   white-space: nowrap;
 }
 
+.accountSummaryMeta {
+  color: #697383;
+  font-size: 0.78rem;
+  line-height: 1.3;
+}
+
 .body {
   display: grid;
   gap: 18px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  align-content: start;
 }
 
 .contentCard {
@@ -302,12 +333,92 @@
 
 .accountCard {
   width: 100%;
+  max-width: 2400px;
   padding: 0;
   overflow: visible;
   border-radius: 0;
   background: transparent;
   border: 0;
   box-shadow: none;
+  display: block;
+  align-self: start;
+  justify-self: stretch;
+  height: auto !important;
+  min-height: 0 !important;
+}
+
+.accountAccordion {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  align-items: stretch;
+  align-content: flex-start;
+  justify-content: flex-start;
+  height: auto !important;
+  min-height: 0 !important;
+}
+
+.accountAccordionSection {
+  display: block;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+}
+
+.accountAccordionSection + .accountAccordionSection {
+  margin-top: 0;
+}
+
+.accountAccordionHeader {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  min-height: 54px;
+  padding: 12px 20px;
+  border: 0;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #4a5f92 0%, #344d7f 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    0 2px 8px rgba(24, 29, 39, 0.12);
+  cursor: pointer;
+  text-align: left;
+}
+
+.accountAccordionHeaderText h3 {
+  margin: 0;
+  color: #ffffff;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.accountAccordionHeaderText p {
+  margin: 2px 0 0;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 0.82rem;
+}
+
+.accountAccordionIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: #ffffff;
+  font-size: 1.35rem;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.accountAccordionBody {
+  padding: 18px 20px 20px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.58);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
 .sectionHeader {
@@ -332,6 +443,14 @@
   border: 1px solid rgba(24, 29, 39, 0.08);
 }
 
+.reportDataTableWrap {
+  overflow: visible;
+  border: 0;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.76);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
 .dashboardTableWrap {
   border-radius: 0;
   background: #fbfbfc;
@@ -343,6 +462,11 @@
   border-collapse: collapse;
   min-width: 0;
   table-layout: fixed;
+}
+
+.reportDataTable {
+  border-collapse: collapse;
+  border-spacing: 0;
 }
 
 .table th,
@@ -377,6 +501,30 @@
   font-weight: 700;
 }
 
+.reportDataTable th {
+  padding: 12px 16px;
+  background: linear-gradient(180deg, #59626f 0%, #434d5a 100%);
+  color: #f5f8fc;
+  font-size: 0.88rem;
+  letter-spacing: 0;
+  text-transform: none;
+  font-weight: 700;
+  white-space: nowrap;
+  border-bottom: 1px solid rgba(24, 29, 39, 0.06);
+  border-right: 0;
+}
+
+.reportDataTable th:first-child {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  text-align: left;
+}
+
+.reportDataTable th:last-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
 .dashboardGridTable th {
   color: #eef4ff;
   background: linear-gradient(180deg, #4a5f92 0%, #344d7f 100%);
@@ -385,6 +533,49 @@
 .table td {
   white-space: nowrap;
   color: #202734;
+  background: #ffffff;
+}
+
+.reportDataTable td {
+  padding: 16px;
+  background: transparent;
+  border-top: 0;
+  border-bottom: 1px solid rgba(24, 29, 39, 0.05);
+  border-right: 0;
+}
+
+.reportDataTable td:first-child {
+  border-left: 0;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  text-align: left;
+}
+
+.reportDataTable td:last-child {
+  border-right: 0;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.reportHeaderLeft,
+.reportCellLeft {
+  text-align: left !important;
+}
+
+.reportHeaderCenter,
+.reportCellCenter {
+  text-align: center !important;
+}
+
+.reportDataTable tbody tr:hover td {
+  background: rgba(255, 255, 255, 0.34);
+}
+
+.tableStateCell {
+  padding: 30px 20px !important;
+  border-right: 0 !important;
+  white-space: normal !important;
+  overflow: visible !important;
   background: #ffffff;
 }
 
@@ -525,6 +716,151 @@
   line-height: 1;
 }
 
+.tableFilter {
+  position: relative;
+  display: inline-flex;
+  justify-content: center;
+}
+
+.tableFilterButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+
+.tableFilterButtonActive {
+  color: #ffffff;
+}
+
+.tableFilterIcon {
+  position: relative;
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+}
+
+.tableFilterIcon::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 10px;
+  height: 4px;
+  background: currentColor;
+  clip-path: polygon(0 0, 100% 0, 65% 100%, 35% 100%);
+}
+
+.tableFilterIcon::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  width: 2px;
+  height: 5px;
+  background: currentColor;
+  border-radius: 999px;
+}
+
+.tableFilterMenu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 120;
+  width: 220px;
+  padding: 12px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(24, 29, 39, 0.1);
+  box-shadow:
+    0 20px 34px rgba(24, 29, 39, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.48);
+}
+
+.tableFilterMenuHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.tableFilterMenuHeader strong {
+  color: #1f2530;
+  font-size: 0.8rem;
+}
+
+.tableFilterClearButton,
+.tableFilterResetButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid rgba(24, 29, 39, 0.12);
+  background: rgba(255, 255, 255, 0.96);
+  color: #355a93;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tableFilterClearButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.tableFilterOptions {
+  display: grid;
+  gap: 8px;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.tableFilterOption {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  color: #334155;
+  font-size: 0.78rem;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+}
+
+.tableFilterOption input {
+  margin-top: 2px;
+  accent-color: #527fc4;
+}
+
+.tableFilterEmpty {
+  color: #6e7b8f;
+  font-size: 0.76rem;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.tableFilterToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin: 0 0 12px;
+}
+
+.tableFilterSummary {
+  color: #6e7b8f;
+  font-size: 0.8rem;
+}
+
 .mapCell span {
   color: #6e7785;
   font-size: 0.8rem;
@@ -561,12 +897,51 @@
 .statusPill {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   min-height: 34px;
   padding: 0 12px;
   border-radius: 999px;
   background: #e7f4e8;
   color: #4d8a58;
   font-weight: 700;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.factorPillPresent {
+  background: #e7f4e8;
+  color: #2f7a43;
+  border-color: rgba(47, 122, 67, 0.18);
+}
+
+.factorPillAbsent {
+  background: #fde8e6;
+  color: #b42318;
+  border-color: rgba(180, 35, 24, 0.18);
+}
+
+.factorPillNeutral {
+  background: #eef2f6;
+  color: #5d6b7d;
+  border-color: rgba(93, 107, 125, 0.18);
+}
+
+.factorPillEssential {
+  background: #fde8e6;
+  color: #8f1d12;
+  border-color: rgba(143, 29, 18, 0.2);
+}
+
+.factorPillContributing {
+  background: #fff4db;
+  color: #9a6400;
+  border-color: rgba(154, 100, 0, 0.18);
+}
+
+.factorPillPredisposing {
+  background: #e7f0ff;
+  color: #355a93;
+  border-color: rgba(53, 90, 147, 0.18);
 }
 
 .emptyState {
@@ -576,6 +951,31 @@
   gap: 6px;
   text-align: center;
   color: #717b88;
+}
+
+.tableLoadingState,
+.tableEmptyState {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  text-align: center;
+  color: #717b88;
+}
+
+.tableLoadingStateInline {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  color: #717b88;
+  text-align: left;
+}
+
+.tableLoadingBar {
+  width: min(220px, 60%);
+  height: 10px;
+  border-radius: 999px;
+  background:
+    linear-gradient(90deg, rgba(110, 159, 227, 0.18) 0%, rgba(82, 127, 196, 0.42) 50%, rgba(110, 159, 227, 0.18) 100%);
 }
 
 .fieldStack {
@@ -640,6 +1040,7 @@
 .accountField {
   display: grid;
   gap: 8px;
+  align-content: start;
 }
 
 .accountField > span:first-child {
@@ -694,6 +1095,11 @@
 .fieldStatusRight {
   display: block;
   text-align: right;
+  min-height: 18px;
+}
+
+.fieldStatusSpacer {
+  visibility: hidden;
 }
 
 .fieldHelpError {
@@ -732,6 +1138,7 @@
   margin: 0 0 8px;
   color: #181d27;
   font-size: 1.1rem;
+  font-weight: 700;
 }
 
 .accountInfoBlock p {
@@ -773,7 +1180,11 @@
 
 .accountDeleteSummary {
   margin-top: 20px;
-  padding: 0;
+  padding: 0 0 0 28px;
+}
+
+.accountDeleteSection {
+  padding-top: 12px;
 }
 
 .accountDeleteSummary strong {
@@ -782,8 +1193,23 @@
   color: #181d27;
 }
 
+.accountDeleteLead {
+  margin: 0 0 14px;
+  max-width: 820px;
+  color: #697383;
+  line-height: 1.55;
+}
+
 .accountDeleteList li + li {
   margin-top: 2px;
+}
+
+.accountDeleteActions {
+  display: grid;
+  justify-items: start;
+  gap: 14px;
+  margin-top: 24px;
+  padding-left: 28px;
 }
 
 .accountCheckboxRow {
@@ -795,6 +1221,10 @@
 
 .accountCheckboxRow input {
   margin-top: 3px;
+}
+
+.accountDeleteButton {
+  min-width: 160px;
 }
 
 .actions {
@@ -894,13 +1324,28 @@
 }
 
 .buttonDanger {
-  background: #ffffff;
-  border-color: #6e9fe3;
-  color: #355a93;
+  background: #fde8e6;
+  border-color: #8f1d12;
+  color: #8f1d12;
+  box-shadow:
+    0 8px 18px rgba(143, 29, 18, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+.buttonDanger:hover:not(:disabled) {
+  background: #f9d7d3;
 }
 
 .bulkDeleteButton {
   margin-right: auto;
+}
+
+.desktopToolbarLabel {
+  display: inline;
+}
+
+.mobileToolbarLabel {
+  display: none;
 }
 
 .bulkDeleteButton:disabled {
@@ -930,29 +1375,150 @@
 }
 
 .message {
-  margin: 0;
+  margin: 0 0 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  font-size: 0.78rem;
+  line-height: 1.45;
   color: #697383;
+  background: #f8fafc;
 }
 
 .messageError {
   color: #b42318;
+  background: #fde8e6;
+  border-color: rgba(180, 35, 24, 0.18);
 }
 
 .messageSuccess {
   color: #1f7a46;
+  background: #e7f4e8;
+  border-color: rgba(31, 122, 70, 0.16);
 }
 
 .actionButtons {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  gap: 8px;
+  justify-content: center;
+  gap: 6px;
   min-width: 0;
+  flex-wrap: nowrap;
+}
+
+.accessActionGroup {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+
+.accessStatusPill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+
+.accessStatusPillGood {
+  background: #e7f4e8;
+  color: #2f7a43;
+  border-color: rgba(47, 122, 67, 0.18);
+}
+
+.accessStatusPillWarn {
+  background: #fff4db;
+  color: #9a6400;
+  border-color: rgba(154, 100, 0, 0.18);
+}
+
+.accessStatusPillBad {
+  background: #fde8e6;
+  color: #b42318;
+  border-color: rgba(180, 35, 24, 0.18);
+}
+
+.accessActionButton {
+  flex: 1 1 0;
+  min-height: 36px;
+  justify-content: center;
+  padding: 0 10px;
+  font-size: 0.72rem;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.accessActionButton:disabled {
+  background: #f2f4f7;
+  border-color: rgba(24, 29, 39, 0.08);
+  color: #9aa3b2;
+  opacity: 1;
+  box-shadow: none;
+}
+
+.accountAccessTableWrap {
+  margin-top: 18px;
+}
+
+.accountAccessMobileCard {
+  display: none;
+  margin-top: 18px;
+  padding: 18px 16px;
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 248, 250, 0.84) 100%);
+  border: 1px solid rgba(24, 29, 39, 0.06);
+  box-shadow:
+    0 12px 26px rgba(29, 36, 46, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.accountAccessMobileGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+.accountAccessMobileItem {
+  display: grid;
+  gap: 6px;
+}
+
+.accountAccessMobileStatusWrap {
+  display: inline-flex;
+  align-items: center;
+}
+
+.accountAccessMobileActions {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.accountAccessTable th,
+.accountAccessTable td {
+  text-align: center;
+}
+
+.accountAccessTable th:last-child,
+.accountAccessTable td:last-child,
+.accountAccessTable th:first-child,
+.accountAccessTable td:first-child {
+  text-align: center;
 }
 
 .actionButton {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1007,6 +1573,113 @@
 .reportLayout {
   display: grid;
   gap: 18px;
+}
+
+.reportBackButton {
+  min-height: 28px;
+  margin: 0 0 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+  color: #181d27;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.reportBackIcon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.reportTabs {
+  padding: 18px 0 0;
+}
+
+.reportSection {
+  padding: 28px 0 0;
+}
+
+.reportToggleBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 0 8px;
+  overflow-x: auto;
+}
+
+.reportToggleGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #515a67 0%, #3f4956 100%);
+  border: 1px solid rgba(24, 29, 39, 0.18);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 8px 18px rgba(24, 29, 39, 0.1);
+}
+
+.reportToggleActions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.reportMobileSelectWrap {
+  display: none;
+}
+
+.reportMobileSelectLabel {
+  font-size: 0.68rem;
+  color: #7c8795;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.reportMobileSelect {
+  width: 100%;
+  min-height: 44px;
+  border-radius: 14px;
+  border: 1px solid rgba(24, 29, 39, 0.1);
+  padding: 0 14px;
+  background: rgba(255, 255, 255, 0.95);
+  color: #252b36;
+  font-size: 0.96rem;
+  font-weight: 600;
+}
+
+.reportToggleButton {
+  flex: 0 0 auto;
+  min-height: 42px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.96);
+  font-size: 0.98rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.reportToggleButtonActive {
+  background: #ffffff;
+  color: #1e2a38;
+  box-shadow:
+    0 1px 2px rgba(24, 29, 39, 0.06),
+    0 8px 18px rgba(24, 29, 39, 0.08);
 }
 
 .reportHero {
@@ -1072,6 +1745,13 @@
   color: #181d27;
 }
 
+.reportScopeBlock {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
 .reportList {
   display: grid;
   gap: 14px;
@@ -1088,7 +1768,7 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #7c8795;
+  color: #2e3744;
 }
 
 .reportList dd {
@@ -1097,13 +1777,603 @@
   font-size: 0.92rem;
 }
 
+.reportListThreeCol {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.reportListThreeCol div {
+  align-content: start;
+  padding: 16px 18px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.76);
+  border: 1px solid rgba(24, 29, 39, 0.05);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.reportScopeForm {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 18px;
+}
+
+.reportScopeField {
+  display: grid;
+  gap: 8px;
+}
+
+.reportScopeField > span {
+  font-size: 0.73rem;
+  color: #2e3744;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.reportScopeFieldFull {
+  grid-column: 1 / -1;
+}
+
+.reportScopeTextarea {
+  min-height: 128px;
+  padding-top: 12px;
+  padding-bottom: 12px;
+  resize: vertical;
+}
+
+.reportScopeValue {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(24, 29, 39, 0.1);
+  background: rgba(255, 255, 255, 0.55);
+  color: #252b36;
+}
+
+.reportScopeTextareaValue {
+  min-height: 128px;
+  align-items: flex-start;
+  padding-top: 12px;
+  padding-bottom: 12px;
+  white-space: pre-wrap;
+}
+
+.reportScopeReadValue {
+  min-height: 28px;
+  display: block;
+  padding: 2px 0 0;
+  color: #252b36;
+  font-size: 1rem;
+  line-height: 1.45;
+}
+
+.reportScopeReadLayout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.reportScopeReadCard {
+  display: grid;
+  gap: 12px;
+  padding: 18px 20px;
+  border-radius: 24px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.88) 0%, rgba(248, 248, 250, 0.82) 100%);
+  border: 1px solid rgba(24, 29, 39, 0.05);
+  box-shadow:
+    0 10px 24px rgba(29, 36, 46, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.reportScopeReadCardFull {
+  grid-column: 1 / -1;
+}
+
+.reportScopeReadLabel {
+  font-size: 0.73rem;
+  color: #2e3744;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.reportNumberHeader,
+.reportNumberCell {
+  text-align: center !important;
+}
+
+.reportNumberCell .tableValue {
+  text-align: center;
+}
+
+.reportScopeReadNarrative {
+  padding-top: 0;
+  min-height: 88px;
+  white-space: pre-wrap;
+}
+
+.reportScopeActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.inlineFormMessage {
+  flex: 1 1 auto;
+  min-height: 20px;
+  font-size: 0.88rem;
+  font-weight: 400;
+  line-height: 1.35;
+  text-align: left;
+}
+
+.reportScopeActionButtons {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.reportScopeSummaryGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.reportScopeSummaryCard {
+  display: grid;
+  gap: 12px;
+  padding: 18px 20px;
+  border-radius: 24px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.88) 0%, rgba(248, 248, 250, 0.82) 100%);
+  border: 1px solid rgba(24, 29, 39, 0.05);
+  box-shadow:
+    0 10px 24px rgba(29, 36, 46, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+.reportMobileToolbar,
+.reportMobileFilterRow,
+.reportMobileList {
+  display: none;
+}
+
+.reportMobileFiltersButtonWrap {
+  display: none;
+}
+
+.reportMobileFiltersButton {
+  width: 100%;
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 16px;
+  border: 1px solid rgba(24, 29, 39, 0.12);
+  background: rgba(255, 255, 255, 0.96);
+  color: #1f2530;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.reportMobileFiltersButtonLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.reportMobileFiltersCount {
+  min-width: 24px;
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(82, 127, 196, 0.14);
+  color: #355a93;
+  font-size: 0.74rem;
+}
+
+.reportMobileFilterOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 140;
+  padding: 0;
+  background: rgba(15, 23, 42, 0.42);
+}
+
+.reportMobileFilterOverlayCard {
+  width: 100%;
+  height: 100dvh;
+  overflow: auto;
+  background: #ffffff;
+  padding: 18px 16px 24px;
+}
+
+.reportMobileFilterOverlayHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.reportMobileFilterOverlayEyebrow {
+  margin: 0 0 6px;
+  font-size: 0.68rem;
+  color: #7c8795;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.reportMobileFilterOverlayTitle {
+  margin: 0;
+  color: #181d27;
+  font-size: 1.2rem;
+}
+
+.reportMobileFilterOverlayClose {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid rgba(24, 29, 39, 0.12);
+  background: rgba(255, 255, 255, 0.96);
+  color: #355a93;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.reportMobileFilterOverlayBody {
+  display: grid;
+  gap: 16px;
+}
+
+.reportMobileFilterSection {
+  display: grid;
+  gap: 12px;
+  padding: 14px 0 0;
+  border-top: 1px solid rgba(24, 29, 39, 0.08);
+}
+
+.reportMobileFilterSectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.reportMobileFilterSectionHeader strong {
+  color: #1f2530;
+  font-size: 0.9rem;
+}
+
+.reportMobileFilterOptions {
+  display: grid;
+  gap: 10px;
+}
+
+.reportMobileFilterOverlayActions {
+  display: grid;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.reportMobileEmptyState {
+  padding: 16px 18px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid rgba(24, 29, 39, 0.05);
+}
+
+.reportMobileEmptyState p {
+  margin: 0;
+}
+
+.reportMobileCard {
+  display: grid;
+  gap: 14px;
+  padding: 16px 18px;
+  border-radius: 20px;
+  background: #ffffff;
+  border: 1px solid rgba(24, 29, 39, 0.08);
+  box-shadow: 0 10px 24px rgba(29, 36, 46, 0.06);
+  overflow: hidden;
+}
+
+.reportMobileCardHeader {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding-bottom: 2px;
+}
+
+.reportMobileCardTop {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 10px;
+}
+
+.reportMobileCardBadgeWrap {
+  display: inline-flex;
+  align-items: center;
+}
+
+.reportMobileCardBadge {
+  min-width: 34px;
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #5c83c4 0%, #4368a3 100%);
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.reportMobileCardMetaPill {
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid rgba(24, 29, 39, 0.14);
+  border-radius: 999px;
+  background: transparent;
+  color: #4a5565;
+  font-size: 0.74rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.reportMobileCardMetaPillStatus {
+  min-height: 34px;
+  padding: 0 12px;
+  border-color: transparent;
+}
+
+.reportMobileCardMetaPillStatus.factorPillPresent {
+  background: #e7f4e8;
+  color: #2f7a43;
+  border-color: rgba(47, 122, 67, 0.18);
+}
+
+.reportMobileCardMetaPillStatus.factorPillAbsent {
+  background: #fde8e6;
+  color: #b42318;
+  border-color: rgba(180, 35, 24, 0.18);
+}
+
+.reportMobileCardMetaPillStatus.factorPillNeutral {
+  background: #eef2f6;
+  color: #5d6b7d;
+  border-color: rgba(93, 107, 125, 0.18);
+}
+
+.reportMobileIndex {
+  min-width: 28px;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(82, 127, 196, 0.12);
+  color: #355a93;
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+.reportMobileTitleBlock {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.reportMobileTitleBlock strong {
+  color: #181d27;
+  font-size: 1rem;
+  line-height: 1.3;
+}
+
+.reportMobileTitleBlock span {
+  color: #697383;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.reportMobileGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(24, 29, 39, 0.08);
+}
+
+.reportMobileItem {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.reportMobileItemFull {
+  grid-column: 1 / -1;
+}
+
+.reportMobileLabel {
+  font-size: 0.68rem;
+  color: #7c8795;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.reportMobileValue,
+.reportMobilePillWrap {
+  color: #252b36;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.reportMobilePillWrap {
+  display: inline-flex;
+  align-items: center;
+}
+
+.reportMobileCardBody {
+  padding-bottom: 16px;
+}
+
+.reportMobileCardDescription {
+  margin: 0;
+  color: #303846;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.reportMobileCardBodyMeta {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.reportMobileCardFooter {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 12px 0 0;
+  border-top: 1px solid rgba(24, 29, 39, 0.08);
+  background: rgba(249, 250, 252, 0.96);
+  margin: 0 -18px -16px;
+  padding-left: 18px;
+  padding-right: 18px;
+  padding-bottom: 16px;
+}
+
+.reportMobileCardFooterMeta {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.reportMobileCardFooterMetaFull {
+  grid-column: 1 / -1;
+}
+
+.factorMobileCard {
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #ffffff;
+  border: 1px solid rgba(24, 29, 39, 0.08);
+  box-shadow: 0 10px 24px rgba(29, 36, 46, 0.06);
+}
+
+.factorMobileCardTop {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px 10px;
+}
+
+.factorMobileCardBadgeWrap {
+  display: inline-flex;
+  align-items: center;
+}
+
+.factorMobileCardBadge {
+  min-width: 34px;
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #5c83c4 0%, #4368a3 100%);
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.factorMobileCardMetaPill {
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid rgba(24, 29, 39, 0.14);
+  border-radius: 999px;
+  background: transparent;
+  color: #4a5565;
+  font-size: 0.74rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.factorMobileTitleBlock {
+  padding: 0 16px 10px;
+}
+
+.factorMobileCardBody {
+  padding: 0 16px 16px;
+}
+
+.factorMobileCardDescription {
+  margin: 0;
+  color: #303846;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.factorMobileCardFooter {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid rgba(24, 29, 39, 0.08);
+  background: rgba(249, 250, 252, 0.96);
+}
+
+.factorMobileCardFooterMeta {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.factorMobileCardFooterLabel {
+  color: #5f6b7c;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.reportScopeSummaryCardFull {
+  grid-column: 1 / -1;
+}
+
 .reportCode {
   word-break: break-word;
 }
 
 .reportPeopleGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 18px;
 }
 
@@ -1251,41 +2521,336 @@
   background: #b26a00;
 }
 
+.dashboardMobileList {
+  display: none;
+}
+
+.dashboardMobileCard {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(24, 29, 39, 0.08);
+  box-shadow: 0 14px 28px rgba(29, 36, 46, 0.08);
+  cursor: pointer;
+}
+
+.dashboardMobileCardToggle {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+}
+
+.dashboardMobileCardHeader {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.dashboardMobileCheckbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
+  padding-top: 2px;
+}
+
+.dashboardMobileCardTitleBlock {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.dashboardMobileCardTitleBlock strong {
+  color: #181d27;
+  font-size: 1rem;
+  line-height: 1.24;
+}
+
+.dashboardMobileCardTitleBlock span {
+  color: #697383;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
+.dashboardMobileChevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  min-height: 28px;
+  border-radius: 999px;
+  background: rgba(82, 127, 196, 0.12);
+  color: #355a93;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.dashboardMobileMeta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 14px;
+  margin: 0;
+}
+
+.dashboardMobileMeta div {
+  display: grid;
+  gap: 4px;
+}
+
+.dashboardMobileMetaDate {
+  min-width: 0;
+}
+
+.dashboardMobileMeta dt {
+  color: #7c8795;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.dashboardMobileMeta dd {
+  margin: 0;
+  color: #1f2530;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.dashboardMobileActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  flex-wrap: nowrap;
+}
+
+.dashboardMobilePrimaryAction {
+  display: block;
+}
+
+.dashboardMobileActionButton {
+  min-height: 40px;
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+  padding: 0 8px;
+  font-size: 0.68rem;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.dashboardMobileState {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 20px 12px;
+  color: #717b88;
+  text-align: center;
+}
+
 @media (max-width: 860px) {
   .deviceShell {
-    padding: 12px;
+    padding: 8px;
   }
 
   .deviceBezel {
     grid-template-columns: 1fr;
-    min-height: calc(100vh - 24px);
+    grid-template-rows: auto minmax(0, 1fr);
+    min-height: calc(100dvh - 14px);
+    height: calc(100dvh - 14px);
+    gap: 0;
+    align-content: start;
   }
 
   .sidebar {
-    grid-template-rows: auto auto;
+    grid-template-columns: auto 1fr auto;
+    grid-template-rows: 1fr;
+    align-items: center;
+    justify-items: stretch;
+    min-height: 48px;
+    padding: 6px 0 8px;
+    gap: 8px;
   }
 
   .canvas {
+    padding: 12px 12px 16px;
     border-radius: 24px;
   }
 
   .sidebarNav {
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(72px, 1fr);
-    overflow: auto;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    overflow: visible;
+  }
+
+  .sidebarFooter {
+    width: auto;
+    justify-items: center;
+    align-self: center;
+    padding-bottom: 0;
+  }
+
+  .brand {
+    width: 36px;
+    height: 36px;
+  }
+
+  .brandImage {
+    width: 36px;
+    height: 36px;
+  }
+
+  .sidebarLink {
+    min-width: 38px;
+    min-height: 38px;
+    border-radius: 12px;
+  }
+
+  .sidebarIcon {
+    width: 16px;
+    height: 16px;
+  }
+
+  .logoutPopover {
+    left: auto;
+    right: 0;
+    top: calc(100% + 10px);
+    transform: none;
+    width: min(260px, 75vw);
+    grid-template-columns: 1fr;
+    padding: 10px;
   }
 
   .topbar,
-  .topbarActions {
+  .topbarActions,
+  .greetingBlock,
+  .accountSummaryPrimary {
     flex-direction: column;
     align-items: stretch;
   }
 
+  .topbar {
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .greetingBlock {
+    gap: 6px;
+    padding-top: 0;
+  }
+
+  .eyebrow {
+    font-size: 0.66rem;
+  }
+
+  .title {
+    font-size: 1.6rem;
+  }
+
+  .subtitle {
+    font-size: 0.8rem;
+    margin-top: 5px;
+  }
+
+  .topbarActions {
+    gap: 8px;
+    width: 100%;
+  }
+
+  .accountSummary {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.58);
+    border: 1px solid rgba(24, 29, 39, 0.05);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  }
+
+  .accountSummaryText {
+    gap: 3px;
+  }
+
+  .accountSummaryPrimary {
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .accountSummaryLabel {
+    width: 100%;
+    font-size: 0.8rem;
+  }
+
+  .accountSummaryPrimary strong {
+    font-size: 0.96rem;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+
+  .tableToolbar,
   .linkBar,
   .headerButtons,
-  .accountActions {
+  .accountActions,
+  .reportScopeActions,
+  .reportScopeActionButtons,
+  .modalActions {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .tableToolbar {
+    flex-direction: column-reverse;
+    gap: 10px;
+    margin: 10px 0 14px;
+  }
+
+  .toolbarControls {
+    width: 100%;
+    gap: 8px;
+  }
+
+  .toolbarControls .headerButtons {
+    flex-direction: row;
+    justify-content: stretch;
+    flex-wrap: nowrap;
+  }
+
+  .button,
+  .buttonAccent,
+  .buttonSecondary,
+  .buttonDanger {
+    width: 100%;
+  }
+
+  .bulkDeleteButton {
+    margin-right: 0;
+  }
+
+  .headerButtons > * {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .desktopToolbarLabel {
+    display: none;
+  }
+
+  .mobileToolbarLabel {
+    display: inline;
+  }
+
+  .linkBar {
+    grid-template-columns: minmax(0, 7fr) minmax(0, 3fr);
   }
 
   .accountTabs {
@@ -1293,13 +2858,381 @@
     gap: 16px;
   }
 
+  .reportSection {
+    padding-top: 18px;
+  }
+
+  .reportToggleBar {
+    padding: 14px 0 4px;
+    gap: 10px;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .reportToggleGroup {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    border-radius: 24px;
+  }
+
+  .reportToggleButton {
+    width: 100%;
+    min-width: 0;
+    min-height: 40px;
+    padding: 0 12px;
+    font-size: 0.86rem;
+    text-align: center;
+  }
+
+  .reportMobileSelectWrap {
+    display: grid;
+    gap: 6px;
+    width: 100%;
+    order: 2;
+  }
+
+  .reportToggleGroup {
+    display: none;
+  }
+
+  .reportToggleActions {
+    width: 100%;
+    margin-left: 0;
+    order: 1;
+  }
+
+  .reportToggleActions .button {
+    width: 100%;
+  }
+
   .accountFormGrid {
     grid-template-columns: 1fr;
+    gap: 14px;
   }
 
   .reportHero,
   .reportGrid {
     grid-template-columns: 1fr;
     flex-direction: column;
+  }
+
+  .reportScopeReadLayout,
+  .reportScopeSummaryGrid,
+  .reportScopeForm,
+  .reportListThreeCol {
+    grid-template-columns: 1fr;
+  }
+
+  .tableWrap.reportDataTableWrap {
+    display: none;
+  }
+
+  .reportMobileToolbar,
+  .reportMobileFilterRow {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .reportMobileFiltersButtonWrap {
+    display: block;
+    margin-bottom: 12px;
+    width: 100%;
+    text-align: right;
+  }
+
+  .reportMobileToolbar > *,
+  .reportMobileFilterRow > * {
+    flex: 1 1 auto;
+  }
+
+  .reportMobileFilterRow .tableFilter {
+    width: 100%;
+  }
+
+  .reportMobileFilterRow .tableFilterButton,
+  .reportMobileToolbar .tableSortButton {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .reportMobileFilterRow {
+    display: none;
+  }
+
+  .reportMobileList {
+    display: grid;
+    gap: 12px;
+  }
+
+  .accountAccessMobileCard {
+    display: block;
+  }
+
+  .accountSummary,
+  .dashboardMobileCard,
+  .accountAccessMobileCard,
+  .reportScopeSummaryCard,
+  .accountDangerBox,
+  .accountEmptyBox {
+    border-radius: 0;
+  }
+
+  .accountDeleteSummary,
+  .accountDeleteActions {
+    padding-left: 0;
+  }
+
+  .accountDeleteSummary {
+    margin-top: 8px;
+  }
+
+  .accountDeleteLead,
+  .accountDeleteList {
+    max-width: none;
+  }
+
+  .dashboardMobileList {
+    display: grid;
+    gap: 12px;
+  }
+}
+
+@media (max-width: 560px) {
+  .viewport,
+  .deviceShell {
+    height: auto;
+    min-height: 100dvh;
+  }
+
+  .deviceShell {
+    padding: 6px 8px 8px;
+  }
+
+  .deviceBezel {
+    grid-template-rows: auto minmax(0, 1fr);
+    min-height: calc(100dvh - 12px);
+    height: auto;
+  }
+
+  .canvas {
+    padding: 14px 10px 14px;
+    border-radius: 20px;
+  }
+
+  .sidebar {
+    min-height: 46px;
+    padding: 6px 0 8px;
+    gap: 6px;
+  }
+
+  .title {
+    font-size: 1.34rem;
+  }
+
+  .subtitle,
+  .accountSummaryMeta {
+    font-size: 0.76rem;
+  }
+
+  .accountSummary {
+    padding: 8px 10px;
+    border-radius: 0;
+  }
+
+  .reportToggleBar {
+    padding-top: 10px;
+  }
+
+  .reportToggleGroup {
+    padding: 5px;
+    border-radius: 20px;
+  }
+
+  .reportToggleButton {
+    min-height: 38px;
+    padding: 0 10px;
+    font-size: 0.78rem;
+  }
+
+  .reportMobileSelect {
+    min-height: 42px;
+    border-radius: 12px;
+    font-size: 0.9rem;
+  }
+
+  .reportMobileSelectLabel {
+    font-size: 0.64rem;
+  }
+
+  .reportSection {
+    padding-top: 14px;
+  }
+
+  .accountSummaryPrimary strong {
+    font-size: 0.9rem;
+  }
+
+  .reportScopeSummaryCard,
+  .accountAccessMobileCard {
+    padding: 16px 14px;
+    border-radius: 0;
+  }
+
+  .reportMobileCard,
+  .reportMobileEmptyState {
+    padding: 14px;
+    border-radius: 18px;
+  }
+
+  .reportMobileCardHeader {
+    padding-bottom: 0;
+  }
+
+  .reportMobileCardTop {
+    padding-bottom: 8px;
+  }
+
+  .factorMobileCard {
+    padding: 0;
+  }
+
+  .factorMobileCardTop {
+    padding: 12px 14px 8px;
+  }
+
+  .factorMobileTitleBlock,
+  .factorMobileCardBody {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .factorMobileCardBody {
+    padding-bottom: 14px;
+  }
+
+  .factorMobileCardFooter {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    padding: 12px 14px;
+  }
+
+  .factorMobileCardMetaPill {
+    min-height: 26px;
+    padding: 0 8px;
+    font-size: 0.7rem;
+  }
+
+  .reportMobileCardMetaPill {
+    min-height: 26px;
+    padding: 0 8px;
+    font-size: 0.7rem;
+  }
+
+  .reportMobileCardFooter {
+    gap: 10px;
+    margin-left: -14px;
+    margin-right: -14px;
+    margin-bottom: -14px;
+    padding-left: 14px;
+    padding-right: 14px;
+    padding-bottom: 14px;
+  }
+
+  .reportMobileFiltersButton {
+    width: 30%;
+    min-width: 132px;
+    min-height: 44px;
+    padding: 0 14px;
+    font-size: 0.86rem;
+  }
+
+  .reportMobileFilterOverlayCard {
+    padding: 16px 14px 22px;
+  }
+
+  .reportMobileFilterOverlayTitle {
+    font-size: 1.08rem;
+  }
+
+  .reportMobileGrid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .accountAccessMobileGrid {
+    gap: 12px;
+  }
+
+  .accountDeleteSection {
+    padding-top: 4px;
+  }
+
+  .accountDeleteLead,
+  .accountCheckboxRow,
+  .accountDeleteList {
+    font-size: 0.88rem;
+  }
+
+  .dashboardMobileMeta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .dashboardMobileMeta > div:first-child,
+  .dashboardMobileMeta > div:nth-child(2) {
+    grid-column: 1 / -1;
+  }
+
+  .dashboardMobileActions {
+    justify-content: flex-start;
+  }
+
+  .dashboardMobileActionButton {
+    padding: 0 6px;
+    font-size: 0.64rem;
+  }
+
+  .button,
+  .buttonAccent,
+  .buttonSecondary,
+  .buttonDanger {
+    font-size: 0.78rem;
+  }
+
+  .message {
+    font-size: 0.74rem;
+  }
+
+  .modalCard {
+    border-radius: 22px;
+    padding: 18px;
+  }
+}
+
+@media (max-width: 1700px) {
+  .reportPeopleGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1380px) {
+  .reportPeopleGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1040px) {
+  .reportPeopleGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .reportPeopleGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

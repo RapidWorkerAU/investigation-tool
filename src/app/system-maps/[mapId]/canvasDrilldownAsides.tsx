@@ -661,10 +661,10 @@ export function DocumentStructureAside({
   if (!open) return null;
   return (
     <aside
-      className={`fixed z-[74] border-l border-r border-slate-300 shadow-[-14px_0_28px_rgba(15,23,42,0.24),0_8px_22px_rgba(15,23,42,0.12)] transition-transform ${
+      className={`fixed border-l border-r border-slate-300 shadow-[-14px_0_28px_rgba(15,23,42,0.24),0_8px_22px_rgba(15,23,42,0.12)] transition-transform ${
         isMobile
-          ? "inset-0 w-full max-w-full bg-white md:inset-y-0 md:left-0 md:max-w-[420px]"
-          : "bottom-0 left-[420px] top-[70px] w-full max-w-[420px] bg-white"
+          ? "inset-0 z-[98] w-full max-w-full bg-white md:inset-y-0 md:left-0 md:max-w-[420px]"
+          : "bottom-0 left-[420px] top-[70px] z-[74] w-full max-w-[420px] bg-white"
       }`}
       style={{
         transform: isMobile ? (outlineNodeId ? "translateX(0)" : "translateX(-100%)") : (shouldShowDesktopStructurePanel ? "translateX(0)" : "translateX(-100%)"),

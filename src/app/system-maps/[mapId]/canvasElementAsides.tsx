@@ -63,8 +63,8 @@ type AsideShellProps = {
 function AsideShell({ isMobile, leftAsideSlideIn, title, onClose, children }: AsideShellProps) {
   return (
     <aside
-      className={`fixed z-[75] border-r border-[#0b1f33] bg-[#102a43] text-slate-100 shadow-[12px_0_30px_rgba(2,12,27,0.45)] transition-transform duration-300 ${
-        isMobile ? "inset-0 w-full max-w-full" : "bottom-0 left-0 top-[70px] w-full max-w-[420px]"
+      className={`fixed border-r border-[#0b1f33] bg-[#102a43] text-slate-100 shadow-[12px_0_30px_rgba(2,12,27,0.45)] transition-transform duration-300 ${
+        isMobile ? "inset-0 z-[98] w-full max-w-full" : "bottom-0 left-0 top-[70px] z-[75] w-full max-w-[420px]"
       }`}
       style={{ transform: isMobile ? "translateX(0)" : leftAsideSlideIn ? "translateX(0)" : "translateX(-100%)" }}
     >
@@ -2453,11 +2453,17 @@ export function MobileDocumentPropertiesModal({
 }: MobileDocumentPropertiesModalProps) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-slate-900/45 p-4 pt-16 md:items-center md:pt-4">
-      <div className="max-h-[calc(100svh-2rem)] w-full max-w-2xl overflow-auto rounded-xl bg-white p-6 shadow-2xl ring-1 ring-slate-200/70 md:max-h-[90vh]">
-        <div className="flex items-center justify-between">
+    <div className="fixed inset-0 z-[98] overflow-y-auto bg-white text-slate-900">
+      <div className="min-h-full px-5 pb-28 pt-5">
+        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
           <h2 className="text-lg font-semibold">Document Properties</h2>
-          <button className="text-sm text-slate-500" onClick={onClose}>Close</button>
+          <button
+            type="button"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-300 bg-white text-slate-900"
+            onClick={onClose}
+          >
+            <span className="text-xl leading-none">x</span>
+          </button>
         </div>
 
         <div className="mt-4 grid gap-3 md:grid-cols-2">

@@ -14,16 +14,25 @@ type DashboardShellProps = {
   eyebrow: string;
   title: string;
   subtitle?: string;
+  headerLead?: ReactNode;
   headerRight?: ReactNode;
   children: ReactNode;
 };
 
 const sidebarLinks = [
   { key: "dashboard" as const, href: "/dashboard", label: "Dashboard", icon: "/icons/house.svg" },
-  { key: "account" as const, href: "/account", label: "Edit Account", icon: "/icons/account.svg", preserveIconColor: true },
+  { key: "account" as const, href: "/account", label: "Edit Account", icon: "/icons/account.svg" },
 ];
 
-export default function DashboardShell({ activeNav = "dashboard", eyebrow, title, subtitle, headerRight, children }: DashboardShellProps) {
+export default function DashboardShell({
+  activeNav = "dashboard",
+  eyebrow,
+  title,
+  subtitle,
+  headerLead,
+  headerRight,
+  children,
+}: DashboardShellProps) {
   const router = useRouter();
   const supabase = createSupabaseBrowser();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -100,7 +109,7 @@ export default function DashboardShell({ activeNav = "dashboard", eyebrow, title
                     alt=""
                     width={22}
                     height={22}
-                    className={`${styles.sidebarIcon}${link.preserveIconColor ? ` ${styles.sidebarIconOriginal}` : ""}`}
+                    className={styles.sidebarIcon}
                   />
                 </Link>
               ))}
@@ -147,6 +156,7 @@ export default function DashboardShell({ activeNav = "dashboard", eyebrow, title
             <header className={styles.topbar}>
               <div className={styles.greetingBlock}>
                 <div>
+                  {headerLead ? <div className={styles.headerLead}>{headerLead}</div> : null}
                   <p className={styles.eyebrow}>{eyebrow}</p>
                   <h1 className={styles.title}>{title}</h1>
                   {subtitle ? <p className={styles.subtitle}>{subtitle}</p> : null}

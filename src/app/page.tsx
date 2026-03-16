@@ -12,6 +12,7 @@ export default function HomePage() {
   const supabase = useMemo(() => createSupabaseBrowser(), []);
   const [isAuthed, setIsAuthed] = useState(false);
   const [dashboardLoading, setDashboardLoading] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -40,8 +41,18 @@ export default function HomePage() {
     };
   }, [supabase]);
 
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [mobileMenuOpen]);
+
   async function handleLogout() {
     await supabase.auth.signOut();
+    setMobileMenuOpen(false);
     router.push("/login");
     router.refresh();
   }
@@ -57,15 +68,18 @@ export default function HomePage() {
 
     if (!session?.access_token) {
       setDashboardLoading(false);
+      setMobileMenuOpen(false);
       router.push("/login?returnTo=%2Fdashboard");
       return;
     }
 
     try {
       const accessState = await fetchAccessState(session.access_token);
+      setMobileMenuOpen(false);
       router.push(accessRequiresSelection(accessState) ? "/subscribe" : "/dashboard");
       router.refresh();
     } catch {
+      setMobileMenuOpen(false);
       router.push("/dashboard");
       router.refresh();
     } finally {
@@ -128,8 +142,122 @@ export default function HomePage() {
               </>
             )}
           </div>
+
+          <button
+            type="button"
+            className="landing-menu-button"
+            aria-label="Open menu"
+            aria-expanded={mobileMenuOpen}
+            onClick={() => setMobileMenuOpen(true)}
+          >
+            <span
+              aria-hidden="true"
+              className="landing-menu-button-icon"
+              style={{
+                WebkitMaskImage: "url('/icons/menu.svg')",
+                maskImage: "url('/icons/menu.svg')",
+                WebkitMaskRepeat: "no-repeat",
+                maskRepeat: "no-repeat",
+                WebkitMaskPosition: "center",
+                maskPosition: "center",
+                WebkitMaskSize: "contain",
+                maskSize: "contain",
+              }}
+            />
+          </button>
         </div>
       </header>
+
+      {mobileMenuOpen ? (
+        <div className="landing-mobile-menu" role="dialog" aria-modal="true" aria-label="Mobile menu">
+          <div className="landing-mobile-menu-header">
+            <Link
+              href="/"
+              className="landing-brand"
+              aria-label="Investigation Tool home"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              <Image
+                src="/images/investigation-tool.png"
+                alt=""
+                aria-hidden="true"
+                width={36}
+                height={36}
+                className="landing-brand-image"
+              />
+              <span>Investigation Tool</span>
+            </Link>
+
+            <button
+              type="button"
+              className="landing-mobile-menu-close"
+              aria-label="Close menu"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              <span
+                aria-hidden="true"
+                className="landing-mobile-menu-close-icon"
+                style={{
+                  WebkitMaskImage: "url('/icons/close.svg')",
+                  maskImage: "url('/icons/close.svg')",
+                  WebkitMaskRepeat: "no-repeat",
+                  maskRepeat: "no-repeat",
+                  WebkitMaskPosition: "center",
+                  maskPosition: "center",
+                  WebkitMaskSize: "contain",
+                  maskSize: "contain",
+                }}
+              />
+            </button>
+          </div>
+
+          <nav className="landing-mobile-menu-nav" aria-label="Mobile primary">
+            <a href="#workflow" onClick={() => setMobileMenuOpen(false)}>
+              Solutions
+            </a>
+            <a href="#features" onClick={() => setMobileMenuOpen(false)}>
+              Features
+            </a>
+            <a href="#pricing" onClick={() => setMobileMenuOpen(false)}>
+              Pricing
+            </a>
+          </nav>
+
+          <div className="landing-mobile-menu-actions">
+            {isAuthed ? (
+              <>
+                <button
+                  type="button"
+                  className="landing-ghost-button landing-auth-action landing-auth-action--primary"
+                  onClick={() => void goToWorkspace()}
+                  disabled={dashboardLoading}
+                >
+                  <Image src="/icons/account.svg" alt="" aria-hidden="true" width={16} height={16} className="landing-auth-icon" />
+                  {dashboardLoading ? "Checking access..." : "Go to dashboard"}
+                </button>
+                <button
+                  type="button"
+                  className="landing-text-link landing-text-button landing-auth-action landing-auth-action--secondary"
+                  onClick={() => void handleLogout()}
+                  disabled={dashboardLoading}
+                >
+                  <Image src="/icons/logout.svg" alt="" aria-hidden="true" width={16} height={16} className="landing-auth-icon" />
+                  Logout
+                </button>
+              </>
+            ) : (
+              <>
+                <Link href="/subscribe" className="landing-primary-button" onClick={() => setMobileMenuOpen(false)}>
+                  Start free trial
+                </Link>
+                <Link href="/login" className="landing-secondary-button" onClick={() => setMobileMenuOpen(false)}>
+                  Sign in
+                </Link>
+              </>
+            )}
+          </div>
+        </div>
+      ) : null}
 
       <main className="landing-main">
         <section className="landing-section landing-hero-shell" aria-labelledby="landing-hero-title">
