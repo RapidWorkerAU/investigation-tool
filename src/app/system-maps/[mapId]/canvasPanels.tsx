@@ -410,8 +410,8 @@ export function CanvasActionButtons({
           </div>
         ) : null}
 
-        <div className="fixed inset-x-0 bottom-0 z-[95] px-3 pb-[calc(env(safe-area-inset-bottom,0px)+10px)] md:hidden">
-          <div className="mx-auto flex max-w-max items-center gap-2 rounded-[24px] border border-slate-300/80 bg-white/92 px-3 py-3 shadow-[0_18px_40px_rgba(15,23,42,0.22)] backdrop-blur">
+        <div className="fixed inset-x-0 bottom-0 z-[95] px-3 pb-[calc(env(safe-area-inset-bottom,0px)+72px)] md:hidden">
+          <div className="mx-auto flex max-w-max items-center gap-2 rounded-[24px] border border-slate-300/80 bg-white/94 px-2.5 py-2.5 shadow-[0_18px_40px_rgba(15,23,42,0.22)] backdrop-blur">
             <Link href="/dashboard" aria-label="Back to dashboard" title="Back" className={floatingButtonClass}>
               <span
                 aria-hidden="true"

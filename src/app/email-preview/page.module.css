@@ -36,6 +36,32 @@
   line-height: 1.6;
 }
 
+.headerActions {
+  display: flex;
+  align-items: end;
+  gap: 14px;
+}
+
+.sendField {
+  display: grid;
+  gap: 6px;
+}
+
+.sendField span {
+  font-size: 0.78rem;
+  color: #516072;
+  font-weight: 700;
+}
+
+.sendField input {
+  min-width: 280px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid rgba(32, 43, 64, 0.14);
+  background: #ffffff;
+  color: #1f2937;
+}
+
 .backLink {
   display: inline-flex;
   align-items: center;
@@ -67,6 +93,10 @@
 .cardHeader {
   padding: 18px 18px 14px;
   border-bottom: 1px solid rgba(20, 34, 70, 0.08);
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: start;
 }
 
 .cardHeader h2 {
@@ -78,6 +108,36 @@
   margin: 6px 0 0;
   color: #5f6b7b;
   line-height: 1.5;
+}
+
+.sendActions {
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+}
+
+.sendButton {
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid rgba(35, 78, 168, 0.18);
+  background: linear-gradient(180deg, #4a89f5 0%, #2e69d6 100%);
+  color: #ffffff;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.sendButton:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.sendStatus {
+  margin: 0;
+  max-width: 220px;
+  text-align: right;
+  color: #516072;
+  font-size: 0.76rem;
+  line-height: 1.4;
 }
 
 .previewFrameWrap {
@@ -103,8 +163,29 @@
   color: #214ca4;
 }
 
+.copyBlock,
+.supabaseBlock {
+  margin-top: 14px;
+}
+
+.copyBlock h3,
+.supabaseBlock h3,
+.copyBlock h4 {
+  margin: 0 0 8px;
+  color: #1f2937;
+}
+
+.copyBlock h3,
+.supabaseBlock h3 {
+  font-size: 0.92rem;
+}
+
+.copyBlock h4 {
+  font-size: 0.82rem;
+}
+
 .details pre {
-  margin: 14px 0 0;
+  margin: 0;
   padding: 16px;
   background: #f7f9fc;
   color: #304154;
@@ -192,8 +273,33 @@
     flex-direction: column;
   }
 
+  .headerActions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .sendField input {
+    min-width: 0;
+    width: 100%;
+  }
+
   .header h1 {
     font-size: 1.9rem;
+  }
+
+  .cardHeader {
+    flex-direction: column;
+  }
+
+  .sendActions {
+    width: 100%;
+    justify-items: stretch;
+  }
+
+  .sendStatus {
+    max-width: none;
+    text-align: left;
   }
 
   .previewFrame {

@@ -263,7 +263,10 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
   const [relations, setRelations] = useState<NodeRelationRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isMobile, setIsMobile] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia("(max-width: 768px), (pointer: coarse)").matches || window.innerWidth <= 768;
+  });
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [isEditingMapTitle, setIsEditingMapTitle] = useState(false);
   const [mapTitleDraft, setMapTitleDraft] = useState("");
@@ -284,6 +287,8 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
     setViewport: (v: Viewport, opts?: { duration?: number }) => void;
   } | null>(null);
   const [pendingViewport, setPendingViewport] = useState<Viewport | null>(null);
+  const [hasStoredViewport, setHasStoredViewport] = useState(false);
+  const mobileViewportInitializedRef = useRef<string | null>(null);
 
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [showWizardModal, setShowWizardModal] = useState(false);
@@ -2173,7 +2178,10 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
 
         if (viewRes.data) {
           const viewData = viewRes.data;
+          setHasStoredViewport(true);
           setPendingViewport({ x: viewData.pan_x, y: viewData.pan_y, zoom: viewData.zoom });
+        } else {
+          setHasStoredViewport(false);
         }
       } catch (err) {
         if (cancelled) return;
@@ -2200,8 +2208,63 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
   useEffect(() => {
     if (!rf || !pendingViewport) return;
     rf.setViewport(pendingViewport, { duration: 250 });
+    mobileViewportInitializedRef.current = mapId;
     setPendingViewport(null);
-  }, [rf, pendingViewport]);
+  }, [rf, pendingViewport, mapId]);
+
+  useEffect(() => {
+    if (!isMobile || !rf || loading || hasStoredViewport || mobileViewportInitializedRef.current === mapId) return;
+
+    const viewportWidth = canvasRef.current?.clientWidth ?? window.innerWidth;
+    const viewportHeight = canvasRef.current?.clientHeight ?? window.innerHeight;
+    if (viewportWidth <= 0 || viewportHeight <= 0) return;
+
+    if (!searchCatalog.length) {
+      rf.setViewport({ x: 24, y: 24, zoom: 0.9 }, { duration: 280 });
+      mobileViewportInitializedRef.current = mapId;
+      return;
+    }
+
+    const paddingX = 44;
+    const paddingY = 56;
+    const bounds = searchCatalog.reduce(
+      (acc, item) => ({
+        minX: Math.min(acc.minX, item.x),
+        minY: Math.min(acc.minY, item.y),
+        maxX: Math.max(acc.maxX, item.x + item.width),
+        maxY: Math.max(acc.maxY, item.y + item.height),
+      }),
+      {
+        minX: Number.POSITIVE_INFINITY,
+        minY: Number.POSITIVE_INFINITY,
+        maxX: Number.NEGATIVE_INFINITY,
+        maxY: Number.NEGATIVE_INFINITY,
+      }
+    );
+
+    const contentWidth = Math.max(bounds.maxX - bounds.minX, 240);
+    const contentHeight = Math.max(bounds.maxY - bounds.minY, 240);
+    const zoom = clamp(
+      Math.min(
+        (viewportWidth - paddingX * 2) / contentWidth,
+        (viewportHeight - paddingY * 2) / contentHeight
+      ),
+      0.68,
+      1
+    );
+    const centerX = bounds.minX + contentWidth / 2;
+    const centerY = bounds.minY + contentHeight / 2;
+
+    rf.setViewport(
+      {
+        x: viewportWidth / 2 - centerX * zoom,
+        y: viewportHeight / 2 - centerY * zoom,
+        zoom,
+      },
+      { duration: 320 }
+    );
+    mobileViewportInitializedRef.current = mapId;
+  }, [isMobile, rf, loading, hasStoredViewport, mapId, searchCatalog]);
 
   useEffect(() => {
     if (!selectedNode) return;
@@ -2220,6 +2283,11 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
     if (typeof window === "undefined") return;
     setUserEmail(localStorage.getItem("investigation_tool_user_email") || "");
   }, []);
+
+  useEffect(() => {
+    mobileViewportInitializedRef.current = null;
+    setHasStoredViewport(false);
+  }, [mapId]);
 
   useEffect(() => {
     if (!selectedProcess) return;
@@ -4222,7 +4290,7 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
   }
 
   return (
-    <div className="flex h-svh min-h-svh flex-col bg-stone-50 md:min-h-screen md:h-dvh">
+    <div className="flex h-dvh min-h-dvh flex-col overflow-hidden bg-stone-50 md:min-h-screen">
       <MapCanvasHeader
         map={map}
         mapRole={mapRole}
@@ -4356,7 +4424,7 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
         mapRoleLabel={mapRoleLabel}
       />
 
-      <main className="relative min-h-0 flex-1 overflow-hidden pb-[76px] md:pb-0">
+      <main className="relative min-h-0 flex-1 overflow-hidden pb-[calc(env(safe-area-inset-bottom,0px)+156px)] md:pb-0">
         <div
           ref={canvasRef}
           className="h-full w-full bg-stone-50"
@@ -4492,9 +4560,9 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
             zoomOnScroll
             snapToGrid
             snapGrid={[minorGridSize, minorGridSize]}
-            minZoom={0.2}
+            minZoom={isMobile ? 0.48 : 0.2}
             maxZoom={2}
-            fitView
+            fitView={!isMobile}
             fitViewOptions={{ padding: 0.2 }}
             style={{ backgroundColor: "#fafaf9" }}
           >
