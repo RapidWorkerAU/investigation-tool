@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { ReactNode, useEffect, useRef, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
 import styles from "./DashboardShell.module.css";
@@ -35,9 +35,10 @@ export default function DashboardShell({
 }: DashboardShellProps) {
   const router = useRouter();
   const supabase = createSupabaseBrowser();
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [logoutConfirmArmed, setLogoutConfirmArmed] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const logoutPopoverRef = useRef<HTMLDivElement | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(false);
 
   useEffect(() => {
     const body = document.body;
@@ -56,27 +57,29 @@ export default function DashboardShell({
   }, []);
 
   useEffect(() => {
-    if (!showLogoutConfirm) return;
-
-    const handlePointerDown = (event: MouseEvent) => {
-      if (!logoutPopoverRef.current?.contains(event.target as Node)) {
-        setShowLogoutConfirm(false);
-      }
+    if (!mobileMenuOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
     };
-
-    document.addEventListener("mousedown", handlePointerDown);
-    return () => document.removeEventListener("mousedown", handlePointerDown);
-  }, [showLogoutConfirm]);
+  }, [mobileMenuOpen]);
 
   const handleLogout = async () => {
+    if (!logoutConfirmArmed) {
+      setLogoutConfirmArmed(true);
+      return;
+    }
+
     try {
       setIsLoggingOut(true);
       await supabase.auth.signOut();
+      setMobileMenuOpen(false);
       router.push("/login");
       router.refresh();
     } finally {
       setIsLoggingOut(false);
-      setShowLogoutConfirm(false);
+      setLogoutConfirmArmed(false);
     }
   };
 
@@ -84,15 +87,65 @@ export default function DashboardShell({
     <div className={styles.viewport}>
       <div className={styles.deviceShell}>
         <div className={styles.deviceBezel}>
-          <aside className={styles.sidebar}>
-            <div className={styles.brand} aria-hidden="true">
+          <header className={styles.mobileHeader}>
+            <Link href="/" className={styles.mobileHeaderBrand} aria-label="Investigation Tool home">
               <Image
                 src="/images/investigation-tool.png"
-                alt=""
+                alt="Investigation Tool"
                 width={52}
                 height={52}
-                className={styles.brandImage}
+                className={styles.mobileHeaderBrandImage}
               />
+              <span className={styles.mobileHeaderBrandText}>Investigation Tool</span>
+            </Link>
+
+            <button
+              type="button"
+              className={styles.mobileHeaderMenuButton}
+              title="Open menu"
+              aria-label="Open menu"
+              aria-expanded={mobileMenuOpen}
+              onClick={() => setMobileMenuOpen(true)}
+            >
+              <span
+                aria-hidden="true"
+                className={styles.mobileHeaderMenuIcon}
+                style={{
+                  WebkitMaskImage: "url('/icons/menu.svg')",
+                  maskImage: "url('/icons/menu.svg')",
+                  WebkitMaskRepeat: "no-repeat",
+                  maskRepeat: "no-repeat",
+                  WebkitMaskPosition: "center",
+                  maskPosition: "center",
+                  WebkitMaskSize: "contain",
+                  maskSize: "contain",
+                }}
+              />
+            </button>
+          </header>
+
+          <aside className={`${styles.sidebar} ${desktopSidebarCollapsed ? styles.sidebarCollapsed : ""}`}>
+            <div className={styles.sidebarTop}>
+              <Link href="/" className={styles.brand} aria-label="Investigation Tool home">
+                <Image
+                  src="/images/investigation-tool.png"
+                  alt="Investigation Tool"
+                  width={52}
+                  height={52}
+                  className={styles.brandImage}
+                />
+                <span className={styles.brandText}>Investigation Tool</span>
+              </Link>
+
+              <button
+                type="button"
+                className={styles.sidebarCollapseButton}
+                aria-label={desktopSidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
+                aria-pressed={desktopSidebarCollapsed}
+                onClick={() => setDesktopSidebarCollapsed((current) => !current)}
+              >
+                <span className={styles.sidebarCollapseIcon} aria-hidden="true" />
+              </button>
             </div>
 
             <nav className={styles.sidebarNav} aria-label="Dashboard shortcuts">
@@ -111,44 +164,31 @@ export default function DashboardShell({
                     height={22}
                     className={styles.sidebarIcon}
                   />
+                  <span className={styles.sidebarLinkLabel}>{link.label}</span>
                 </Link>
               ))}
             </nav>
 
             <div className={styles.sidebarFooter}>
-              <div className={styles.logoutWrap} ref={logoutPopoverRef}>
-                <button
-                  type="button"
-                  className={styles.sidebarLink}
-                  title="Logout"
-                  aria-label="Logout"
-                  onClick={() => setShowLogoutConfirm((current) => !current)}
-                >
-                  <Image
-                    src="/icons/logout.svg"
-                    alt=""
-                    width={22}
-                    height={22}
-                    className={styles.sidebarIcon}
-                  />
-                </button>
-
-                {showLogoutConfirm ? (
-                  <div className={styles.logoutPopover}>
-                    <p className={styles.logoutPopoverText}>Log out of Investigation Tool?</p>
-                    <div className={styles.logoutPopoverActions}>
-                      <button
-                        type="button"
-                        className={`${styles.logoutConfirmButton} ${styles.logoutPopoverButton}`}
-                        onClick={() => void handleLogout()}
-                        disabled={isLoggingOut}
-                      >
-                        {isLoggingOut ? "Logging out..." : "Confirm"}
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
+              <button
+                type="button"
+                className={`${styles.sidebarLink} ${logoutConfirmArmed ? styles.sidebarLinkConfirm : ""}`}
+                title={logoutConfirmArmed ? "Click again to confirm logout" : "Logout"}
+                aria-label={logoutConfirmArmed ? "Confirm logout" : "Logout"}
+                onClick={() => void handleLogout()}
+                disabled={isLoggingOut}
+              >
+                <Image
+                  src="/icons/logout.svg"
+                  alt=""
+                  width={22}
+                  height={22}
+                  className={styles.sidebarIcon}
+                />
+                <span className={styles.sidebarLinkLabel}>
+                  {isLoggingOut ? "Logging out..." : logoutConfirmArmed ? "Confirm Logout" : "Logout"}
+                </span>
+              </button>
             </div>
           </aside>
 
@@ -170,6 +210,65 @@ export default function DashboardShell({
           </section>
         </div>
       </div>
+
+      {mobileMenuOpen ? (
+        <div className={styles.mobileMenu} role="dialog" aria-modal="true" aria-label="Dashboard menu">
+          <div className={styles.mobileMenuHeader}>
+            <Link href="/" className={styles.mobileMenuBrand} aria-label="Investigation Tool home" onClick={() => setMobileMenuOpen(false)}>
+              <Image
+                src="/images/investigation-tool.png"
+                alt="Investigation Tool"
+                width={36}
+                height={36}
+                className={styles.mobileMenuBrandImage}
+              />
+              <span>Investigation Tool</span>
+            </Link>
+
+            <button
+              type="button"
+              className={styles.mobileMenuClose}
+              aria-label="Close menu"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              <span
+                aria-hidden="true"
+                className={styles.mobileMenuCloseIcon}
+                style={{
+                  WebkitMaskImage: "url('/icons/close.svg')",
+                  maskImage: "url('/icons/close.svg')",
+                  WebkitMaskRepeat: "no-repeat",
+                  maskRepeat: "no-repeat",
+                  WebkitMaskPosition: "center",
+                  maskPosition: "center",
+                  WebkitMaskSize: "contain",
+                  maskSize: "contain",
+                }}
+              />
+            </button>
+          </div>
+
+          <nav className={styles.mobileMenuNav} aria-label="Dashboard mobile navigation">
+            <Link href="/dashboard" onClick={() => setMobileMenuOpen(false)}>
+              Home
+            </Link>
+            <Link href="/account" onClick={() => setMobileMenuOpen(false)}>
+              Account
+            </Link>
+          </nav>
+
+          <div className={styles.mobileMenuActions}>
+            <button
+              type="button"
+              className={styles.mobileMenuLogout}
+              onClick={() => void handleLogout()}
+              disabled={isLoggingOut}
+            >
+              {isLoggingOut ? "Logging out..." : logoutConfirmArmed ? "Confirm Logout" : "Logout"}
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

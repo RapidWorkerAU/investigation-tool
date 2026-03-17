@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { createPortal } from "react-dom";
 import DashboardShell from "@/components/dashboard/DashboardShell";
 import shellStyles from "@/components/dashboard/DashboardShell.module.css";
 import { accessIsReadOnlyRestricted, accessRequiresSelection, type BillingAccessState, fetchAccessState } from "@/lib/access";
@@ -213,6 +214,9 @@ export default function DashboardWorkspace() {
   const [creating, setCreating] = useState(false);
   const [isLinking, setIsLinking] = useState(false);
   const [showLinkForm, setShowLinkForm] = useState(false);
+  const [showCreateInvestigationModal, setShowCreateInvestigationModal] = useState(false);
+  const [newInvestigationTitle, setNewInvestigationTitle] = useState("");
+  const [newInvestigationDescription, setNewInvestigationDescription] = useState("");
   const [mapCodeInput, setMapCodeInput] = useState("");
   const [deletingMapId, setDeletingMapId] = useState<string | null>(null);
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -226,6 +230,7 @@ export default function DashboardWorkspace() {
   const [pendingDuplicateRow, setPendingDuplicateRow] = useState<MapRecord | null>(null);
   const [pendingDeleteRow, setPendingDeleteRow] = useState<MapRecord | null>(null);
   const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
+  const [portalReady, setPortalReady] = useState(false);
   const [duplicateProgress, setDuplicateProgress] = useState<ProgressState>({
     percent: 0,
     message: "",
@@ -381,6 +386,37 @@ export default function DashboardWorkspace() {
       ? "Your maps are currently read only because the latest subscription payment did not complete. Update your payment information to restore full access."
       : "Your maps are currently read only because your access is no longer active. Choose a new access type to restore editing, duplication, sharing, and export.";
 
+  useEffect(() => {
+    setPortalReady(true);
+  }, []);
+
+  useEffect(() => {
+    const anyDashboardModalOpen =
+      showAccessRestrictedModal ||
+      showCreateInvestigationModal ||
+      !!pendingDuplicateRow ||
+      !!pendingDeleteRow ||
+      showBulkDeleteModal;
+
+    if (!anyDashboardModalOpen) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [
+    pendingDeleteRow,
+    pendingDuplicateRow,
+    showAccessRestrictedModal,
+    showBulkDeleteModal,
+    showCreateInvestigationModal,
+  ]);
+
+  const renderViewportModal = (content: React.ReactNode) =>
+    portalReady && content ? createPortal(content, document.body) : null;
+
   const handleRestrictedAccessAction = async () => {
     if (!accessState) return;
 
@@ -429,10 +465,28 @@ export default function DashboardWorkspace() {
       setCreating(true);
       setError(null);
 
-      const { data, error: createError } = await supabase.rpc("create_investigation_map", { p_title: null });
+      const normalizedTitle = newInvestigationTitle.trim();
+      const normalizedDescription = newInvestigationDescription.trim();
+
+      const { data, error: createError } = await supabase.rpc("create_investigation_map", {
+        p_title: normalizedTitle || null,
+      });
       if (createError) throw createError;
       if (!data) throw new Error("Investigation created, but no map id was returned.");
 
+      if (normalizedDescription) {
+        const { error: updateError } = await supabase
+          .schema("ms")
+          .from("system_maps")
+          .update({ description: normalizedDescription })
+          .eq("id", data);
+
+        if (updateError) throw updateError;
+      }
+
+      setShowCreateInvestigationModal(false);
+      setNewInvestigationTitle("");
+      setNewInvestigationDescription("");
       router.push(`/investigations/${data}/canvas?welcome=1`);
     } catch (createError) {
       setError(summarizeDashboardError(createError, "We could not create your investigation."));
@@ -476,6 +530,14 @@ export default function DashboardWorkspace() {
     } catch {
       setError("Unable to copy map code.");
     }
+  };
+
+  const openDuplicateConfirm = (row: MapRecord) => {
+    setDuplicateProgress({ percent: 0, message: "", status: "idle" });
+    setDuplicateCancelRequested(false);
+    window.requestAnimationFrame(() => {
+      setPendingDuplicateRow(row);
+    });
   };
 
   const handleDeleteMap = async (row: MapRecord) => {
@@ -906,7 +968,7 @@ export default function DashboardWorkspace() {
               <button
                 type="button"
                 className={`${shellStyles.button} ${shellStyles.buttonAccent}`}
-                onClick={() => void handleAddInvestigation()}
+                onClick={() => setShowCreateInvestigationModal(true)}
                 disabled={creating || !canCreateMaps}
               >
                 <Image src="/icons/addcomponent.svg" alt="" width={18} height={18} className={shellStyles.buttonIcon} />
@@ -1062,11 +1124,7 @@ export default function DashboardWorkspace() {
                             className={shellStyles.actionButton}
                             title={canDuplicate ? "Duplicate map" : "You do not have permission to duplicate this map"}
                             disabled={!canDuplicate || duplicatingMapId === map.id}
-                            onClick={() => {
-                              setPendingDuplicateRow(map);
-                              setDuplicateProgress({ percent: 0, message: "", status: "idle" });
-                              setDuplicateCancelRequested(false);
-                            }}
+                            onClick={() => openDuplicateConfirm(map)}
                           >
                             <Image src="/icons/addcomponent.svg" alt="" width={16} height={16} className={shellStyles.actionIcon} />
                           </button>
@@ -1169,7 +1227,10 @@ export default function DashboardWorkspace() {
                         <button
                           type="button"
                           className={`${shellStyles.button} ${shellStyles.buttonAccent}`}
-                          onClick={() => router.push(`/investigations/${map.id}`)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            router.push(`/investigations/${map.id}`);
+                          }}
                         >
                           Open Investigation
                         </button>
@@ -1181,7 +1242,10 @@ export default function DashboardWorkspace() {
                           className={`${shellStyles.button} ${shellStyles.buttonSecondary} ${shellStyles.dashboardMobileActionButton}`}
                           disabled={!canCopy}
                           title={canCopy ? "Copy map code" : "No map code available"}
-                          onClick={() => void handleCopyCode(map)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void handleCopyCode(map);
+                          }}
                         >
                           <Image src="/icons/structure.svg" alt="" width={16} height={16} className={shellStyles.actionIcon} />
                           Copy Code
@@ -1191,10 +1255,14 @@ export default function DashboardWorkspace() {
                           className={`${shellStyles.button} ${shellStyles.buttonSecondary} ${shellStyles.dashboardMobileActionButton}`}
                           disabled={!canDuplicate || duplicatingMapId === map.id}
                           title={canDuplicate ? "Duplicate map" : "You do not have permission to duplicate this map"}
-                          onClick={() => {
-                            setPendingDuplicateRow(map);
-                            setDuplicateProgress({ percent: 0, message: "", status: "idle" });
-                            setDuplicateCancelRequested(false);
+                          onTouchEnd={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            openDuplicateConfirm(map);
+                          }}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openDuplicateConfirm(map);
                           }}
                         >
                           <Image src="/icons/addcomponent.svg" alt="" width={16} height={16} className={shellStyles.actionIcon} />
@@ -1205,7 +1273,10 @@ export default function DashboardWorkspace() {
                           className={`${shellStyles.button} ${shellStyles.buttonDanger} ${shellStyles.dashboardMobileActionButton}`}
                           disabled={!canDelete || deletingMapId === map.id}
                           title={canDelete ? "Delete map" : "Only the owner can delete this map"}
-                          onClick={() => setPendingDeleteRow(map)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setPendingDeleteRow(map);
+                          }}
                         >
                           <Image src="/icons/delete.svg" alt="" width={16} height={16} className={shellStyles.actionIcon} />
                           {deletingMapId === map.id ? "Deleting..." : "Delete"}
@@ -1220,7 +1291,7 @@ export default function DashboardWorkspace() {
         </div>
       </section>
 
-      {showAccessRestrictedModal && accessState ? (
+      {renderViewportModal(showAccessRestrictedModal && accessState ? (
         <div className={shellStyles.modalBackdrop}>
           <div className={shellStyles.modalCard}>
             <h3 className={shellStyles.modalTitle}>Read-only access</h3>
@@ -1250,9 +1321,81 @@ export default function DashboardWorkspace() {
             </div>
           </div>
         </div>
-      ) : null}
+      ) : null)}
 
-      {pendingDuplicateRow ? (
+      {renderViewportModal(showCreateInvestigationModal ? (
+        <div className={`${shellStyles.modalBackdrop} ${shellStyles.createInvestigationBackdrop}`}>
+          <div className={`${shellStyles.modalCard} ${shellStyles.createInvestigationCard}`}>
+            <div className={shellStyles.createInvestigationHeader}>
+              <div>
+                <p className={shellStyles.createInvestigationEyebrow}>New investigation</p>
+                <h3 className={shellStyles.modalTitle}>Create your investigation</h3>
+                <p className={shellStyles.modalText}>
+                  Give the investigation a clear working title and a short description so your team can identify the purpose straight away.
+                </p>
+              </div>
+            </div>
+
+            <div className={shellStyles.createInvestigationForm}>
+              <label className={shellStyles.accountField}>
+                <span>Investigation Title</span>
+                <input
+                  className={shellStyles.input}
+                  type="text"
+                  value={newInvestigationTitle}
+                  onChange={(event) => setNewInvestigationTitle(event.target.value)}
+                  placeholder="Example: Forklift collision in warehouse"
+                  maxLength={120}
+                />
+                <span className={shellStyles.createInvestigationHint}>
+                  Use a short title that identifies the event, location, or incident being examined.
+                </span>
+              </label>
+
+              <label className={shellStyles.accountField}>
+                <span>Description</span>
+                <textarea
+                  className={`${shellStyles.input} ${shellStyles.createInvestigationTextarea}`}
+                  value={newInvestigationDescription}
+                  onChange={(event) => setNewInvestigationDescription(event.target.value)}
+                  placeholder="Example: Review the sequence of events, contributing factors, controls, and corrective actions for the warehouse forklift collision."
+                  rows={5}
+                  maxLength={600}
+                />
+                <span className={shellStyles.createInvestigationHint}>
+                  Add context such as what happened, who is involved, or what the investigation needs to establish.
+                </span>
+              </label>
+            </div>
+
+            <div className={shellStyles.modalActions}>
+              <button
+                type="button"
+                className={`${shellStyles.button} ${shellStyles.buttonSecondary}`}
+                onClick={() => {
+                  if (creating) return;
+                  setShowCreateInvestigationModal(false);
+                  setNewInvestigationTitle("");
+                  setNewInvestigationDescription("");
+                }}
+                disabled={creating}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={`${shellStyles.button} ${shellStyles.buttonAccent}`}
+                onClick={() => void handleAddInvestigation()}
+                disabled={creating}
+              >
+                {creating ? "Creating..." : "Create investigation"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null)}
+
+      {renderViewportModal(pendingDuplicateRow ? (
         <div className={shellStyles.modalBackdrop}>
           <div className={shellStyles.modalCard}>
             <h3 className={shellStyles.modalTitle}>Duplicate map?</h3>
@@ -1313,9 +1456,9 @@ export default function DashboardWorkspace() {
             </div>
           </div>
         </div>
-      ) : null}
+      ) : null)}
 
-      {pendingDeleteRow ? (
+      {renderViewportModal(pendingDeleteRow ? (
         <div className={shellStyles.modalBackdrop}>
           <div className={shellStyles.modalCard}>
             <h3 className={shellStyles.modalTitle}>Delete map?</h3>
@@ -1351,9 +1494,9 @@ export default function DashboardWorkspace() {
             </div>
           </div>
         </div>
-      ) : null}
+      ) : null)}
 
-      {showBulkDeleteModal ? (
+      {renderViewportModal(showBulkDeleteModal ? (
         <div className={shellStyles.modalBackdrop}>
           <div className={shellStyles.modalCard}>
             <h3 className={shellStyles.modalTitle}>Bulk delete selected maps?</h3>
@@ -1406,7 +1549,7 @@ export default function DashboardWorkspace() {
             </div>
           </div>
         </div>
-      ) : null}
+      ) : null)}
     </DashboardShell>
   );
 }

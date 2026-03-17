@@ -67,15 +67,7 @@ type PersonElementRow = {
 type PeopleReportRow = {
   id: string;
   role_name: string;
-  department: string;
-  role_id: string;
-  occupant_name: string;
-  start_date: string;
-  employment_type: string;
-  acting_name: string;
-  acting_start_date: string;
-  recruiting: boolean;
-  proposed_role: boolean;
+  person_name: string;
 };
 
 type FactorElementRow = {
@@ -1279,6 +1271,17 @@ export default function InvestigationReportPage() {
     </div>
   );
 
+  const getEmptyTableMessage = (subject: string) =>
+    `No ${subject} yet. Add information on your system map for items to appear here.`;
+
+  const renderTableEmptyRow = (colSpan: number, message: string) => (
+    <tr>
+      <td colSpan={colSpan} className={styles.emptyState}>
+        <div className={styles.tableEmptyState}>{message}</div>
+      </td>
+    </tr>
+  );
+
   useEffect(() => {
     const load = async () => {
       setLoading(true);
@@ -1467,20 +1470,12 @@ export default function InvestigationReportPage() {
         const normalizedHeading = String(row.heading ?? "").replace(/\\n/g, "\n");
         const headingLines = normalizedHeading.split("\n");
         const roleName = String(config.position_title ?? headingLines[0] ?? "").trim() || "Person";
-        const department = String(config.department ?? headingLines.slice(1).join(" ") ?? "").trim();
+        const personName = String(config.occupant_name ?? headingLines.slice(1).join(" ") ?? "").trim();
 
         return {
           id: row.id,
           role_name: roleName,
-          department,
-          role_id: String(config.role_id ?? "").trim(),
-          occupant_name: String(config.occupant_name ?? "").trim(),
-          start_date: String(config.start_date ?? "").trim(),
-          employment_type: String(config.employment_type ?? "").trim(),
-          acting_name: String(config.acting_name ?? "").trim(),
-          acting_start_date: String(config.acting_start_date ?? "").trim(),
-          recruiting: Boolean(config.recruiting),
-          proposed_role: Boolean(config.proposed_role),
+          person_name: personName,
         };
       });
 
@@ -1745,7 +1740,7 @@ export default function InvestigationReportPage() {
         {!loading && !error && map ? (
           <div className={styles.accountCard}>
             {renderMobileFilterOverlay()}
-            <div className={styles.reportToggleBar}>
+            <div className={`${styles.reportToggleBar} ${styles.reportToggleBarMobileSelectOnly}`}>
               <div className={styles.reportMobileSelectWrap}>
                 <label className={styles.reportMobileSelectLabel} htmlFor="investigation-view-select">
                   View
@@ -1999,9 +1994,7 @@ export default function InvestigationReportPage() {
                       </thead>
                       <tbody>
                         {sortedSequenceRows.length === 0 ? (
-                          <tr>
-                            <td colSpan={5} className={styles.emptyState}>No sequence steps have been added yet.</td>
-                        </tr>
+                          renderTableEmptyRow(5, getEmptyTableMessage("sequence steps"))
                       ) : (
                           pagedSequence.rows.map((row, index) => (
                             <tr key={row.id}>
@@ -2030,7 +2023,7 @@ export default function InvestigationReportPage() {
                   </div>
                   <div className={styles.reportMobileList}>
                     {sortedSequenceRows.length === 0
-                      ? renderMobileEmptyState("No sequence steps have been added yet.")
+                      ? renderMobileEmptyState(getEmptyTableMessage("sequence steps"))
                       : pagedSequence.rows.map((row, index) => (
                           <article key={row.id} className={styles.reportMobileCard}>
                             <div className={styles.reportMobileCardTop}>
@@ -2079,15 +2072,7 @@ export default function InvestigationReportPage() {
                         </div>
                         <div className={styles.personCardText}>
                           <h3>{row.role_name || "Person"}</h3>
-                          <p>{row.department || "No department recorded"}</p>
-                          {row.occupant_name ? <p><strong>Occupant:</strong> {row.occupant_name}</p> : null}
-                          {row.role_id ? <p><strong>Role ID:</strong> {row.role_id}</p> : null}
-                          {row.employment_type ? <p><strong>Employment:</strong> {row.employment_type}</p> : null}
-                          {row.start_date ? <p><strong>Start:</strong> {formatShortDate(row.start_date)}</p> : null}
-                          {row.acting_name ? <p><strong>Acting:</strong> {row.acting_name}</p> : null}
-                          {row.acting_start_date ? <p><strong>Acting Start:</strong> {formatShortDate(row.acting_start_date)}</p> : null}
-                          {row.recruiting ? <p><strong>Recruiting</strong></p> : null}
-                          {row.proposed_role ? <p><strong>Proposed Role</strong></p> : null}
+                          <p>{row.person_name || "No person name recorded"}</p>
                         </div>
                       </article>
                     ))
@@ -2136,9 +2121,7 @@ export default function InvestigationReportPage() {
                       </thead>
                       <tbody>
                       {sortedFactorRows.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className={styles.emptyState}>No factors have been added yet.</td>
-                        </tr>
+                        renderTableEmptyRow(6, getEmptyTableMessage("factors"))
                       ) : (
                         pagedFactors.rows.map((row) => (
                           <tr key={row.id}>
@@ -2164,7 +2147,7 @@ export default function InvestigationReportPage() {
                   </div>
                   <div className={styles.reportMobileList}>
                     {sortedFactorRows.length === 0
-                      ? renderMobileEmptyState("No factors have been added yet.")
+                      ? renderMobileEmptyState(getEmptyTableMessage("factors"))
                       : pagedFactors.rows.map((row) => (
                           <article key={row.id} className={`${styles.reportMobileCard} ${styles.factorMobileCard}`}>
                             <div className={styles.factorMobileCardTop}>
@@ -2244,9 +2227,7 @@ export default function InvestigationReportPage() {
                       </thead>
                       <tbody>
                       {filteredTaskConditionRows.length === 0 ? (
-                        <tr>
-                          <td colSpan={4} className={styles.emptyState}>No task/condition nodes have been added yet.</td>
-                        </tr>
+                        renderTableEmptyRow(4, getEmptyTableMessage("task and condition items"))
                       ) : (
                         pagedTaskConditions.rows.map((row) => (
                           <tr key={row.id}>
@@ -2266,7 +2247,7 @@ export default function InvestigationReportPage() {
                   </div>
                   <div className={styles.reportMobileList}>
                     {filteredTaskConditionRows.length === 0
-                      ? renderMobileEmptyState("No task/condition nodes have been added yet.")
+                      ? renderMobileEmptyState(getEmptyTableMessage("task and condition items"))
                       : pagedTaskConditions.rows.map((row) => (
                           <article key={row.id} className={styles.reportMobileCard}>
                             <div className={styles.reportMobileCardTop}>
@@ -2346,9 +2327,7 @@ export default function InvestigationReportPage() {
                       </thead>
                       <tbody>
                       {filteredControlBarrierRows.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className={styles.emptyState}>No control/barrier nodes have been added yet.</td>
-                        </tr>
+                        renderTableEmptyRow(6, getEmptyTableMessage("control and barrier items"))
                       ) : (
                         pagedControlBarriers.rows.map((row) => (
                           <tr key={row.id}>
@@ -2374,7 +2353,7 @@ export default function InvestigationReportPage() {
                   </div>
                   <div className={styles.reportMobileList}>
                     {filteredControlBarrierRows.length === 0
-                      ? renderMobileEmptyState("No control/barrier nodes have been added yet.")
+                      ? renderMobileEmptyState(getEmptyTableMessage("control and barrier items"))
                       : pagedControlBarriers.rows.map((row) => (
                           <article key={row.id} className={styles.reportMobileCard}>
                             <div className={styles.reportMobileCardTop}>
@@ -2462,9 +2441,7 @@ export default function InvestigationReportPage() {
                       </thead>
                       <tbody>
                       {filteredEvidenceRows.length === 0 ? (
-                        <tr>
-                          <td colSpan={5} className={styles.emptyState}>No evidence nodes have been added yet.</td>
-                        </tr>
+                        renderTableEmptyRow(5, getEmptyTableMessage("evidence items"))
                       ) : (
                         pagedEvidence.rows.map((row) => (
                           <tr key={row.id}>
@@ -2494,7 +2471,7 @@ export default function InvestigationReportPage() {
                   </div>
                   <div className={styles.reportMobileList}>
                     {filteredEvidenceRows.length === 0
-                      ? renderMobileEmptyState("No evidence nodes have been added yet.")
+                      ? renderMobileEmptyState(getEmptyTableMessage("evidence items"))
                       : pagedEvidence.rows.map((row) => (
                           <article key={row.id} className={styles.reportMobileCard}>
                             <div className={styles.reportMobileCardTop}>
@@ -2569,9 +2546,7 @@ export default function InvestigationReportPage() {
                       </thead>
                       <tbody>
                       {filteredFindingRows.length === 0 ? (
-                        <tr>
-                          <td colSpan={4} className={styles.emptyState}>No finding nodes have been added yet.</td>
-                        </tr>
+                        renderTableEmptyRow(4, getEmptyTableMessage("findings"))
                       ) : (
                         pagedFindings.rows.map((row, index) => (
                           <tr key={row.id}>
@@ -2595,7 +2570,7 @@ export default function InvestigationReportPage() {
                   </div>
                   <div className={styles.reportMobileList}>
                     {filteredFindingRows.length === 0
-                      ? renderMobileEmptyState("No finding nodes have been added yet.")
+                      ? renderMobileEmptyState(getEmptyTableMessage("findings"))
                       : pagedFindings.rows.map((row, index) => (
                           <article key={row.id} className={styles.reportMobileCard}>
                             <div className={styles.reportMobileCardTop}>
@@ -2670,9 +2645,7 @@ export default function InvestigationReportPage() {
                       </thead>
                       <tbody>
                       {filteredRecommendationRows.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className={styles.emptyState}>No recommendation nodes have been added yet.</td>
-                        </tr>
+                        renderTableEmptyRow(6, getEmptyTableMessage("recommendations"))
                       ) : (
                         pagedRecommendations.rows.map((row, index) => (
                           <tr key={row.id}>
@@ -2698,7 +2671,7 @@ export default function InvestigationReportPage() {
                   </div>
                   <div className={styles.reportMobileList}>
                     {filteredRecommendationRows.length === 0
-                      ? renderMobileEmptyState("No recommendation nodes have been added yet.")
+                      ? renderMobileEmptyState(getEmptyTableMessage("recommendations"))
                       : pagedRecommendations.rows.map((row, index) => (
                           <article key={row.id} className={styles.reportMobileCard}>
                             <div className={styles.reportMobileCardTop}>
