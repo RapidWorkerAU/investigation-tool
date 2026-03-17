@@ -50,19 +50,10 @@
   gap: 34px;
 }
 
-.nav a,
-.textLink {
+.nav a {
   color: rgba(255, 255, 255, 0.88);
   text-decoration: none;
   font-size: 0.94rem;
-}
-
-.textButton {
-  border: 0;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.88);
-  font-size: 0.94rem;
-  cursor: pointer;
 }
 
 .headerActions {
@@ -91,20 +82,60 @@
   background: currentColor;
 }
 
-.ctaButton {
+.primaryButton,
+.secondaryButton,
+.authAction {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 44px;
+  gap: 10px;
+  min-height: 46px;
   padding: 0 22px;
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  background: rgba(255, 255, 255, 0.12);
-  color: #ffffff;
   text-decoration: none;
   font-weight: 700;
+  white-space: nowrap;
   box-shadow:
     0 14px 28px rgba(16, 38, 95, 0.18),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+.primaryButton,
+.authActionPrimary {
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: #ffffff;
+  color: #1747b9;
+}
+
+.secondaryButton,
+.authActionSecondary {
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+.authAction {
+  border-radius: 0;
+}
+
+.authActionPrimary {
+  min-width: 220px;
+}
+
+.authActionSecondary {
+  cursor: pointer;
+}
+
+.authIcon {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.authActionPrimary .authIcon {
+  filter: brightness(0) saturate(100%) invert(20%) sepia(92%) saturate(2536%) hue-rotate(215deg) brightness(94%) contrast(93%);
+}
+
+.authActionSecondary .authIcon {
+  filter: brightness(0) invert(1);
 }
 
 .headerCurve {
@@ -359,6 +390,7 @@
   .brand {
     min-width: 0;
     font-size: 1rem;
+    justify-self: start;
   }
 
   .brand span {
@@ -373,6 +405,9 @@
   .menuButton {
     display: inline-flex;
     justify-self: end;
+    width: 48px;
+    height: 48px;
+    border-radius: 16px;
   }
 
   .headerCurve {
@@ -447,7 +482,7 @@
     z-index: 50;
     display: flex;
     flex-direction: column;
-    padding: 18px 16px 28px;
+    padding: 16px;
     background: linear-gradient(180deg, #1747b9 0%, #2f77df 42%, #5ba1ff 100%);
     color: #ffffff;
   }
@@ -456,16 +491,18 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    gap: 12px;
+    width: 100%;
   }
 
   .mobileMenuClose {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 52px;
-    height: 52px;
+    width: 48px;
+    height: 48px;
     border: 1px solid rgba(255, 255, 255, 0.24);
+    border-radius: 16px;
     background: rgba(255, 255, 255, 0.14);
     color: #ffffff;
     box-shadow:
@@ -480,42 +517,40 @@
   }
 
   .mobileMenuNav {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    width: 100%;
     margin-top: 36px;
-    display: grid;
-    gap: 18px;
+    gap: 14px;
+    text-align: right;
   }
 
   .mobileMenuNav a {
     color: #ffffff;
     text-decoration: none;
-    font-size: 1.2rem;
+    font-size: clamp(1.7rem, 10vw, 2.5rem);
+    line-height: 1.05;
     font-weight: 700;
   }
 
   .mobileMenuActions {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
     margin-top: auto;
-    display: grid;
-    gap: 12px;
+    padding-top: 28px;
+    width: 100%;
   }
 
-  .mobilePrimaryButton,
-  .mobileSecondaryButton {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 50px;
-    text-decoration: none;
-    font-weight: 700;
+  .mobileMenuActions > * {
+    width: 100%;
   }
 
-  .mobilePrimaryButton {
-    background: #ffffff;
-    color: #173b8f;
-  }
-
-  .mobileSecondaryButton {
-    border: 1px solid rgba(255, 255, 255, 0.34);
-    background: rgba(255, 255, 255, 0.12);
-    color: #ffffff;
+  .mobileMenuActions .authAction,
+  .mobileMenuActions .primaryButton,
+  .mobileMenuActions .secondaryButton {
+    width: 100%;
+    min-width: 0;
   }
 }

@@ -18,6 +18,9 @@
 
 html {
   scroll-behavior: smooth;
+  width: 100%;
+  min-height: 100%;
+  overflow-x: hidden;
 }
 
 *,
@@ -30,12 +33,18 @@ body {
   margin: 0;
   background: #ecebe7;
   color: var(--text);
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow-x: hidden;
 }
 
 .app-main-shell {
   width: 100%;
   min-height: 100vh;
+  min-height: 100dvh;
   background: #ecebe7;
+  overflow-x: hidden;
 }
 
 .page-stack {
@@ -7270,6 +7279,7 @@ body.mobile-menu-open {
   .landing-brand {
     gap: 10px;
     font-size: 1.05rem;
+    justify-self: start;
   }
 
   .landing-brand-image {
@@ -7524,6 +7534,22 @@ body.mobile-menu-open {
   max-width: none !important;
   margin: 0 !important;
   padding: 0 !important;
+}
+
+@media (max-width: 768px) {
+  html,
+  body,
+  .app-main-shell {
+    width: 100%;
+    min-height: 100dvh;
+    overflow-x: hidden;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
 }
 
 @tailwind base;

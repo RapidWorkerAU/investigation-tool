@@ -166,27 +166,29 @@ export function LegalPageClient({
           </Link>
 
           <nav className={styles.nav} aria-label="Primary">
+            <Link href="/#workflow">Solutions</Link>
             <Link href="/#features">Features</Link>
-            <Link href="/#workflow">Workflow</Link>
             <Link href="/#pricing">Pricing</Link>
           </nav>
 
           <div className={styles.headerActions}>
             {isAuthed ? (
               <>
-                <button type="button" className={styles.textButton} onClick={() => void handleLogout()} disabled={dashboardLoading}>
-                  Logout
-                </button>
-                <button type="button" className={styles.ctaButton} onClick={() => void goToWorkspace()} disabled={dashboardLoading}>
+                <button type="button" className={`${styles.authAction} ${styles.authActionPrimary}`} onClick={() => void goToWorkspace()} disabled={dashboardLoading}>
+                  <Image src="/icons/account.svg" alt="" aria-hidden="true" width={16} height={16} className={styles.authIcon} />
                   {dashboardLoading ? "Checking access..." : "Go to dashboard"}
+                </button>
+                <button type="button" className={`${styles.authAction} ${styles.authActionSecondary}`} onClick={() => void handleLogout()} disabled={dashboardLoading}>
+                  <Image src="/icons/logout.svg" alt="" aria-hidden="true" width={16} height={16} className={styles.authIcon} />
+                  Logout
                 </button>
               </>
             ) : (
               <>
-                <Link href="/login" className={styles.textLink}>
+                <Link href="/login" className={styles.secondaryButton}>
                   Sign in
                 </Link>
-                <Link href="/subscribe" className={styles.ctaButton}>
+                <Link href="/subscribe" className={styles.primaryButton}>
                   Start free trial
                 </Link>
               </>
@@ -264,11 +266,11 @@ export function LegalPageClient({
           </div>
 
           <nav className={styles.mobileMenuNav} aria-label="Mobile primary">
+            <Link href="/#workflow" onClick={() => setMobileMenuOpen(false)}>
+              Solutions
+            </Link>
             <Link href="/#features" onClick={() => setMobileMenuOpen(false)}>
               Features
-            </Link>
-            <Link href="/#workflow" onClick={() => setMobileMenuOpen(false)}>
-              Workflow
             </Link>
             <Link href="/#pricing" onClick={() => setMobileMenuOpen(false)}>
               Pricing
@@ -284,19 +286,21 @@ export function LegalPageClient({
           <div className={styles.mobileMenuActions}>
             {isAuthed ? (
               <>
-                <button type="button" className={styles.mobilePrimaryButton} onClick={() => void goToWorkspace()} disabled={dashboardLoading}>
+                <button type="button" className={`${styles.authAction} ${styles.authActionPrimary}`} onClick={() => void goToWorkspace()} disabled={dashboardLoading}>
+                  <Image src="/icons/account.svg" alt="" aria-hidden="true" width={16} height={16} className={styles.authIcon} />
                   {dashboardLoading ? "Checking access..." : "Go to dashboard"}
                 </button>
-                <button type="button" className={styles.mobileSecondaryButton} onClick={() => void handleLogout()} disabled={dashboardLoading}>
+                <button type="button" className={`${styles.authAction} ${styles.authActionSecondary}`} onClick={() => void handleLogout()} disabled={dashboardLoading}>
+                  <Image src="/icons/logout.svg" alt="" aria-hidden="true" width={16} height={16} className={styles.authIcon} />
                   Logout
                 </button>
               </>
             ) : (
               <>
-                <Link href="/subscribe" className={styles.mobilePrimaryButton} onClick={() => setMobileMenuOpen(false)}>
+                <Link href="/subscribe" className={styles.primaryButton} onClick={() => setMobileMenuOpen(false)}>
                   Start free trial
                 </Link>
-                <Link href="/login" className={styles.mobileSecondaryButton} onClick={() => setMobileMenuOpen(false)}>
+                <Link href="/login" className={styles.secondaryButton} onClick={() => setMobileMenuOpen(false)}>
                   Sign in
                 </Link>
               </>
