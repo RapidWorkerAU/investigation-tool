@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
+import { emailTemplates, loadEmailRecipientByUserId, sendResendEmail } from "@/lib/email";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -25,6 +26,31 @@ function mapSubscriptionStatus(status: Stripe.Subscription.Status) {
 async function refreshProfileForUser(userId: string) {
   const supabase = createServiceRoleClient();
   await supabase.rpc("refresh_billing_profile_state", { p_user_id: userId });
+}
+
+async function sendLifecycleEmail(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  userId: string,
+  template: { subject: string; html: string; text: string },
+  templateName: string,
+) {
+  const recipient = await loadEmailRecipientByUserId(supabase, userId);
+  if (!recipient) return;
+
+  try {
+    await sendResendEmail({
+      to: recipient.email,
+      subject: template.subject,
+      html: template.html,
+      text: template.text,
+      tags: [
+        { name: "category", value: "billing" },
+        { name: "template", value: templateName },
+      ],
+    });
+  } catch (error) {
+    console.error(`Failed to send ${templateName} email`, error);
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -79,6 +105,7 @@ export async function POST(req: NextRequest) {
         }
 
         if (userId && accessType === "pass_30d") {
+          const endsAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
           const existing = await supabase
             .from("access_periods")
             .select("id")
@@ -95,7 +122,7 @@ export async function POST(req: NextRequest) {
               stripe_price_id: session.metadata?.price_id ?? null,
               stripe_payment_status: session.payment_status ?? null,
               starts_at: new Date().toISOString(),
-              ends_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+              ends_at: endsAt,
               map_limit: 1,
               maps_allocated: 0,
               export_allowed: true,
@@ -107,6 +134,16 @@ export async function POST(req: NextRequest) {
           }
 
           await refreshProfileForUser(userId);
+
+          await sendLifecycleEmail(
+            supabase,
+            userId,
+            emailTemplates.pass30Started({
+              endsAt,
+              actionUrl: `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/dashboard`,
+            }),
+            "pass-30-started",
+          );
         }
 
         break;
@@ -138,10 +175,12 @@ export async function POST(req: NextRequest) {
         if (userId) {
           const existing = await supabase
             .from("access_periods")
-            .select("id")
+            .select("id,access_status")
             .eq("stripe_subscription_id", subscription.id)
             .eq("starts_at", startsAt)
             .maybeSingle();
+
+          let createdNewPeriod = false;
 
           if (existing.data?.id) {
             await supabase
@@ -158,6 +197,7 @@ export async function POST(req: NextRequest) {
               })
               .eq("id", existing.data.id);
           } else {
+            createdNewPeriod = true;
             await supabase.from("access_periods").insert({
               user_id: userId,
               access_type: "subscription_monthly",
@@ -179,6 +219,30 @@ export async function POST(req: NextRequest) {
           }
 
           await refreshProfileForUser(userId);
+
+          if (status === "active") {
+            if (event.type === "customer.subscription.created") {
+              await sendLifecycleEmail(
+                supabase,
+                userId,
+                emailTemplates.subscriptionStarted({
+                  renewalDate: endsAt,
+                  actionUrl: `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/dashboard`,
+                }),
+                "subscription-started",
+              );
+            } else if (createdNewPeriod || existing.data?.access_status === "payment_failed") {
+              await sendLifecycleEmail(
+                supabase,
+                userId,
+                emailTemplates.subscriptionRenewed({
+                  renewalDate: endsAt,
+                  actionUrl: `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/dashboard`,
+                }),
+                "subscription-renewed",
+              );
+            }
+          }
         }
 
         break;
@@ -228,6 +292,45 @@ export async function POST(req: NextRequest) {
               .eq("id", period.id);
 
             await refreshProfileForUser(period.user_id);
+
+            await sendLifecycleEmail(
+              supabase,
+              period.user_id,
+              emailTemplates.paymentFailed({
+                actionUrl: `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/account`,
+              }),
+              "payment-failed",
+            );
+          }
+        }
+
+        break;
+      }
+
+      case "invoice.payment_succeeded": {
+        const invoice = event.data.object as Stripe.Invoice;
+        const subscriptionId = typeof invoice.subscription === "string" ? invoice.subscription : null;
+        const billingReason = invoice.billing_reason ?? null;
+
+        if (subscriptionId && billingReason === "subscription_cycle") {
+          const { data: period } = await supabase
+            .from("access_periods")
+            .select("user_id,ends_at")
+            .eq("stripe_subscription_id", subscriptionId)
+            .order("starts_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (period?.user_id) {
+            await sendLifecycleEmail(
+              supabase,
+              period.user_id,
+              emailTemplates.subscriptionRenewed({
+                renewalDate: period.ends_at,
+                actionUrl: `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/dashboard`,
+              }),
+              "subscription-renewed",
+            );
           }
         }
 

@@ -1,0 +1,210 @@
+.page {
+  min-height: 100dvh;
+  padding: 28px;
+  background: #eef3fb;
+  color: #1f2937;
+}
+
+.header {
+  max-width: 1440px;
+  margin: 0 auto 24px;
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.eyebrow {
+  margin: 0 0 8px;
+  font-size: 0.74rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #5f6b7b;
+  font-weight: 700;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 2.4rem;
+  line-height: 1;
+}
+
+.copy {
+  margin: 10px 0 0;
+  max-width: 760px;
+  color: #516072;
+  line-height: 1.6;
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 18px;
+  background: #ffffff;
+  border: 1px solid rgba(32, 43, 64, 0.1);
+  color: #214ca4;
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.grid {
+  max-width: 1440px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px;
+}
+
+.card {
+  background: #ffffff;
+  border: 1px solid rgba(20, 34, 70, 0.08);
+  box-shadow: 0 20px 40px rgba(20, 34, 70, 0.08);
+  overflow: hidden;
+}
+
+.cardHeader {
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid rgba(20, 34, 70, 0.08);
+}
+
+.cardHeader h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.cardHeader p {
+  margin: 6px 0 0;
+  color: #5f6b7b;
+  line-height: 1.5;
+}
+
+.previewFrameWrap {
+  padding: 18px;
+  background: #dde8f8;
+}
+
+.previewFrame {
+  display: block;
+  width: 100%;
+  height: 760px;
+  border: 0;
+  background: #ffffff;
+}
+
+.details {
+  padding: 0 18px 18px;
+}
+
+.details summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: #214ca4;
+}
+
+.details pre {
+  margin: 14px 0 0;
+  padding: 16px;
+  background: #f7f9fc;
+  color: #304154;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.passwordOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(10, 18, 36, 0.72);
+  backdrop-filter: blur(8px);
+}
+
+.passwordCard {
+  width: min(100%, 460px);
+  padding: 28px;
+  background: #ffffff;
+  box-shadow: 0 24px 50px rgba(20, 34, 70, 0.22);
+}
+
+.passwordTitle {
+  margin: 0;
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.passwordCopy {
+  margin: 12px 0 0;
+  color: #516072;
+  line-height: 1.6;
+}
+
+.passwordForm {
+  display: grid;
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.passwordInput {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid rgba(32, 43, 64, 0.18);
+  background: #ffffff;
+  color: #1f2937;
+  font-size: 1rem;
+}
+
+.passwordButton {
+  min-height: 48px;
+  border: 1px solid rgba(35, 78, 168, 0.18);
+  background: linear-gradient(180deg, #4a89f5 0%, #2e69d6 100%);
+  color: #ffffff;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.passwordError {
+  margin: 14px 0 0;
+  color: #b42318;
+  font-weight: 700;
+}
+
+@media (max-width: 980px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .page {
+    padding: 18px;
+  }
+
+  .header {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .header h1 {
+    font-size: 1.9rem;
+  }
+
+  .previewFrame {
+    height: 680px;
+  }
+
+  .passwordCard {
+    padding: 22px;
+  }
+
+  .passwordTitle {
+    font-size: 1.7rem;
+  }
+}

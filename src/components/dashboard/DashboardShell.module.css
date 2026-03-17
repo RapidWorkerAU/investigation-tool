@@ -2877,11 +2877,11 @@
 
 @media (max-width: 860px) {
   .bodyChrome {
-    background: linear-gradient(180deg, rgba(251, 250, 247, 0.98), rgba(246, 243, 238, 0.99));
+    background: #fcfaf7;
   }
 
   .viewport {
-    --shell-bg: linear-gradient(180deg, rgba(251, 250, 247, 0.98), rgba(246, 243, 238, 0.99));
+    --shell-bg: #fcfaf7;
     --mobile-header-offset: calc(max(env(safe-area-inset-top), 8px) + 58px);
     --mobile-header-bg:
       radial-gradient(circle at top left, rgba(255, 255, 255, 0.06), transparent 20%),
@@ -2889,7 +2889,8 @@
     min-height: 100dvh;
     height: auto;
     background: var(--shell-bg);
-    overflow: clip;
+    overflow-x: hidden;
+    overflow-y: visible;
   }
 
   .deviceShell {
@@ -2901,15 +2902,17 @@
       0
       max(env(safe-area-inset-bottom), 0px)
       0;
+    overflow: visible;
   }
 
   .deviceBezel {
     grid-template-columns: 1fr;
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: auto auto;
     min-height: calc(100dvh - max(env(safe-area-inset-top), 8px) - max(env(safe-area-inset-bottom), 0px));
     height: auto;
     gap: 0;
     align-content: start;
+    overflow: visible;
   }
 
   .mobileHeader {
@@ -2948,9 +2951,9 @@
     background:
       radial-gradient(circle at top right, rgba(118, 165, 220, 0.06), transparent 28%),
       linear-gradient(180deg, rgba(251, 250, 247, 0.98), rgba(246, 243, 238, 0.99));
-    overflow: hidden;
-    height: calc(100dvh - var(--mobile-header-offset));
-    min-height: 0;
+    overflow: visible;
+    height: auto;
+    min-height: calc(100dvh - var(--mobile-header-offset));
   }
 
   .sidebarNav {
@@ -3047,15 +3050,15 @@
   }
 
   .body {
-    overflow: auto;
-    padding: 0 20px calc(max(env(safe-area-inset-bottom), 24px) + 72px);
+    overflow: visible;
+    padding: 0 20px calc(max(env(safe-area-inset-bottom), 32px) + 120px);
     gap: 16px;
   }
 
   .body::after {
     content: "";
     display: block;
-    height: 56px;
+    height: calc(max(env(safe-area-inset-bottom), 24px) + 96px);
   }
 
   .tableLoadingStateInline {
@@ -3531,7 +3534,7 @@
   }
 
   .deviceBezel {
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: auto auto;
     min-height: 100dvh;
     height: auto;
   }
@@ -3540,8 +3543,9 @@
     padding: 0;
     margin-top: var(--mobile-header-offset);
     border-radius: 0;
-    overflow: hidden;
-    height: calc(100dvh - var(--mobile-header-offset));
+    overflow: visible;
+    height: auto;
+    min-height: calc(100dvh - var(--mobile-header-offset));
   }
 
   .sidebar {
@@ -3572,12 +3576,12 @@
   }
 
   .body {
-    padding: 0 18px calc(max(env(safe-area-inset-bottom), 18px) + 72px);
+    padding: 0 18px calc(max(env(safe-area-inset-bottom), 26px) + 128px);
     gap: 14px;
   }
 
   .body::after {
-    height: 72px;
+    height: calc(max(env(safe-area-inset-bottom), 24px) + 112px);
   }
 
   .reportToggleBarMobileSelectOnly .reportMobileSelect {
@@ -3763,7 +3767,7 @@
   }
 
   .dashboardMobileList {
-    padding-bottom: 64px;
+    padding-bottom: 96px;
   }
 
   .modalCard {
@@ -3786,8 +3790,12 @@
   }
 
   .modalCard {
-    border-radius: 22px;
-    padding: 18px;
+    border-radius: 0;
+    padding:
+      max(16px, env(safe-area-inset-top))
+      14px
+      max(32px, env(safe-area-inset-bottom))
+      14px;
   }
 }
 

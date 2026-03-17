@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { emailTemplates, loadEmailRecipientByUserId, sendResendEmail } from "@/lib/email";
 import { getUserFromAuthHeader } from "@/lib/supabase/auth";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 
@@ -20,6 +21,30 @@ export async function POST(request: NextRequest) {
   }
 
   const row = Array.isArray(data) ? data[0] : data;
+
+  const recipient = await loadEmailRecipientByUserId(supabase, user.userId);
+  if (recipient) {
+    const email = emailTemplates.trialStarted({
+      firstName: recipient.firstName,
+      endsAt: row?.current_period_ends_at ?? null,
+      actionUrl: `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/dashboard`,
+    });
+
+    try {
+      await sendResendEmail({
+        to: recipient.email,
+        subject: email.subject,
+        html: email.html,
+        text: email.text,
+        tags: [
+          { name: "category", value: "access" },
+          { name: "template", value: "trial-started" },
+        ],
+      });
+    } catch (error) {
+      console.error("Failed to send trial started email", error);
+    }
+  }
 
   return NextResponse.json({
     userId: row?.user_id ?? user.userId,
