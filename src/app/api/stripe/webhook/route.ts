@@ -105,7 +105,7 @@ export async function POST(req: NextRequest) {
         }
 
         if (userId && accessType === "pass_30d") {
-          const endsAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+          let lifecycleEndsAt: string | null = null;
           const existing = await supabase
             .from("access_periods")
             .select("id")
@@ -113,6 +113,38 @@ export async function POST(req: NextRequest) {
             .maybeSingle();
 
           if (!existing.data?.id) {
+            const now = new Date();
+            const nowIso = now.toISOString();
+            const { data: queuedPass } = await supabase
+              .from("access_periods")
+              .select("id")
+              .eq("user_id", userId)
+              .eq("access_type", "pass_30d")
+              .eq("access_status", "active")
+              .gt("starts_at", nowIso)
+              .order("starts_at", { ascending: true })
+              .limit(1)
+              .maybeSingle();
+
+            const { data: activePass } = await supabase
+              .from("access_periods")
+              .select("id,ends_at,reminder_3_business_days_sent_at")
+              .eq("user_id", userId)
+              .eq("access_type", "pass_30d")
+              .eq("access_status", "active")
+              .lte("starts_at", nowIso)
+              .gt("ends_at", nowIso)
+              .order("ends_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            const startsAt =
+              activePass?.id && activePass.reminder_3_business_days_sent_at && !queuedPass?.id
+                ? activePass.ends_at
+                : nowIso;
+            const endsAt = new Date(new Date(startsAt).getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+            lifecycleEndsAt = endsAt;
+
             await supabase.from("access_periods").insert({
               user_id: userId,
               access_type: "pass_30d",
@@ -121,7 +153,7 @@ export async function POST(req: NextRequest) {
               stripe_checkout_session_id: session.id,
               stripe_price_id: session.metadata?.price_id ?? null,
               stripe_payment_status: session.payment_status ?? null,
-              starts_at: new Date().toISOString(),
+              starts_at: startsAt,
               ends_at: endsAt,
               map_limit: 1,
               maps_allocated: 0,
@@ -139,7 +171,7 @@ export async function POST(req: NextRequest) {
             supabase,
             userId,
             emailTemplates.pass30Started({
-              endsAt,
+              endsAt: lifecycleEndsAt,
               actionUrl: `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/dashboard`,
             }),
             "pass-30-started",

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import DashboardShell from "@/components/dashboard/DashboardShell";
 import styles from "@/components/dashboard/DashboardShell.module.css";
+import { accessBlocksInvestigationEntry, accessRequiresSelection, fetchAccessState, type BillingAccessState } from "@/lib/access";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
 
 type MapRow = {
@@ -384,6 +385,7 @@ export default function InvestigationReportPage() {
   const [openFactorFilter, setOpenFactorFilter] = useState<ColumnFilterKey | null>(null);
   const [factorFilterMenuPosition, setFactorFilterMenuPosition] = useState<FactorFilterMenuPosition | null>(null);
   const [mobileFilterOverlayOpen, setMobileFilterOverlayOpen] = useState(false);
+  const [accessState, setAccessState] = useState<BillingAccessState | null>(null);
   const [tablePages, setTablePages] = useState<Record<string, number>>({
     sequence: 1,
     factors: 1,
@@ -1297,6 +1299,28 @@ export default function InvestigationReportPage() {
         return;
       }
 
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        router.push(`/login?returnTo=${encodeURIComponent(`/investigations/${params.id}`)}`);
+        return;
+      }
+
+      const accessState = await fetchAccessState(session.access_token);
+      setAccessState(accessState);
+
+      if (accessRequiresSelection(accessState)) {
+        router.push("/subscribe");
+        return;
+      }
+
+      if (accessBlocksInvestigationEntry(accessState)) {
+        router.push("/dashboard?mapAccess=blocked");
+        return;
+      }
+
       const [
         { data: mapRow, error: mapError },
         { data: memberRows, error: memberError },
@@ -1651,7 +1675,17 @@ export default function InvestigationReportPage() {
     setScopeForm((current) => ({ ...current, [field]: value }));
   };
 
+  const canEditScope = accessState?.canEditMaps ?? true;
+  const scopeEditDisabledReason = (() => {
+    if (canEditScope) return null;
+    if (accessState?.currentAccessStatus === "expired") return "Editing is unavailable because this access period has expired.";
+    if (accessState?.currentAccessStatus === "payment_failed") return "Editing is unavailable until payment details are updated.";
+    if (accessState?.currentAccessStatus === "cancelled") return "Editing is unavailable because this access has been cancelled.";
+    return accessState?.readOnlyReason || "Editing is unavailable for your current access.";
+  })();
+
   const handleScopeEdit = () => {
+    if (!canEditScope) return;
     setScopeMessage(null);
     setScopeMessageIsError(false);
     setScopeEditing(true);
@@ -1675,7 +1709,7 @@ export default function InvestigationReportPage() {
   };
 
   const handleScopeSave = async () => {
-    if (!map) return;
+    if (!map || !canEditScope) return;
 
     setScopeSaving(true);
     setScopeMessage(null);
@@ -1935,13 +1969,16 @@ export default function InvestigationReportPage() {
                             </button>
                           </>
                         ) : (
-                          <button
-                            type="button"
-                            className={`${styles.button} ${styles.buttonAccent}`}
-                            onClick={handleScopeEdit}
-                          >
-                            Edit Scope
-                          </button>
+                          <span title={scopeEditDisabledReason ?? undefined}>
+                            <button
+                              type="button"
+                              className={`${styles.button} ${styles.buttonAccent}`}
+                              onClick={handleScopeEdit}
+                              disabled={!canEditScope}
+                            >
+                              Edit Scope
+                            </button>
+                          </span>
                         )}
                       </div>
                     </div>

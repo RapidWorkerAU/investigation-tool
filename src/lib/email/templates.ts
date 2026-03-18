@@ -81,6 +81,10 @@ function greeting(firstName?: string | null) {
   return firstName?.trim() ? `Hi ${firstName.trim()},` : "Hi,";
 }
 
+function titleCaseSubject(value: string) {
+  return value.replace(/\b([a-z])([a-z]*)/gi, (_match, first: string, rest: string) => `${first.toUpperCase()}${rest.toLowerCase()}`);
+}
+
 function buildText({
   title,
   intro,
@@ -125,36 +129,142 @@ function renderTemplate({
   note,
 }: BaseTemplateArgs): TemplateResult {
   const primaryButton = ctaLabel && ctaUrl
-    ? `<a href="${escapeHtml(ctaUrl)}" style="display:inline-block;padding:14px 24px;background:linear-gradient(180deg,#4a89f5 0%,#2e69d6 100%);color:#ffffff;text-decoration:none;font-weight:700;border-radius:12px;">${escapeHtml(ctaLabel)}</a>`
+    ? `<!--[if mso]>
+        <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="${escapeHtml(ctaUrl)}" style="height:48px;v-text-anchor:middle;width:220px;" arcsize="12%" strokecolor="#2e69d6" fillcolor="#2e69d6">
+          <w:anchorlock/>
+          <center style="color:#ffffff;font-family:Arial,sans-serif;font-size:16px;font-weight:700;">${escapeHtml(ctaLabel)}</center>
+        </v:roundrect>
+      <![endif]-->
+      <!--[if !mso]><!-- -->
+        <a href="${escapeHtml(ctaUrl)}" class="email-button email-button-primary" style="display:inline-block;padding:14px 24px;background:#2e69d6;color:#ffffff;text-decoration:none;font-weight:700;border-radius:12px;border:1px solid #2e69d6;">${escapeHtml(ctaLabel)}</a>
+      <!--<![endif]-->`
     : "";
   const secondaryButton = secondaryCtaLabel && secondaryCtaUrl
-    ? `<a href="${escapeHtml(secondaryCtaUrl)}" style="display:inline-block;padding:14px 24px;background:#ffffff;color:#234ea8;text-decoration:none;font-weight:700;border:1px solid rgba(35,78,168,0.18);border-radius:12px;">${escapeHtml(secondaryCtaLabel)}</a>`
+    ? `<!--[if mso]>
+        <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" href="${escapeHtml(secondaryCtaUrl)}" style="height:48px;v-text-anchor:middle;width:220px;" arcsize="12%" strokecolor="#c8d6eb" fillcolor="#ffffff">
+          <w:anchorlock/>
+          <center style="color:#234ea8;font-family:Arial,sans-serif;font-size:16px;font-weight:700;">${escapeHtml(secondaryCtaLabel)}</center>
+        </v:roundrect>
+      <![endif]-->
+      <!--[if !mso]><!-- -->
+        <a href="${escapeHtml(secondaryCtaUrl)}" class="email-button email-button-secondary" style="display:inline-block;padding:14px 24px;background:#ffffff;color:#234ea8;text-decoration:none;font-weight:700;border:1px solid #c8d6eb;border-radius:12px;">${escapeHtml(secondaryCtaLabel)}</a>
+      <!--<![endif]-->`
     : "";
 
   return {
-    subject: title,
+    subject: titleCaseSubject(title),
     html: `
 <!DOCTYPE html>
 <html lang="en">
-  <body style="margin:0;padding:0;background:#eef3fb;font-family:Arial,sans-serif;color:#1f2937;">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta name="color-scheme" content="light">
+    <meta name="supported-color-schemes" content="light">
+    <style>
+      :root {
+        color-scheme: light;
+        supported-color-schemes: light;
+      }
+      body, table, td, div, p, a, h1 {
+        font-family: Arial, sans-serif !important;
+      }
+      .email-page {
+        background-color: #eef3fb !important;
+      }
+      .email-card {
+        background-color: #ffffff !important;
+      }
+      .email-hero {
+        background-color: #1747b9 !important;
+        background-image: linear-gradient(135deg, #1747b9 0%, #2f77df 42%, #5ba1ff 100%) !important;
+      }
+      .email-hero-text,
+      .email-hero-text div,
+      .email-hero-text h1 {
+        color: #ffffff !important;
+      }
+      .email-copy {
+        color: #425166 !important;
+      }
+      .email-highlight {
+        background-color: #f6f9ff !important;
+        border-color: #d8e4fb !important;
+      }
+      .email-highlight p {
+        color: #30435f !important;
+      }
+      .email-note {
+        color: #5a6472 !important;
+      }
+      .email-footer {
+        color: #6b7280 !important;
+        border-top-color: #e5e7eb !important;
+      }
+      .email-footer a,
+      .email-link {
+        color: #234ea8 !important;
+        text-decoration: underline !important;
+        font-weight: 600 !important;
+      }
+      .email-button-primary {
+        background: #2e69d6 !important;
+        border-color: #2e69d6 !important;
+        color: #ffffff !important;
+      }
+      .email-button-secondary {
+        background: #ffffff !important;
+        border-color: #c8d6eb !important;
+        color: #234ea8 !important;
+      }
+      [data-ogsc] .email-page {
+        background-color: #eef3fb !important;
+      }
+      [data-ogsc] .email-card {
+        background-color: #ffffff !important;
+      }
+      [data-ogsc] .email-hero {
+        background-color: #1747b9 !important;
+      }
+      [data-ogsc] .email-hero-text,
+      [data-ogsc] .email-hero-text div,
+      [data-ogsc] .email-hero-text h1,
+      [data-ogsc] .email-copy,
+      [data-ogsc] .email-highlight p,
+      [data-ogsc] .email-note,
+      [data-ogsc] .email-footer {
+        color: inherit !important;
+      }
+      [data-ogsc] .email-button-primary {
+        background: #2e69d6 !important;
+        color: #ffffff !important;
+        border-color: #2e69d6 !important;
+      }
+      [data-ogsc] .email-button-secondary {
+        background: #ffffff !important;
+        color: #234ea8 !important;
+        border-color: #c8d6eb !important;
+      }
+    </style>
+  </head>
+  <body class="email-page" style="margin:0;padding:0;background:#eef3fb;font-family:Arial,sans-serif;color:#1f2937;">
     <div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(preheader)}</div>
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef3fb;padding:24px 12px;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" bgcolor="#eef3fb" class="email-page" style="background:#eef3fb;padding:24px 12px;">
       <tr>
         <td align="center">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 20px 44px rgba(20,34,70,0.12);">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" bgcolor="#ffffff" class="email-card" style="max-width:640px;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 20px 44px rgba(20,34,70,0.12);">
             <tr>
-              <td style="padding:28px 28px 20px;background:linear-gradient(135deg,#1747b9 0%,#2f77df 42%,#5ba1ff 100%);color:#ffffff;">
+              <td bgcolor="#1747b9" class="email-hero email-hero-text" style="padding:28px 28px 20px;background:#1747b9;background-image:linear-gradient(135deg,#1747b9 0%,#2f77df 42%,#5ba1ff 100%);color:#ffffff;">
                 <img src="${LOGO_DATA_URI}" alt="${escapeHtml(BRAND_NAME)}" width="52" height="52" style="display:block;width:52px;height:52px;object-fit:contain;margin-bottom:16px;">
                 <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;opacity:0.84;font-weight:700;">${escapeHtml(BRAND_NAME)}</div>
                 <h1 style="margin:10px 0 0;font-size:30px;line-height:1.1;font-weight:700;">${escapeHtml(title)}</h1>
               </td>
             </tr>
             <tr>
-              <td style="padding:28px;">
-                ${intro.map((paragraph) => `<p style="margin:0 0 16px;font-size:16px;line-height:1.7;color:#425166;">${escapeHtml(paragraph)}</p>`).join("")}
+              <td bgcolor="#ffffff" class="email-card" style="padding:28px;background:#ffffff;">
+                ${intro.map((paragraph) => `<p class="email-copy" style="margin:0 0 16px;font-size:16px;line-height:1.7;color:#425166;">${escapeHtml(paragraph)}</p>`).join("")}
                 ${
                   highlights?.length
-                    ? `<div style="margin:20px 0;padding:18px 18px 4px;background:#f6f9ff;border:1px solid rgba(34,74,160,0.08);border-radius:16px;">
+                    ? `<div class="email-highlight" style="margin:20px 0;padding:18px 18px 4px;background:#f6f9ff;border:1px solid #d8e4fb;border-radius:16px;">
                         ${highlights.map((item) => `<p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#30435f;">${escapeHtml(item)}</p>`).join("")}
                       </div>`
                     : ""
@@ -169,15 +279,15 @@ function renderTemplate({
                 }
                 ${
                   note
-                    ? `<p style="margin:22px 0 0;font-size:14px;line-height:1.6;color:#5a6472;">${escapeHtml(note)}</p>`
+                    ? `<p class="email-note" style="margin:22px 0 0;font-size:14px;line-height:1.6;color:#5a6472;">${escapeHtml(note)}</p>`
                     : ""
                 }
               </td>
             </tr>
             <tr>
-              <td style="padding:0 28px 28px;">
-                <div style="padding-top:18px;border-top:1px solid rgba(31,41,55,0.08);font-size:13px;line-height:1.7;color:#6b7280;">
-                  Need help? Reply to <a href="mailto:${escapeHtml(SUPPORT_EMAIL)}" style="color:#234ea8;text-decoration:none;">${escapeHtml(SUPPORT_EMAIL)}</a>.
+              <td bgcolor="#ffffff" class="email-card" style="padding:0 28px 28px;background:#ffffff;">
+                <div class="email-footer" style="padding-top:18px;border-top:1px solid #e5e7eb;font-size:13px;line-height:1.7;color:#6b7280;">
+                  Need help? Reply to <a class="email-link" href="mailto:${escapeHtml(SUPPORT_EMAIL)}" style="color:#234ea8;text-decoration:underline;font-weight:600;">${escapeHtml(SUPPORT_EMAIL)}</a>.
                 </div>
               </td>
             </tr>
@@ -287,6 +397,24 @@ export const emailTemplates = {
       ],
       ctaLabel: "Open dashboard",
       ctaUrl: actionUrl || absoluteUrl("/dashboard"),
+    });
+  },
+
+  trialEndsToday({ firstName, endsAt, actionUrl }: AccessTemplateArgs): TemplateResult {
+    const endsLabel = formatDateTime(endsAt) ?? "today";
+    return renderTemplate({
+      preheader: "Your 7 day trial ends today.",
+      title: "Your 7 day trial ends today",
+      intro: [
+        greeting(firstName),
+        `Your free Investigation Tool trial expires ${endsLabel}.`,
+      ],
+      highlights: [
+        "Upgrade to paid access to keep working in your current investigation map.",
+        "Monthly access also restores your existing map and removes the single-map cap.",
+      ],
+      ctaLabel: "View paid access",
+      ctaUrl: actionUrl || absoluteUrl("/subscribe"),
     });
   },
 

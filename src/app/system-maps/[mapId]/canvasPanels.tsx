@@ -25,6 +25,10 @@ type CanvasActionButtonsProps = {
   onSelectSearchResult: (id: string) => void;
   canWriteMap: boolean;
   canUseWizard: boolean;
+  addDisabledReason?: string;
+  wizardDisabledReason?: string;
+  canPrint: boolean;
+  printDisabledReason?: string;
   onOpenWizard: () => void;
   canCreateSticky: boolean;
   handleAddBlankDocument: () => void;
@@ -62,6 +66,19 @@ type CanvasActionButtonsProps = {
   handleAddIncidentFinding: () => void;
   handleAddIncidentRecommendation: () => void;
   allowedNodeKinds: NodePaletteKind[];
+  canSaveTemplate: boolean;
+  templateDisabledReason?: string;
+  showTemplateMenu: boolean;
+  setShowTemplateMenu: (updater: (prev: boolean) => boolean) => void;
+  templateMenuRef: RefObject<HTMLDivElement | null>;
+  templateQuery: string;
+  setTemplateQuery: (value: string) => void;
+  templateResults: Array<{ id: string; name: string; updatedAt: string }>;
+  isLoadingTemplates: boolean;
+  isSavingTemplate: boolean;
+  templateSaveMessage: string | null;
+  onSelectTemplate: (id: string, name: string) => void;
+  onSaveTemplate: () => void;
   showPrintMenu: boolean;
   setShowPrintMenu: (updater: (prev: boolean) => boolean) => void;
   printMenuRef: RefObject<HTMLDivElement | null>;
@@ -87,6 +104,10 @@ export function CanvasActionButtons({
   onSelectSearchResult,
   canWriteMap,
   canUseWizard,
+  addDisabledReason,
+  wizardDisabledReason,
+  canPrint,
+  printDisabledReason,
   onOpenWizard,
   canCreateSticky,
   handleAddBlankDocument,
@@ -124,6 +145,19 @@ export function CanvasActionButtons({
   handleAddIncidentFinding,
   handleAddIncidentRecommendation,
   allowedNodeKinds,
+  canSaveTemplate,
+  templateDisabledReason,
+  showTemplateMenu,
+  setShowTemplateMenu,
+  templateMenuRef,
+  templateQuery,
+  setTemplateQuery,
+  templateResults,
+  isLoadingTemplates,
+  isSavingTemplate,
+  templateSaveMessage,
+  onSelectTemplate,
+  onSaveTemplate,
   showPrintMenu,
   setShowPrintMenu,
   printMenuRef,
@@ -426,20 +460,22 @@ export function CanvasActionButtons({
                 style={{ WebkitMaskImage: "url('/icons/info.svg')", maskImage: "url('/icons/info.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
               />
             </button>
-            <button
-              type="button"
-              aria-label="Add component"
-              title="Add component"
-              onClick={() => setShowAddMenu((prev) => !prev)}
-              disabled={!canWriteMap && !canCreateSticky}
-              className={floatingButtonClass}
-            >
-              <span
-                aria-hidden="true"
-                className="h-6 w-6 bg-current"
-                style={{ WebkitMaskImage: "url('/icons/addcomponent.svg')", maskImage: "url('/icons/addcomponent.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
-              />
-            </button>
+            <span title={!canWriteMap && !canCreateSticky ? addDisabledReason : "Add component"}>
+              <button
+                type="button"
+                aria-label="Add component"
+                title={undefined}
+                onClick={() => setShowAddMenu((prev) => !prev)}
+                disabled={!canWriteMap && !canCreateSticky}
+                className={floatingButtonClass}
+              >
+                <span
+                  aria-hidden="true"
+                  className="h-6 w-6 bg-current"
+                  style={{ WebkitMaskImage: "url('/icons/addcomponent.svg')", maskImage: "url('/icons/addcomponent.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
+                />
+              </button>
+            </span>
             <button
               type="button"
               aria-label="Reset zoom"
@@ -453,20 +489,22 @@ export function CanvasActionButtons({
                 style={{ WebkitMaskImage: "url('/icons/resetzoom.svg')", maskImage: "url('/icons/resetzoom.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
               />
             </button>
-            <button
-              type="button"
-              aria-label="Open wizard"
-              title={canUseWizard ? "Open wizard" : "Wizard is unavailable for this map"}
-              onClick={onOpenWizard}
-              disabled={!canUseWizard}
-              className="group flex h-[56px] w-[56px] items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#2563eb_0%,#6d28d9_52%,#db2777_100%)] text-white shadow-[0_14px_30px_rgba(79,70,229,0.26)] transition-all duration-150 hover:-translate-y-0.5 hover:bg-[linear-gradient(135deg,#1d4ed8_0%,#5b21b6_52%,#be185d_100%)] hover:shadow-[0_18px_36px_rgba(79,70,229,0.32)] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0 disabled:hover:shadow-[0_14px_30px_rgba(79,70,229,0.26)]"
-            >
-              <span
-                aria-hidden="true"
-                className="h-6 w-6 bg-current"
-                style={{ WebkitMaskImage: "url('/icons/wizard.svg')", maskImage: "url('/icons/wizard.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
-              />
-            </button>
+            <span title={canUseWizard ? "Open wizard" : wizardDisabledReason}>
+              <button
+                type="button"
+                aria-label="Open wizard"
+                title={undefined}
+                onClick={onOpenWizard}
+                disabled={!canUseWizard}
+                className="group flex h-[56px] w-[56px] items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#2563eb_0%,#6d28d9_52%,#db2777_100%)] text-white shadow-[0_14px_30px_rgba(79,70,229,0.26)] transition-all duration-150 hover:-translate-y-0.5 hover:bg-[linear-gradient(135deg,#1d4ed8_0%,#5b21b6_52%,#be185d_100%)] hover:shadow-[0_18px_36px_rgba(79,70,229,0.32)] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0 disabled:hover:shadow-[0_14px_30px_rgba(79,70,229,0.26)]"
+              >
+                <span
+                  aria-hidden="true"
+                  className="h-6 w-6 bg-current"
+                  style={{ WebkitMaskImage: "url('/icons/wizard.svg')", maskImage: "url('/icons/wizard.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
+                />
+              </button>
+            </span>
           </div>
         </div>
       </>
@@ -487,25 +525,96 @@ export function CanvasActionButtons({
           style={{ WebkitMaskImage: "url('/icons/back.svg')", maskImage: "url('/icons/back.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
         />
       </Link>
-      <button
-        type="button"
-        aria-label="Open wizard"
-        title={canUseWizard ? "Open wizard" : "Wizard is unavailable for this map"}
-        onClick={onOpenWizard}
-        disabled={!canUseWizard}
-        className="fixed left-[20px] top-[156px] z-[74] group flex h-[62px] w-[62px] items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#2563eb_0%,#6d28d9_52%,#db2777_100%)] text-white shadow-[0_14px_30px_rgba(79,70,229,0.26)] transition-all duration-150 hover:-translate-y-0.5 hover:bg-[linear-gradient(135deg,#1d4ed8_0%,#5b21b6_52%,#be185d_100%)] hover:shadow-[0_18px_36px_rgba(79,70,229,0.32)] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0 disabled:hover:shadow-[0_14px_30px_rgba(79,70,229,0.26)]"
-      >
-        <span
-          aria-hidden="true"
-          className="h-7 w-7 bg-current"
-          style={{ WebkitMaskImage: "url('/icons/wizard.svg')", maskImage: "url('/icons/wizard.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
-        />
-      </button>
+      <span title={canUseWizard ? "Open wizard" : wizardDisabledReason}>
+        <button
+          type="button"
+          aria-label="Open wizard"
+          title={undefined}
+          onClick={onOpenWizard}
+          disabled={!canUseWizard}
+          className="fixed left-[20px] top-[156px] z-[74] group flex h-[62px] w-[62px] items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#2563eb_0%,#6d28d9_52%,#db2777_100%)] text-white shadow-[0_14px_30px_rgba(79,70,229,0.26)] transition-all duration-150 hover:-translate-y-0.5 hover:bg-[linear-gradient(135deg,#1d4ed8_0%,#5b21b6_52%,#be185d_100%)] hover:shadow-[0_18px_36px_rgba(79,70,229,0.32)] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0 disabled:hover:shadow-[0_14px_30px_rgba(79,70,229,0.26)]"
+        >
+          <span
+            aria-hidden="true"
+            className="h-7 w-7 bg-current"
+            style={{ WebkitMaskImage: "url('/icons/wizard.svg')", maskImage: "url('/icons/wizard.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
+          />
+        </button>
+      </span>
       <div
         className="fixed top-[82px] z-[88] transition-[right] duration-300 ease-out"
         style={{ right: showMapInfoAside ? "315px" : "20px" }}
       >
         <div className="relative flex items-center gap-3">
+        <div className="relative">
+          <span title={canSaveTemplate ? "Save as template" : templateDisabledReason}>
+            <button
+              type="button"
+              aria-label="Save as template"
+              title={undefined}
+              onClick={() => setShowTemplateMenu((prev) => !prev)}
+              disabled={!canSaveTemplate}
+              className="group flex h-[62px] w-[62px] items-center justify-center rounded-2xl border border-slate-200 bg-white text-black shadow-[0_10px_24px_rgba(15,23,42,0.14)] transition-all duration-150 hover:-translate-y-0.5 hover:bg-[#102a43] hover:text-white hover:shadow-[0_14px_28px_rgba(15,23,42,0.22)] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0 disabled:hover:bg-white disabled:hover:text-black disabled:hover:shadow-[0_10px_24px_rgba(15,23,42,0.14)]"
+            >
+              <span
+                aria-hidden="true"
+                className="h-7 w-7 bg-current"
+                style={{ WebkitMaskImage: "url('/icons/template.svg')", maskImage: "url('/icons/template.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
+              />
+            </button>
+          </span>
+          {showTemplateMenu && canSaveTemplate ? (
+            <div
+              ref={templateMenuRef}
+              className="absolute left-0 top-full z-[70] mt-2 w-[358px] rounded-none border border-slate-300 bg-white p-2 text-sm shadow-xl"
+            >
+              <input
+                type="text"
+                value={templateQuery}
+                onChange={(e) => setTemplateQuery(e.target.value)}
+                placeholder="Enter or search template name"
+                className="w-full bg-transparent px-2 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
+              />
+              <div className="px-2 pb-1 text-[11px] text-slate-500">
+                Select an existing template to overwrite it, or enter a new name to save a fresh template.
+              </div>
+              {templateQuery.trim().length > 0 || isLoadingTemplates || templateResults.length > 0 ? (
+                <div className="mt-1 max-h-56 overflow-auto rounded-none border border-slate-300 bg-white">
+                  {isLoadingTemplates ? (
+                    <div className="px-3 py-2 text-xs text-slate-500">Loading templates...</div>
+                  ) : templateResults.length ? (
+                    templateResults.map((result) => (
+                      <button
+                        key={result.id}
+                        type="button"
+                        className="block w-full px-3 py-2 text-left text-sm text-slate-800 hover:bg-slate-100"
+                        onClick={() => onSelectTemplate(result.id, result.name)}
+                      >
+                        <div className="font-semibold text-slate-900">{result.name}</div>
+                        <div className="text-xs text-slate-500">Updated {result.updatedAt}</div>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="px-3 py-2 text-xs text-slate-500">
+                      {templateQuery.trim().length >= 4 ? "No templates found." : "Type 4 characters to start filtering your templates."}
+                    </div>
+                  )}
+                </div>
+              ) : null}
+              <div className="mt-2 flex items-center justify-end gap-2 border-t border-slate-200 pt-2">
+                {templateSaveMessage ? <div className="mr-auto text-xs font-medium text-emerald-600">{templateSaveMessage}</div> : null}
+                <button
+                  type="button"
+                  className="rounded-none border border-black bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={onSaveTemplate}
+                  disabled={isSavingTemplate || !templateQuery.trim()}
+                >
+                  {isSavingTemplate ? "Saving..." : "Save Template"}
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </div>
         <button
           type="button"
           aria-label="Search components"
@@ -546,25 +655,27 @@ export function CanvasActionButtons({
           />
         </button>
         <div className="relative">
-          <button
-            type="button"
-            aria-label="Print to PDF"
-            title="Print to PDF"
-            onClick={() => setShowPrintMenu((prev) => !prev)}
-            disabled={isPreparingPrint}
-            className="group flex h-[62px] w-[62px] items-center justify-center rounded-2xl border border-slate-200 bg-white text-black shadow-[0_10px_24px_rgba(15,23,42,0.14)] transition-all duration-150 hover:-translate-y-0.5 hover:bg-[#102a43] hover:text-white hover:shadow-[0_14px_28px_rgba(15,23,42,0.22)] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0 disabled:hover:bg-white disabled:hover:text-black disabled:hover:shadow-[0_10px_24px_rgba(15,23,42,0.14)]"
-          >
-            {isPreparingPrint ? (
-              <span aria-hidden="true" className="h-6 w-6 animate-spin rounded-full border-2 border-current border-r-transparent" />
-            ) : (
-              <span
-                aria-hidden="true"
-                className="h-7 w-7 bg-current"
-                style={{ WebkitMaskImage: "url('/icons/printer.svg')", maskImage: "url('/icons/printer.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
-              />
-            )}
-          </button>
-          {showPrintMenu ? (
+          <span title={!canPrint ? printDisabledReason : "Print to PDF"}>
+            <button
+              type="button"
+              aria-label="Print to PDF"
+              title={undefined}
+              onClick={() => setShowPrintMenu((prev) => !prev)}
+              disabled={!canPrint || isPreparingPrint}
+              className="group flex h-[62px] w-[62px] items-center justify-center rounded-2xl border border-slate-200 bg-white text-black shadow-[0_10px_24px_rgba(15,23,42,0.14)] transition-all duration-150 hover:-translate-y-0.5 hover:bg-[#102a43] hover:text-white hover:shadow-[0_14px_28px_rgba(15,23,42,0.22)] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0 disabled:hover:bg-white disabled:hover:text-black disabled:hover:shadow-[0_10px_24px_rgba(15,23,42,0.14)]"
+            >
+              {isPreparingPrint ? (
+                <span aria-hidden="true" className="h-6 w-6 animate-spin rounded-full border-2 border-current border-r-transparent" />
+              ) : (
+                <span
+                  aria-hidden="true"
+                  className="h-7 w-7 bg-current"
+                  style={{ WebkitMaskImage: "url('/icons/printer.svg')", maskImage: "url('/icons/printer.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
+                />
+              )}
+            </button>
+          </span>
+          {showPrintMenu && canPrint ? (
             <div ref={printMenuRef} className="absolute right-0 top-full z-[70] mt-2 min-w-[200px] rounded-none border border-slate-300 bg-white p-1 text-sm shadow-xl">
               <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100 disabled:opacity-50" onClick={onPrintCurrentView} disabled={isPreparingPrint}>
                 Current View
@@ -575,20 +686,22 @@ export function CanvasActionButtons({
             </div>
           ) : null}
         </div>
-        <button
-          type="button"
-          aria-label="Add component"
-          title="Add component"
-          onClick={() => setShowAddMenu((prev) => !prev)}
-          disabled={!canWriteMap && !canCreateSticky}
-          className="group flex h-[62px] w-[62px] items-center justify-center rounded-2xl border border-slate-200 bg-white text-black shadow-[0_10px_24px_rgba(15,23,42,0.14)] transition-all duration-150 hover:-translate-y-0.5 hover:bg-[#102a43] hover:text-white hover:shadow-[0_14px_28px_rgba(15,23,42,0.22)] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0 disabled:hover:bg-white disabled:hover:text-black disabled:hover:shadow-[0_10px_24px_rgba(15,23,42,0.14)]"
-        >
-          <span
-            aria-hidden="true"
-            className="h-7 w-7 bg-current"
-            style={{ WebkitMaskImage: "url('/icons/addcomponent.svg')", maskImage: "url('/icons/addcomponent.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
-          />
-        </button>
+        <span title={!canWriteMap && !canCreateSticky ? addDisabledReason : "Add component"}>
+          <button
+            type="button"
+            aria-label="Add component"
+            title={undefined}
+            onClick={() => setShowAddMenu((prev) => !prev)}
+            disabled={!canWriteMap && !canCreateSticky}
+            className="group flex h-[62px] w-[62px] items-center justify-center rounded-2xl border border-slate-200 bg-white text-black shadow-[0_10px_24px_rgba(15,23,42,0.14)] transition-all duration-150 hover:-translate-y-0.5 hover:bg-[#102a43] hover:text-white hover:shadow-[0_14px_28px_rgba(15,23,42,0.22)] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0 disabled:hover:bg-white disabled:hover:text-black disabled:hover:shadow-[0_10px_24px_rgba(15,23,42,0.14)]"
+          >
+            <span
+              aria-hidden="true"
+              className="h-7 w-7 bg-current"
+              style={{ WebkitMaskImage: "url('/icons/addcomponent.svg')", maskImage: "url('/icons/addcomponent.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
+            />
+          </button>
+        </span>
         {showAddMenu && (canWriteMap || canCreateSticky) && (
           <div ref={addMenuRef} className="absolute right-0 top-full z-[70] mt-2 min-w-[180px] rounded-none border border-slate-300 bg-white p-1 text-sm shadow-xl">
             {canWriteMap ? (

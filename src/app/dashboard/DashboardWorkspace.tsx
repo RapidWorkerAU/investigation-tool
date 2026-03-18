@@ -6,7 +6,13 @@ import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import DashboardShell from "@/components/dashboard/DashboardShell";
 import shellStyles from "@/components/dashboard/DashboardShell.module.css";
-import { accessIsReadOnlyRestricted, accessRequiresSelection, type BillingAccessState, fetchAccessState } from "@/lib/access";
+import { accessIsReadOnlyRestricted, accessRequiresSelection, fetchAccessState, isExpiredTrialAccess, type BillingAccessState } from "@/lib/access";
+import {
+  hasActiveTemplateAccess,
+  listInvestigationTemplates,
+  templateCreateDisabledReason,
+  type InvestigationTemplateOption,
+} from "@/lib/investigationTemplates";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
 
 type MapRecord = {
@@ -118,6 +124,13 @@ type ProgressState = {
   status: "idle" | "running" | "success" | "error" | "aborted";
 };
 
+type AccessRestrictionTile = {
+  title: string;
+  description: string;
+};
+
+const disabledActionTitle = (reason: string | null) => reason ?? undefined;
+
 const formatSupabaseLikeError = (error: unknown, fallback: string) => {
   if (!error || typeof error !== "object") return fallback;
   const message = "message" in error && typeof error.message === "string" ? error.message.trim() : "";
@@ -144,6 +157,9 @@ const summarizeDashboardError = (error: unknown, fallback: string) => {
   }
   if (normalized.includes("no remaining map allocations")) {
     return `You have used all investigation allocations included with your current access. ${supportContactMessage}`;
+  }
+  if (normalized.includes("already has an active investigation map")) {
+    return `Your current access allows one active investigation at a time. Delete the current map to create a new one while the access period is still active. ${supportContactMessage}`;
   }
   if (normalized.includes("active access period not found")) {
     return `We could not confirm your current access period. ${supportContactMessage}`;
@@ -217,6 +233,11 @@ export default function DashboardWorkspace() {
   const [showCreateInvestigationModal, setShowCreateInvestigationModal] = useState(false);
   const [newInvestigationTitle, setNewInvestigationTitle] = useState("");
   const [newInvestigationDescription, setNewInvestigationDescription] = useState("");
+  const [newInvestigationTemplateQuery, setNewInvestigationTemplateQuery] = useState("");
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [templateOptions, setTemplateOptions] = useState<InvestigationTemplateOption[]>([]);
+  const [showTemplateOptions, setShowTemplateOptions] = useState(false);
+  const [loadingTemplateOptions, setLoadingTemplateOptions] = useState(false);
   const [mapCodeInput, setMapCodeInput] = useState("");
   const [deletingMapId, setDeletingMapId] = useState<string | null>(null);
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -243,6 +264,7 @@ export default function DashboardWorkspace() {
   });
   const [error, setError] = useState<string | null>(null);
   const [expandedMobileMapId, setExpandedMobileMapId] = useState<string | null>(null);
+  const [mapAccessBlocked, setMapAccessBlocked] = useState(false);
 
   const loadMaps = useCallback(async () => {
     const {
@@ -361,6 +383,18 @@ export default function DashboardWorkspace() {
     }
   }, [loadMaps]);
 
+  const refreshAccessStateLocal = useCallback(async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) return;
+
+    const nextAccessState = await fetchAccessState(session.access_token);
+    setAccessState(nextAccessState);
+    setShowAccessRestrictedModal(accessIsReadOnlyRestricted(nextAccessState));
+  }, [supabase]);
+
   const selectedOwnedMaps = useMemo(
     () => maps.filter((map) => selectedMapIds.includes(map.id) && map.owner_id === userId),
     [maps, selectedMapIds, userId]
@@ -370,7 +404,9 @@ export default function DashboardWorkspace() {
   const canEditMaps = accessState?.canEditMaps ?? false;
   const canShareMaps = accessState?.canShareMaps ?? false;
   const canDuplicateMaps = accessState?.canDuplicateMaps ?? false;
+  const canUseTemplates = hasActiveTemplateAccess(accessState);
   const accessStatus = accessState?.currentAccessStatus ?? null;
+  const expiredTrialAccess = isExpiredTrialAccess(accessState);
   const accountAccessSummary =
     accessState?.currentAccessStatus === "active" &&
     accessState.currentPeriodEndsAt &&
@@ -380,11 +416,154 @@ export default function DashboardWorkspace() {
         } until ${formatAccessExpiry(accessState.currentPeriodEndsAt)}`
       : null;
   const bulkDeleteEnabled = selectedOwnedMaps.length > 0 && !bulkDeleting && canEditMaps;
-  const restrictedModalActionLabel = accessStatus === "payment_failed" ? "Update payment information" : "Choose access type";
+  const accessRestrictionHeading =
+    accessStatus === "payment_failed"
+      ? "Payment needed"
+      : accessStatus === "cancelled"
+        ? "Access cancelled"
+        : "Access expired";
+  const restrictedModalActionLabel =
+    accessStatus === "payment_failed"
+      ? "Update payment information"
+      : expiredTrialAccess
+        ? "View paid access"
+        : "Choose access type";
   const restrictedModalText =
     accessStatus === "payment_failed"
       ? "Your maps are currently read only because the latest subscription payment did not complete. Update your payment information to restore full access."
-      : "Your maps are currently read only because your access is no longer active. Choose a new access type to restore editing, duplication, sharing, and export.";
+      : expiredTrialAccess
+        ? "Your 7 day trial has expired. Your investigation data is still retained, but this map is locked until you move to paid access. Choose 30 day access to keep working in this map, or upgrade to monthly access for unlimited maps and continued access to your existing investigation."
+        : "Your maps are currently read only because your access is no longer active. Choose a new access type to restore editing, duplication, sharing, and export.";
+  const restrictedModalSecondaryLabel = mapAccessBlocked ? "Back to dashboard" : "Continue read only";
+  const accessRestrictionTiles: AccessRestrictionTile[] =
+    accessStatus === "payment_failed"
+      ? [
+          {
+            title: "Update Payment Details",
+            description: "Open the billing portal and restore your current monthly access.",
+          },
+          {
+            title: "Unlimited Maps Return",
+            description: "Once payment is resolved, your existing investigation and unlimited maps are available again.",
+          },
+          {
+            title: "Data Retained",
+            description: "Your investigation content is still there while billing is brought back into good standing.",
+          },
+        ]
+      : expiredTrialAccess
+        ? [
+            {
+              title: "30 Day Access",
+              description: "Move this investigation onto paid access and continue working in the same map.",
+            },
+            {
+              title: "Monthly Access",
+              description: "Restore this map, remove the one-map cap, and create unlimited investigations.",
+            },
+            {
+              title: "Data Retained",
+              description: "Your trial map is still stored, but it stays locked until you move to paid access.",
+            },
+          ]
+        : accessState?.currentAccessType === "pass_30d"
+          ? [
+              {
+                title: "30 Day Access",
+                description: "Start a fresh paid access window so you can continue working without rebuilding the map.",
+              },
+              {
+                title: "Monthly Access",
+                description: "Restore this investigation and move to unlimited maps, sharing, and ongoing access.",
+              },
+              {
+                title: "Data Retained",
+                description: "Your investigation content is still stored and can be reopened once access is active again.",
+              },
+            ]
+          : accessState?.currentAccessType === "subscription_monthly" && accessStatus === "cancelled"
+            ? [
+                {
+                  title: "Restart Monthly Access",
+                  description: "Return to ongoing access for this investigation and any future maps you need to create.",
+                },
+                {
+                  title: "30 Day Access",
+                  description: "Choose a shorter paid access window if you only need access for one investigation cycle.",
+                },
+                {
+                  title: "Data Retained",
+                  description: "Your current map remains stored and can be reopened once paid access is active again.",
+                },
+              ]
+            : [
+                {
+                  title: "30 Day Access",
+                  description: "Restore access to the investigation through a focused paid access period.",
+                },
+                {
+                  title: "Monthly Access",
+                  description: "Return to full ongoing access with unlimited maps and continued access to this investigation.",
+                },
+                {
+                  title: "Data Retained",
+                  description: "Your investigation content is still stored, but access remains locked until billing is active again.",
+                },
+              ];
+  const linkMapDisabledReason = (() => {
+    if (canShareMaps) return null;
+    if (accessStatus === "expired") return "Map linking is unavailable because your access has expired.";
+    if (accessStatus === "payment_failed") return "Map linking is unavailable until your payment details are updated.";
+    if (accessStatus === "cancelled") return "Map linking is unavailable because your access has been cancelled.";
+    if (accessState?.currentAccessType === "trial_7d") return "Map linking is not included with 7 Day Trial access.";
+    return "Map linking is not available for your current access.";
+  })();
+  const createMapDisabledReason = (() => {
+    if (creating) return "An investigation is already being created.";
+    if (canCreateMaps) return null;
+    if (accessStatus === "expired") return "Map creation is unavailable because your access has expired.";
+    if (accessStatus === "payment_failed") return "Map creation is unavailable until your payment details are updated.";
+    if (accessStatus === "cancelled") return "Map creation is unavailable because your access has been cancelled.";
+    return "Map creation is not available for your current access.";
+  })();
+  const getCopyCodeDisabledReason = (map: MapRecord) => {
+    if (!map.map_code) return "No map code is available for this investigation.";
+    if (accessStatus === "expired") return "Map code copying is unavailable because your access has expired.";
+    if (accessStatus === "payment_failed") return "Map code copying is unavailable until your payment details are updated.";
+    if (accessStatus === "cancelled") return "Map code copying is unavailable because your access has been cancelled.";
+    if (accessState?.currentAccessType === "trial_7d") return "Map code copying is not included with 7 Day Trial access.";
+    return "Map code copying is not available for your current access.";
+  };
+  const getDuplicateDisabledReason = (map: MapRecord) => {
+    if (duplicatingMapId === map.id) return "This investigation is currently being duplicated.";
+    if ((Boolean(map.role) || map.owner_id === userId) && canDuplicateMaps) return null;
+    if (accessStatus === "expired") return "Map duplication is unavailable because your access has expired.";
+    if (accessStatus === "payment_failed") return "Map duplication is unavailable until your payment details are updated.";
+    if (accessStatus === "cancelled") return "Map duplication is unavailable because your access has been cancelled.";
+    if (accessState?.currentAccessType === "trial_7d") return "Map duplication is not included with 7 Day Trial access.";
+    return "You do not have permission to duplicate this map.";
+  };
+  const getDeleteDisabledReason = (map: MapRecord) => {
+    if (deletingMapId === map.id) return "This investigation is currently being deleted.";
+    if (map.owner_id === userId && canEditMaps) return null;
+    if (accessStatus === "expired") return "Map deletion is unavailable because your access has expired.";
+    if (accessStatus === "payment_failed") return "Map deletion is unavailable until your payment details are updated.";
+    if (accessStatus === "cancelled") return "Map deletion is unavailable because your access has been cancelled.";
+    return "Only the owner can delete this map.";
+  };
+  const canViewMapCode = accessStatus === "active";
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    setMapAccessBlocked(params.get("mapAccess") === "blocked");
+  }, []);
+
+  useEffect(() => {
+    if (mapAccessBlocked && accessIsReadOnlyRestricted(accessState)) {
+      setShowAccessRestrictedModal(true);
+    }
+  }, [accessState, mapAccessBlocked]);
 
   useEffect(() => {
     setPortalReady(true);
@@ -458,6 +637,59 @@ export default function DashboardWorkspace() {
     router.push("/subscribe");
   };
 
+  const renderBrandedModalHeader = (title: string, eyebrow = "Investigation Tool", pillLabel?: string, pillToneClass?: string) => (
+    <div className={shellStyles.dashboardModalHeader}>
+      <div className={shellStyles.dashboardModalBrand}>
+        <Image
+          src="/images/investigation-tool.png"
+          alt="Investigation Tool"
+          width={40}
+          height={40}
+          className={shellStyles.dashboardModalLogo}
+        />
+        <div className={shellStyles.dashboardModalBrandCopy}>
+          <span className={shellStyles.dashboardModalEyebrow}>{eyebrow}</span>
+          <h3 className={`${shellStyles.modalTitle} ${shellStyles.dashboardModalTitle}`}>{title}</h3>
+        </div>
+      </div>
+      {pillLabel && pillToneClass ? (
+        <span className={`${shellStyles.accessStatusPill} ${pillToneClass}`}>{pillLabel}</span>
+      ) : null}
+    </div>
+  );
+
+  const resetCreateInvestigationState = useCallback(() => {
+    setShowCreateInvestigationModal(false);
+    setNewInvestigationTitle("");
+    setNewInvestigationDescription("");
+    setNewInvestigationTemplateQuery("");
+    setSelectedTemplateId(null);
+    setTemplateOptions([]);
+    setShowTemplateOptions(false);
+  }, []);
+
+  const loadCreateTemplateOptions = useCallback(
+    async (query: string) => {
+      if (!canUseTemplates) return;
+
+      try {
+        setLoadingTemplateOptions(true);
+        const options = await listInvestigationTemplates(supabase, query, 24);
+        setTemplateOptions(options);
+      } catch (templateError) {
+        setError(templateError instanceof Error ? templateError.message : "Unable to load templates.");
+      } finally {
+        setLoadingTemplateOptions(false);
+      }
+    },
+    [canUseTemplates, supabase]
+  );
+
+  useEffect(() => {
+    if (!showCreateInvestigationModal || !canUseTemplates) return;
+    void loadCreateTemplateOptions("");
+  }, [showCreateInvestigationModal, canUseTemplates, loadCreateTemplateOptions]);
+
   const handleAddInvestigation = async () => {
     if (!canCreateMaps) return;
 
@@ -467,27 +699,47 @@ export default function DashboardWorkspace() {
 
       const normalizedTitle = newInvestigationTitle.trim();
       const normalizedDescription = newInvestigationDescription.trim();
+      const normalizedTemplateQuery = newInvestigationTemplateQuery.trim();
 
-      const { data, error: createError } = await supabase.rpc("create_investigation_map", {
-        p_title: normalizedTitle || null,
-      });
-      if (createError) throw createError;
-      if (!data) throw new Error("Investigation created, but no map id was returned.");
-
-      if (normalizedDescription) {
-        const { error: updateError } = await supabase
-          .schema("ms")
-          .from("system_maps")
-          .update({ description: normalizedDescription })
-          .eq("id", data);
-
-        if (updateError) throw updateError;
+      if (canUseTemplates && normalizedTemplateQuery && !selectedTemplateId) {
+        setError("Select a template from the list or clear the template field before creating the investigation.");
+        return;
       }
 
-      setShowCreateInvestigationModal(false);
-      setNewInvestigationTitle("");
-      setNewInvestigationDescription("");
-      router.push(`/investigations/${data}/canvas?welcome=1`);
+      let mapId: string | null = null;
+
+      if (canUseTemplates && selectedTemplateId) {
+        const { data, error: createError } = await supabase.rpc("create_investigation_map_from_template", {
+          p_template_id: selectedTemplateId,
+          p_title: normalizedTitle || null,
+          p_description: normalizedDescription || null,
+        });
+
+        if (createError) throw createError;
+        if (!data) throw new Error("Investigation created, but no map id was returned.");
+        mapId = data as string;
+      } else {
+        const { data, error: createError } = await supabase.rpc("create_investigation_map", {
+          p_title: normalizedTitle || null,
+        });
+        if (createError) throw createError;
+        if (!data) throw new Error("Investigation created, but no map id was returned.");
+
+        if (normalizedDescription) {
+          const { error: updateError } = await supabase
+            .schema("ms")
+            .from("system_maps")
+            .update({ description: normalizedDescription })
+            .eq("id", data);
+
+          if (updateError) throw updateError;
+        }
+
+        mapId = data as string;
+      }
+
+      resetCreateInvestigationState();
+      router.push(`/investigations/${mapId}/canvas?welcome=1`);
     } catch (createError) {
       setError(summarizeDashboardError(createError, "We could not create your investigation."));
     } finally {
@@ -522,6 +774,7 @@ export default function DashboardWorkspace() {
 
   const handleCopyCode = async (row: MapRecord) => {
     if (!row.map_code) return;
+    if (accessState?.currentAccessType === "trial_7d" || accessStatus !== "active") return;
 
     try {
       await navigator.clipboard.writeText(row.map_code);
@@ -558,6 +811,7 @@ export default function DashboardWorkspace() {
 
       setPendingDeleteRow(null);
       setMaps((current) => current.filter((map) => map.id !== row.id));
+      await refreshAccessStateLocal();
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : "Unable to delete map.");
     } finally {
@@ -605,6 +859,7 @@ export default function DashboardWorkspace() {
 
       setMaps((current) => current.filter((map) => !selectedMapIds.includes(map.id)));
       setSelectedMapIds([]);
+      await refreshAccessStateLocal();
 
       await new Promise((resolve) => setTimeout(resolve, 900));
       setShowBulkDeleteModal(false);
@@ -656,36 +911,22 @@ export default function DashboardWorkspace() {
       throwIfCancelled();
 
       setProgress(10, "Creating duplicate map...");
-      const { data: createdMap, error: createMapError } = await supabase
-        .schema("ms")
-        .from("system_maps")
-        .insert({
-          owner_id: userId,
-          title: duplicateTitle,
-          description: row.description,
-          map_category: "incident_investigation",
-        })
-        .select("id")
-        .single();
+      const { data: createdMap, error: createMapError } = await supabase.rpc("create_investigation_map", {
+        p_title: duplicateTitle,
+      });
 
-      if (createMapError || !createdMap?.id) throw createMapError ?? new Error("Unable to create duplicate map.");
-      createdMapId = createdMap.id;
+      if (createMapError || !createdMap) throw createMapError ?? new Error("Unable to create duplicate map.");
+      createdMapId = createdMap;
 
-      throwIfCancelled();
+      if (row.description) {
+        const { error: descriptionError } = await supabase
+          .schema("ms")
+          .from("system_maps")
+          .update({ description: row.description })
+          .eq("id", createdMapId);
 
-      const { error: memberInsertError } = await supabase
-        .schema("ms")
-        .from("map_members")
-        .upsert(
-          {
-            map_id: createdMapId,
-            user_id: userId,
-            role: "full_write",
-          },
-          { onConflict: "map_id,user_id" }
-        );
-
-      if (memberInsertError) throw memberInsertError;
+        if (descriptionError) throw descriptionError;
+      }
 
       setProgress(16, "Loading source map data...");
       const [typesRes, nodesRes, elementsRes, relationsRes, outlineRes] = await Promise.all([
@@ -941,40 +1182,46 @@ export default function DashboardWorkspace() {
     >
       <section className={shellStyles.accountCard}>
         <div className={shellStyles.tableToolbar}>
-          <button
-            type="button"
-            className={`${shellStyles.button} ${shellStyles.buttonDanger} ${shellStyles.bulkDeleteButton}`}
-            disabled={!bulkDeleteEnabled}
-            onClick={() => {
-              setBulkDeleteProgress({ percent: 0, message: "", status: "idle" });
-              setShowBulkDeleteModal(true);
-            }}
-          >
-            <Image src="/icons/delete.svg" alt="" width={16} height={16} className={shellStyles.buttonIconDanger} />
-            Bulk Delete
-          </button>
+          <span title={disabledActionTitle(!bulkDeleteEnabled ? "Bulk delete is only available for maps you own and can edit." : null)}>
+            <button
+              type="button"
+              className={`${shellStyles.button} ${shellStyles.buttonDanger} ${shellStyles.bulkDeleteButton}`}
+              disabled={!bulkDeleteEnabled}
+              onClick={() => {
+                setBulkDeleteProgress({ percent: 0, message: "", status: "idle" });
+                setShowBulkDeleteModal(true);
+              }}
+            >
+              <Image src="/icons/delete.svg" alt="" width={16} height={16} className={shellStyles.buttonIconDanger} />
+              Bulk Delete
+            </button>
+          </span>
           <div className={shellStyles.toolbarControls}>
             <div className={shellStyles.headerButtons}>
-              <button
-                type="button"
-                className={`${shellStyles.button} ${shellStyles.buttonSecondary}`}
-                onClick={() => setShowLinkForm((current) => !current)}
-                disabled={!canShareMaps}
-              >
-                <Image src="/icons/relationship.svg" alt="" width={18} height={18} className={shellStyles.buttonIconDark} />
-                <span className={shellStyles.desktopToolbarLabel}>Link Map Code</span>
-                <span className={shellStyles.mobileToolbarLabel}>Link Map</span>
-              </button>
-              <button
-                type="button"
-                className={`${shellStyles.button} ${shellStyles.buttonAccent}`}
-                onClick={() => setShowCreateInvestigationModal(true)}
-                disabled={creating || !canCreateMaps}
-              >
-                <Image src="/icons/addcomponent.svg" alt="" width={18} height={18} className={shellStyles.buttonIcon} />
-                <span className={shellStyles.desktopToolbarLabel}>{creating ? "Creating..." : "Add Investigation"}</span>
-                <span className={shellStyles.mobileToolbarLabel}>{creating ? "Creating..." : "Add New"}</span>
-              </button>
+              <span title={disabledActionTitle(linkMapDisabledReason)}>
+                <button
+                  type="button"
+                  className={`${shellStyles.button} ${shellStyles.buttonSecondary}`}
+                  onClick={() => setShowLinkForm((current) => !current)}
+                  disabled={!canShareMaps}
+                >
+                  <Image src="/icons/relationship.svg" alt="" width={18} height={18} className={shellStyles.buttonIconDark} />
+                  <span className={shellStyles.desktopToolbarLabel}>Link Map Code</span>
+                  <span className={shellStyles.mobileToolbarLabel}>Link Map</span>
+                </button>
+              </span>
+              <span title={disabledActionTitle(createMapDisabledReason)}>
+                <button
+                  type="button"
+                  className={`${shellStyles.button} ${shellStyles.buttonAccent}`}
+                  onClick={() => setShowCreateInvestigationModal(true)}
+                  disabled={creating || !canCreateMaps}
+                >
+                  <Image src="/icons/addcomponent.svg" alt="" width={18} height={18} className={shellStyles.buttonIcon} />
+                  <span className={shellStyles.desktopToolbarLabel}>{creating ? "Creating..." : "Add Investigation"}</span>
+                  <span className={shellStyles.mobileToolbarLabel}>{creating ? "Creating..." : "Add New"}</span>
+                </button>
+              </span>
             </div>
 
             {showLinkForm ? (
@@ -986,14 +1233,16 @@ export default function DashboardWorkspace() {
                   value={mapCodeInput}
                   onChange={(event) => setMapCodeInput(event.target.value)}
                 />
-                <button
-                  type="button"
-                  className={`${shellStyles.button} ${shellStyles.buttonSecondary}`}
-                  onClick={() => void handleLinkMapToProfile()}
-                  disabled={isLinking || !canShareMaps}
-                >
-                  {isLinking ? "Linking..." : "Link"}
-                </button>
+                <span title={disabledActionTitle(isLinking ? "Map linking is in progress." : linkMapDisabledReason)}>
+                  <button
+                    type="button"
+                    className={`${shellStyles.button} ${shellStyles.buttonSecondary}`}
+                    onClick={() => void handleLinkMapToProfile()}
+                    disabled={isLinking || !canShareMaps}
+                  >
+                    {isLinking ? "Linking..." : "Link"}
+                  </button>
+                </span>
               </div>
             ) : null}
           </div>
@@ -1056,8 +1305,11 @@ export default function DashboardWorkspace() {
                 maps.map((map) => {
                   const canDelete = map.owner_id === userId && canEditMaps;
                   const canDuplicate = (Boolean(map.role) || map.owner_id === userId) && canDuplicateMaps;
-                  const canCopy = Boolean(map.map_code);
+                  const canCopy = Boolean(map.map_code) && accessState?.currentAccessType !== "trial_7d" && accessStatus === "active";
                   const isSelected = selectedMapIds.includes(map.id);
+                  const copyDisabledReason = canCopy ? null : getCopyCodeDisabledReason(map);
+                  const duplicateDisabledReason = canDuplicate && duplicatingMapId !== map.id ? null : getDuplicateDisabledReason(map);
+                  const deleteDisabledReason = canDelete && deletingMapId !== map.id ? null : getDeleteDisabledReason(map);
 
                   return (
                     <tr
@@ -1097,7 +1349,7 @@ export default function DashboardWorkspace() {
                         <span className={shellStyles.tableClamp}>{map.owner_email ?? "Unknown"}</span>
                       </td>
                       <td>
-                        <span className={shellStyles.tableClamp}>{map.map_code ?? "-"}</span>
+                        <span className={shellStyles.tableClamp}>{canViewMapCode ? map.map_code ?? "-" : "Restricted"}</span>
                       </td>
                       <td>
                         <span className={shellStyles.tableClamp}>{map.updated_by_email ?? "Unknown"}</span>
@@ -1110,33 +1362,36 @@ export default function DashboardWorkspace() {
                       </td>
                       <td onClick={(event) => event.stopPropagation()}>
                         <div className={shellStyles.actionButtons}>
-                          <button
-                            type="button"
-                            className={shellStyles.actionButton}
-                            title={canCopy ? "Copy map code" : "No map code available"}
-                            disabled={!canCopy}
-                            onClick={() => void handleCopyCode(map)}
-                          >
-                            <Image src="/icons/structure.svg" alt="" width={16} height={16} className={shellStyles.actionIcon} />
-                          </button>
-                          <button
-                            type="button"
-                            className={shellStyles.actionButton}
-                            title={canDuplicate ? "Duplicate map" : "You do not have permission to duplicate this map"}
-                            disabled={!canDuplicate || duplicatingMapId === map.id}
-                            onClick={() => openDuplicateConfirm(map)}
-                          >
-                            <Image src="/icons/addcomponent.svg" alt="" width={16} height={16} className={shellStyles.actionIcon} />
-                          </button>
-                          <button
-                            type="button"
-                            className={`${shellStyles.actionButton} ${shellStyles.actionButtonDanger}`}
-                            title={canDelete ? "Delete map" : "Only the owner can delete this map"}
-                            disabled={!canDelete || deletingMapId === map.id}
-                            onClick={() => setPendingDeleteRow(map)}
-                          >
-                            <Image src="/icons/delete.svg" alt="" width={16} height={16} className={shellStyles.actionIcon} />
-                          </button>
+                          <span title={disabledActionTitle(copyDisabledReason)}>
+                            <button
+                              type="button"
+                              className={shellStyles.actionButton}
+                              disabled={!canCopy}
+                              onClick={() => void handleCopyCode(map)}
+                            >
+                              <Image src="/icons/structure.svg" alt="" width={16} height={16} className={shellStyles.actionIcon} />
+                            </button>
+                          </span>
+                          <span title={disabledActionTitle(duplicateDisabledReason)}>
+                            <button
+                              type="button"
+                              className={shellStyles.actionButton}
+                              disabled={!canDuplicate || duplicatingMapId === map.id}
+                              onClick={() => openDuplicateConfirm(map)}
+                            >
+                              <Image src="/icons/addcomponent.svg" alt="" width={16} height={16} className={shellStyles.actionIcon} />
+                            </button>
+                          </span>
+                          <span title={disabledActionTitle(deleteDisabledReason)}>
+                            <button
+                              type="button"
+                              className={`${shellStyles.actionButton} ${shellStyles.actionButtonDanger}`}
+                              disabled={!canDelete || deletingMapId === map.id}
+                              onClick={() => setPendingDeleteRow(map)}
+                            >
+                              <Image src="/icons/delete.svg" alt="" width={16} height={16} className={shellStyles.actionIcon} />
+                            </button>
+                          </span>
                         </div>
                       </td>
                     </tr>
@@ -1159,8 +1414,11 @@ export default function DashboardWorkspace() {
             maps.map((map) => {
               const canDelete = map.owner_id === userId && canEditMaps;
               const canDuplicate = (Boolean(map.role) || map.owner_id === userId) && canDuplicateMaps;
-              const canCopy = Boolean(map.map_code);
+              const canCopy = Boolean(map.map_code) && accessState?.currentAccessType !== "trial_7d" && accessStatus === "active";
               const isSelected = selectedMapIds.includes(map.id);
+              const copyDisabledReason = canCopy ? null : getCopyCodeDisabledReason(map);
+              const duplicateDisabledReason = canDuplicate && duplicatingMapId !== map.id ? null : getDuplicateDisabledReason(map);
+              const deleteDisabledReason = canDelete && deletingMapId !== map.id ? null : getDeleteDisabledReason(map);
 
               return (
                 <article
@@ -1211,7 +1469,7 @@ export default function DashboardWorkspace() {
                         </div>
                         <div>
                           <dt>Code</dt>
-                          <dd>{map.map_code ?? "-"}</dd>
+                          <dd>{canViewMapCode ? map.map_code ?? "-" : "Restricted"}</dd>
                         </div>
                         <div className={shellStyles.dashboardMobileMetaDate}>
                           <dt>Updated</dt>
@@ -1237,50 +1495,53 @@ export default function DashboardWorkspace() {
                       </div>
 
                       <div className={shellStyles.dashboardMobileActions}>
-                        <button
-                          type="button"
-                          className={`${shellStyles.button} ${shellStyles.buttonSecondary} ${shellStyles.dashboardMobileActionButton}`}
-                          disabled={!canCopy}
-                          title={canCopy ? "Copy map code" : "No map code available"}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void handleCopyCode(map);
-                          }}
-                        >
-                          <Image src="/icons/structure.svg" alt="" width={16} height={16} className={shellStyles.actionIcon} />
-                          Copy Code
-                        </button>
-                        <button
-                          type="button"
-                          className={`${shellStyles.button} ${shellStyles.buttonSecondary} ${shellStyles.dashboardMobileActionButton}`}
-                          disabled={!canDuplicate || duplicatingMapId === map.id}
-                          title={canDuplicate ? "Duplicate map" : "You do not have permission to duplicate this map"}
-                          onTouchEnd={(event) => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            openDuplicateConfirm(map);
-                          }}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            openDuplicateConfirm(map);
-                          }}
-                        >
-                          <Image src="/icons/addcomponent.svg" alt="" width={16} height={16} className={shellStyles.actionIcon} />
-                          {duplicatingMapId === map.id ? "Duplicating..." : "Duplicate"}
-                        </button>
-                        <button
-                          type="button"
-                          className={`${shellStyles.button} ${shellStyles.buttonDanger} ${shellStyles.dashboardMobileActionButton}`}
-                          disabled={!canDelete || deletingMapId === map.id}
-                          title={canDelete ? "Delete map" : "Only the owner can delete this map"}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setPendingDeleteRow(map);
-                          }}
-                        >
-                          <Image src="/icons/delete.svg" alt="" width={16} height={16} className={shellStyles.actionIcon} />
-                          {deletingMapId === map.id ? "Deleting..." : "Delete"}
-                        </button>
+                        <span title={disabledActionTitle(copyDisabledReason)}>
+                          <button
+                            type="button"
+                            className={`${shellStyles.button} ${shellStyles.buttonSecondary} ${shellStyles.dashboardMobileActionButton}`}
+                            disabled={!canCopy}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void handleCopyCode(map);
+                            }}
+                          >
+                            <Image src="/icons/structure.svg" alt="" width={16} height={16} className={shellStyles.actionIcon} />
+                            Copy Code
+                          </button>
+                        </span>
+                        <span title={disabledActionTitle(duplicateDisabledReason)}>
+                          <button
+                            type="button"
+                            className={`${shellStyles.button} ${shellStyles.buttonSecondary} ${shellStyles.dashboardMobileActionButton}`}
+                            disabled={!canDuplicate || duplicatingMapId === map.id}
+                            onTouchEnd={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              openDuplicateConfirm(map);
+                            }}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              openDuplicateConfirm(map);
+                            }}
+                          >
+                            <Image src="/icons/addcomponent.svg" alt="" width={16} height={16} className={shellStyles.actionIcon} />
+                            {duplicatingMapId === map.id ? "Duplicating..." : "Duplicate"}
+                          </button>
+                        </span>
+                        <span title={disabledActionTitle(deleteDisabledReason)}>
+                          <button
+                            type="button"
+                            className={`${shellStyles.button} ${shellStyles.buttonDanger} ${shellStyles.dashboardMobileActionButton}`}
+                            disabled={!canDelete || deletingMapId === map.id}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setPendingDeleteRow(map);
+                            }}
+                          >
+                            <Image src="/icons/delete.svg" alt="" width={16} height={16} className={shellStyles.actionIcon} />
+                            {deletingMapId === map.id ? "Deleting..." : "Delete"}
+                          </button>
+                        </span>
                       </div>
                     </>
                   ) : null}
@@ -1293,22 +1554,39 @@ export default function DashboardWorkspace() {
 
       {renderViewportModal(showAccessRestrictedModal && accessState ? (
         <div className={shellStyles.modalBackdrop}>
-          <div className={shellStyles.modalCard}>
-            <h3 className={shellStyles.modalTitle}>Read-only access</h3>
-            <p className={shellStyles.modalText}>{restrictedModalText}</p>
-            <p className={shellStyles.modalText}>
-              Current access status:{" "}
-              <span className={`${shellStyles.accessStatusPill} ${getAccessStatusToneClass(accessState.currentAccessStatus)}`}>
-                {formatAccessStatus(accessState.currentAccessStatus)}
-              </span>
-            </p>
+          <div className={`${shellStyles.modalCard} ${shellStyles.accessRestrictionModal}`}>
+            <div className={shellStyles.accessRestrictionHeader}>
+              {renderBrandedModalHeader(
+                accessRestrictionHeading,
+                "Investigation Tool",
+                formatAccessStatus(accessState.currentAccessStatus),
+                getAccessStatusToneClass(accessState.currentAccessStatus),
+              )}
+            </div>
+
+            <p className={`${shellStyles.modalText} ${shellStyles.accessRestrictionLead}`}>{restrictedModalText}</p>
+
+            <div className={shellStyles.accessRestrictionOptions}>
+              {accessRestrictionTiles.map((tile) => (
+                <div key={tile.title} className={shellStyles.accessRestrictionOptionCard}>
+                  <strong>{tile.title}</strong>
+                  <p>{tile.description}</p>
+                </div>
+              ))}
+            </div>
+
             <div className={shellStyles.modalActions}>
               <button
                 type="button"
                 className={`${shellStyles.button} ${shellStyles.buttonSecondary}`}
-                onClick={() => setShowAccessRestrictedModal(false)}
+                onClick={() => {
+                  setShowAccessRestrictedModal(false);
+                  if (mapAccessBlocked) {
+                    router.replace("/dashboard");
+                  }
+                }}
               >
-                Continue read only
+                {restrictedModalSecondaryLabel}
               </button>
               <button
                 type="button"
@@ -1325,11 +1603,10 @@ export default function DashboardWorkspace() {
 
       {renderViewportModal(showCreateInvestigationModal ? (
         <div className={`${shellStyles.modalBackdrop} ${shellStyles.createInvestigationBackdrop}`}>
-          <div className={`${shellStyles.modalCard} ${shellStyles.createInvestigationCard}`}>
+          <div className={`${shellStyles.modalCard} ${shellStyles.dashboardModalCard} ${shellStyles.createInvestigationCard}`}>
             <div className={shellStyles.createInvestigationHeader}>
               <div>
-                <p className={shellStyles.createInvestigationEyebrow}>New investigation</p>
-                <h3 className={shellStyles.modalTitle}>Create your investigation</h3>
+                {renderBrandedModalHeader("Create your investigation", "New investigation")}
                 <p className={shellStyles.modalText}>
                   Give the investigation a clear working title and a short description so your team can identify the purpose straight away.
                 </p>
@@ -1349,6 +1626,96 @@ export default function DashboardWorkspace() {
                 />
                 <span className={shellStyles.createInvestigationHint}>
                   Use a short title that identifies the event, location, or incident being examined.
+                </span>
+              </label>
+
+              <label className={shellStyles.accountField}>
+                <span>Start From Template</span>
+                <div
+                  className={shellStyles.templatePickerField}
+                  title={canUseTemplates ? undefined : templateCreateDisabledReason}
+                >
+                  <div className={shellStyles.templatePickerControl}>
+                    <input
+                      className={`${shellStyles.input} ${shellStyles.templatePickerInput}`}
+                      type="text"
+                      value={newInvestigationTemplateQuery}
+                      onChange={(event) => {
+                        const nextValue = event.target.value;
+                        setNewInvestigationTemplateQuery(nextValue);
+                        setSelectedTemplateId(null);
+                        if (!canUseTemplates) return;
+                        if (nextValue.trim().length >= 4) {
+                          setShowTemplateOptions(true);
+                          void loadCreateTemplateOptions(nextValue);
+                        }
+                      }}
+                      onFocus={() => {
+                        if (!canUseTemplates) return;
+                        if (newInvestigationTemplateQuery.trim().length >= 4) {
+                          setShowTemplateOptions(true);
+                          void loadCreateTemplateOptions(newInvestigationTemplateQuery);
+                        }
+                      }}
+                      placeholder={canUseTemplates ? "Browse or type to find a template" : "Templates require active subscription access"}
+                      disabled={!canUseTemplates || creating}
+                    />
+                    <button
+                      type="button"
+                      className={`${shellStyles.button} ${shellStyles.buttonSecondary} ${shellStyles.templatePickerToggle}`}
+                      onClick={() => {
+                        if (!canUseTemplates) return;
+                        setShowTemplateOptions((current) => {
+                          const nextOpen = !current;
+                          if (nextOpen) {
+                            void loadCreateTemplateOptions(newInvestigationTemplateQuery.trim().length >= 4 ? newInvestigationTemplateQuery : "");
+                          }
+                          return nextOpen;
+                        });
+                      }}
+                      disabled={!canUseTemplates || creating}
+                      title={canUseTemplates ? "Browse templates" : undefined}
+                    >
+                      Browse
+                    </button>
+                  </div>
+
+                  {showTemplateOptions && canUseTemplates ? (
+                    <div className={shellStyles.templatePickerMenu}>
+                      {loadingTemplateOptions ? (
+                        <div className={shellStyles.templatePickerStatus}>Loading templates...</div>
+                      ) : templateOptions.length ? (
+                        templateOptions.map((option) => (
+                          <button
+                            key={option.id}
+                            type="button"
+                            className={`${shellStyles.templatePickerOption} ${
+                              selectedTemplateId === option.id ? shellStyles.templatePickerOptionActive : ""
+                            }`}
+                            onClick={() => {
+                              setSelectedTemplateId(option.id);
+                              setNewInvestigationTemplateQuery(option.name);
+                              setShowTemplateOptions(false);
+                            }}
+                          >
+                            <strong>{option.name}</strong>
+                            <span>Updated {formatMobileDate(option.updated_at)}</span>
+                          </button>
+                        ))
+                      ) : (
+                        <div className={shellStyles.templatePickerStatus}>
+                          {newInvestigationTemplateQuery.trim().length >= 4
+                            ? "No templates match that search."
+                            : "Open the list or type 4 characters to start filtering templates."}
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+                <span className={shellStyles.createInvestigationHint}>
+                  {canUseTemplates
+                    ? "Optional. Browse the list or type 4 characters to filter your saved templates, then select one to start from that layout."
+                    : "Template-based map creation is available to active subscription holders."}
                 </span>
               </label>
 
@@ -1374,9 +1741,7 @@ export default function DashboardWorkspace() {
                 className={`${shellStyles.button} ${shellStyles.buttonSecondary}`}
                 onClick={() => {
                   if (creating) return;
-                  setShowCreateInvestigationModal(false);
-                  setNewInvestigationTitle("");
-                  setNewInvestigationDescription("");
+                  resetCreateInvestigationState();
                 }}
                 disabled={creating}
               >
@@ -1397,8 +1762,8 @@ export default function DashboardWorkspace() {
 
       {renderViewportModal(pendingDuplicateRow ? (
         <div className={shellStyles.modalBackdrop}>
-          <div className={shellStyles.modalCard}>
-            <h3 className={shellStyles.modalTitle}>Duplicate map?</h3>
+          <div className={`${shellStyles.modalCard} ${shellStyles.dashboardModalCard}`}>
+            {renderBrandedModalHeader("Duplicate map?", "Investigation Tool")}
             <p className={shellStyles.modalText}>
               You are about to duplicate <strong>{pendingDuplicateRow.title}</strong>.
             </p>
@@ -1460,8 +1825,8 @@ export default function DashboardWorkspace() {
 
       {renderViewportModal(pendingDeleteRow ? (
         <div className={shellStyles.modalBackdrop}>
-          <div className={shellStyles.modalCard}>
-            <h3 className={shellStyles.modalTitle}>Delete map?</h3>
+          <div className={`${shellStyles.modalCard} ${shellStyles.dashboardModalCard}`}>
+            {renderBrandedModalHeader("Delete map?", "Investigation Tool")}
             <p className={shellStyles.modalText}>
               You are about to permanently delete <strong>{pendingDeleteRow.title}</strong>.
             </p>
@@ -1498,8 +1863,8 @@ export default function DashboardWorkspace() {
 
       {renderViewportModal(showBulkDeleteModal ? (
         <div className={shellStyles.modalBackdrop}>
-          <div className={shellStyles.modalCard}>
-            <h3 className={shellStyles.modalTitle}>Bulk delete selected maps?</h3>
+          <div className={`${shellStyles.modalCard} ${shellStyles.dashboardModalCard}`}>
+            {renderBrandedModalHeader("Bulk delete selected maps?", "Investigation Tool")}
             <p className={shellStyles.modalText}>
               You are about to permanently delete <strong>{selectedOwnedMaps.length}</strong> selected map
               {selectedOwnedMaps.length === 1 ? "" : "s"}.

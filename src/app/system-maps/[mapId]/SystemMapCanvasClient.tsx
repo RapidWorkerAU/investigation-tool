@@ -13,6 +13,13 @@ import {
   type Viewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { accessBlocksInvestigationEntry, accessRequiresSelection, fetchAccessState, type BillingAccessState } from "@/lib/access";
+import {
+  hasActiveTemplateAccess,
+  listInvestigationTemplates,
+  templateAccessDisabledReason,
+  type InvestigationTemplateSnapshot,
+} from "@/lib/investigationTemplates";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { ensurePortalSupabaseUser } from "@/lib/supabase/portalSession";
 import {
@@ -236,6 +243,7 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const relationshipPopupRef = useRef<HTMLDivElement | null>(null);
   const addMenuRef = useRef<HTMLDivElement | null>(null);
+  const templateMenuRef = useRef<HTMLDivElement | null>(null);
   const searchMenuRef = useRef<HTMLDivElement | null>(null);
   const printMenuRef = useRef<HTMLDivElement | null>(null);
   const printPreviewFrameRef = useRef<HTMLIFrameElement | null>(null);
@@ -255,6 +263,7 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
   const [userId, setUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string>("");
   const [mapRole, setMapRole] = useState<"read" | "partial_write" | "full_write" | null>(null);
+  const [accessState, setAccessState] = useState<BillingAccessState | null>(null);
   const [map, setMap] = useState<SystemMap | null>(null);
   const [mapCategoryId, setMapCategoryId] = useState<MapCategoryId>(defaultMapCategoryId);
   const [types, setTypes] = useState<DocumentTypeRow[]>([]);
@@ -295,6 +304,13 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [wizardSaving, setWizardSaving] = useState(false);
   const [isNodeDragActive, setIsNodeDragActive] = useState(false);
+  const [showTemplateMenu, setShowTemplateMenu] = useState(false);
+  const [templateQuery, setTemplateQuery] = useState("");
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [templateResults, setTemplateResults] = useState<Array<{ id: string; name: string; updatedAt: string }>>([]);
+  const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+  const [templateSaveMessage, setTemplateSaveMessage] = useState<string | null>(null);
   const [showSearchMenu, setShowSearchMenu] = useState(false);
   const [showPrintMenu, setShowPrintMenu] = useState(false);
   const [isPreparingPrint, setIsPreparingPrint] = useState(false);
@@ -343,12 +359,25 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
       y: snapToMinorGrid(flowPoint.y),
     };
   }, [rf, snapToMinorGrid]);
-  const canWriteMap = mapRole === "partial_write" || mapRole === "full_write";
-  const canManageMapMetadata = mapRole === "full_write" && !!map && !!userId && map.owner_id === userId;
-  const canUseContextMenu = mapRole !== "read";
-  const canCreateSticky = !!userId;
+  const accessAllowsEditing = accessState?.canEditMaps ?? true;
+  const canSaveTemplate = hasActiveTemplateAccess(accessState);
+  const canWriteMap = accessAllowsEditing && (mapRole === "partial_write" || mapRole === "full_write");
+  const canManageMapMetadata = accessAllowsEditing && mapRole === "full_write" && !!map && !!userId && map.owner_id === userId;
+  const canUseContextMenu = accessAllowsEditing && mapRole !== "read";
+  const canCreateSticky = accessAllowsEditing && !!userId;
   const allowedNodeKinds = useMemo(() => getAllowedNodeKindsForCategory(mapCategoryId), [mapCategoryId]);
   const canUseWizard = canWriteMap && allowedNodeKinds.some((kind) => kind.startsWith("incident_"));
+  const readOnlyActionReason = !accessAllowsEditing
+    ? accessState?.readOnlyReason || "This map is read only for your current access."
+    : undefined;
+  const canPrintMap = accessAllowsEditing;
+  const addDisabledReason = !accessAllowsEditing
+    ? accessState?.readOnlyReason || "This map is read only for your current access."
+    : "Adding components is unavailable for this map.";
+  const wizardDisabledReason = !accessAllowsEditing
+    ? accessState?.readOnlyReason || "The wizard is unavailable while this map is read only."
+    : "The wizard is unavailable for this map.";
+  const templateDisabledReason = canSaveTemplate ? undefined : templateAccessDisabledReason;
   useEffect(() => {
     if (!showWelcomeOnLoad) return;
     setShowWelcomeModal(true);
@@ -407,6 +436,158 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
     setShowPrintSelectionConfirm(false);
     setPrintSelectionCopyMessage(null);
   }, []);
+  const loadTemplateResults = useCallback(
+    async (query: string) => {
+      if (!canSaveTemplate) return;
+
+      try {
+        setIsLoadingTemplates(true);
+        const results = await listInvestigationTemplates(supabaseBrowser, query, 24);
+        setTemplateResults(
+          results.map((item) => ({
+            id: item.id,
+            name: item.name,
+            updatedAt: formatStickyDate(item.updated_at) || "Recently saved",
+          }))
+        );
+      } catch (templateError) {
+        setError(templateError instanceof Error ? templateError.message : "Unable to load templates.");
+      } finally {
+        setIsLoadingTemplates(false);
+      }
+    },
+    [canSaveTemplate, formatStickyDate]
+  );
+
+  const handleTemplateQueryChange = useCallback(
+    (value: string) => {
+      setTemplateQuery(value);
+      setSelectedTemplateId(null);
+      setTemplateSaveMessage(null);
+      if (!canSaveTemplate) return;
+      if (value.trim().length >= 4) {
+        setShowTemplateMenu(true);
+        void loadTemplateResults(value);
+      }
+    },
+    [canSaveTemplate, loadTemplateResults]
+  );
+
+  const handleSelectTemplateResult = useCallback((id: string, name: string) => {
+    setSelectedTemplateId(id);
+    setTemplateQuery(name);
+    setTemplateSaveMessage(null);
+  }, []);
+
+  const handleSaveTemplate = useCallback(async () => {
+    if (!canSaveTemplate) return;
+
+    const normalizedName = templateQuery.trim();
+    if (!normalizedName) {
+      setError("Enter a template name before saving.");
+      return;
+    }
+
+    try {
+      setIsSavingTemplate(true);
+      setTemplateSaveMessage(null);
+      setError(null);
+
+      const { data: outlineData, error: outlineError } = await supabaseBrowser
+        .schema("ms")
+        .from("document_outline_items")
+        .select("id,map_id,node_id,kind,heading_level,parent_heading_id,heading_id,title,content_text,sort_order")
+        .eq("map_id", mapId)
+        .order("sort_order", { ascending: true })
+        .order("created_at", { ascending: true });
+
+      if (outlineError) throw outlineError;
+
+      const snapshot: InvestigationTemplateSnapshot = {
+        types: types.map((item) => ({
+          id: item.id,
+          name: item.name,
+          level_rank: item.level_rank,
+          band_y_min: item.band_y_min,
+          band_y_max: item.band_y_max,
+          is_active: item.is_active,
+        })),
+        nodes: nodes.map((item) => ({
+          id: item.id,
+          type_id: item.type_id,
+          title: item.title,
+          document_number: item.document_number,
+          discipline: item.discipline,
+          owner_user_id: item.owner_user_id,
+          owner_name: item.owner_name,
+          user_group: item.user_group,
+          pos_x: item.pos_x,
+          pos_y: item.pos_y,
+          width: item.width,
+          height: item.height,
+          is_archived: item.is_archived,
+        })),
+        elements: elements.map((item) => ({
+          id: item.id,
+          element_type: item.element_type,
+          heading: item.heading,
+          color_hex: item.color_hex,
+          element_config: item.element_config,
+          pos_x: item.pos_x,
+          pos_y: item.pos_y,
+          width: item.width,
+          height: item.height,
+        })),
+        relations: relations.map((item) => ({
+          id: item.id,
+          from_node_id: item.from_node_id,
+          to_node_id: item.to_node_id,
+          source_grouping_element_id: item.source_grouping_element_id,
+          target_grouping_element_id: item.target_grouping_element_id,
+          source_system_element_id: item.source_system_element_id,
+          target_system_element_id: item.target_system_element_id,
+          relation_type: item.relation_type,
+          relationship_description: item.relationship_description,
+          relationship_disciplines: item.relationship_disciplines,
+          relationship_category: item.relationship_category,
+          relationship_custom_type: item.relationship_custom_type,
+        })),
+        outlineItems: (outlineData ?? []).map((item) => ({
+          id: item.id,
+          node_id: item.node_id,
+          kind: item.kind,
+          heading_level: item.heading_level,
+          parent_heading_id: item.parent_heading_id,
+          heading_id: item.heading_id,
+          title: item.title,
+          content_text: item.content_text,
+          sort_order: item.sort_order,
+        })),
+      };
+
+      const { data, error: saveError } = await supabaseBrowser.rpc("save_investigation_template", {
+        p_name: normalizedName,
+        p_snapshot: snapshot,
+        p_template_id: selectedTemplateId,
+      });
+
+      if (saveError) throw saveError;
+
+      const savedRow = Array.isArray(data) ? data[0] : data;
+      if (savedRow?.id) {
+        setSelectedTemplateId(savedRow.id as string);
+      }
+      if (savedRow?.name) {
+        setTemplateQuery(savedRow.name as string);
+      }
+      setTemplateSaveMessage(savedRow?.was_overwritten ? "Template updated." : "Template saved.");
+      await loadTemplateResults(normalizedName.length >= 4 ? normalizedName : "");
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Unable to save template.");
+    } finally {
+      setIsSavingTemplate(false);
+    }
+  }, [canSaveTemplate, templateQuery, mapId, types, nodes, elements, relations, selectedTemplateId, loadTemplateResults]);
   const openPrintPreviewFromDataUrl = useCallback(
     (imageDataUrl: string) => {
       setPrintPreviewImageDataUrl(imageDataUrl);
@@ -2078,6 +2259,29 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
         }
         setUserId(user.id);
 
+        const {
+          data: { session },
+        } = await supabaseBrowser.auth.getSession();
+
+        if (!session?.access_token) {
+          window.location.assign(`/login?returnTo=${encodeURIComponent(`/system-maps/${mapId}`)}`);
+          return;
+        }
+
+        const nextAccessState = await fetchAccessState(session.access_token);
+        if (cancelled) return;
+        setAccessState(nextAccessState);
+
+        if (accessRequiresSelection(nextAccessState)) {
+          window.location.assign("/subscribe");
+          return;
+        }
+
+        if (accessBlocksInvestigationEntry(nextAccessState)) {
+          window.location.assign("/dashboard?mapAccess=blocked");
+          return;
+        }
+
         const [memberRes, mapRes, typeRes, nodeRes, elementRes, relRes, viewRes] = await Promise.all([
           supabaseBrowser.schema("ms").from("map_members").select("role").eq("map_id", mapId).eq("user_id", user.id).maybeSingle(),
           supabaseBrowser.schema("ms").from("system_maps").select("id,title,description,owner_id,updated_by_user_id,map_code,map_category,updated_at,created_at").eq("id", mapId).maybeSingle(),
@@ -2630,10 +2834,26 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
   }, [map]);
 
   useEffect(() => {
+    if (!canSaveTemplate) {
+      setShowTemplateMenu(false);
+      setTemplateResults([]);
+      setSelectedTemplateId(null);
+      setTemplateSaveMessage(null);
+    }
+  }, [canSaveTemplate]);
+
+  useEffect(() => {
+    if (!showTemplateMenu || !canSaveTemplate) return;
+    void loadTemplateResults(templateQuery.trim().length >= 4 ? templateQuery : "");
+  }, [showTemplateMenu, canSaveTemplate, templateQuery, loadTemplateResults]);
+
+  useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as globalThis.Node | null;
       if (addMenuRef.current && target && addMenuRef.current.contains(target)) return;
       setShowAddMenu(false);
+      if (templateMenuRef.current && target && templateMenuRef.current.contains(target)) return;
+      setShowTemplateMenu(false);
       if (searchMenuRef.current && target && searchMenuRef.current.contains(target)) return;
       setShowSearchMenu(false);
       if (printMenuRef.current && target && printMenuRef.current.contains(target)) return;
@@ -4258,6 +4478,7 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
       onDelete: handleDeleteRelation,
       onSave: (id: string) => void handleUpdateRelation(id),
       onCancelEdit: cancelEditRelation,
+      actionDisabledReason: readOnlyActionReason,
     }),
     [
       cancelEditRelation,
@@ -4271,6 +4492,7 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
       handleDeleteRelation,
       handleUpdateRelation,
       relationshipCategoryOptions,
+      readOnlyActionReason,
       setEditingRelationCategory,
       setEditingRelationCustomType,
       setEditingRelationDescription,
@@ -4294,6 +4516,7 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
       <MapCanvasHeader
         map={map}
         mapRole={mapRole}
+        accessState={accessState}
         canManageMapMetadata={canManageMapMetadata}
         isEditingMapTitle={isEditingMapTitle}
         mapTitleDraft={mapTitleDraft}
@@ -4317,6 +4540,19 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
         setShowAddMenu={setShowAddMenu}
         showAddMenu={showAddMenu}
         addMenuRef={addMenuRef}
+        canSaveTemplate={canSaveTemplate}
+        templateDisabledReason={templateDisabledReason}
+        showTemplateMenu={showTemplateMenu}
+        setShowTemplateMenu={setShowTemplateMenu}
+        templateMenuRef={templateMenuRef}
+        templateQuery={templateQuery}
+        setTemplateQuery={handleTemplateQueryChange}
+        templateResults={templateResults}
+        isLoadingTemplates={isLoadingTemplates}
+        isSavingTemplate={isSavingTemplate}
+        templateSaveMessage={templateSaveMessage}
+        onSelectTemplate={handleSelectTemplateResult}
+        onSaveTemplate={() => void handleSaveTemplate()}
         showSearchMenu={showSearchMenu}
         setShowSearchMenu={setShowSearchMenu}
         searchMenuRef={searchMenuRef}
@@ -4326,6 +4562,10 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
         onSelectSearchResult={handleSelectSearchResult}
         canWriteMap={canWriteMap}
         canUseWizard={canUseWizard}
+        addDisabledReason={addDisabledReason}
+        wizardDisabledReason={wizardDisabledReason}
+        canPrint={canPrintMap}
+        printDisabledReason={readOnlyActionReason}
         onOpenWizard={() => {
           if (!canUseWizard) return;
           setShowWizardModal(true);
@@ -4769,6 +5009,7 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
             },
             onSave: handleSaveProcessHeading,
             onClose: () => setSelectedProcessId(null),
+            actionDisabledReason: readOnlyActionReason,
           }}
           systemProps={{
             open: !!selectedSystem,
@@ -4789,6 +5030,7 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
             relatedRows: relatedSystemRows,
             resolveLabels: resolveDocumentRelationLabels,
             relationshipSectionProps: sharedRelationshipSectionProps,
+            actionDisabledReason: readOnlyActionReason,
           }}
           processProps={{
             open: !!selectedProcessComponent,
@@ -4809,6 +5051,7 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
             relatedRows: relatedProcessComponentRows,
             resolveLabels: resolveDocumentRelationLabels,
             relationshipSectionProps: sharedRelationshipSectionProps,
+            actionDisabledReason: readOnlyActionReason,
           }}
           personProps={{
             open: !!selectedPerson,
@@ -4849,6 +5092,7 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
             relatedRows: relatedPersonRows,
             resolveLabels: resolvePersonRelationLabels,
             relationshipSectionProps: sharedRelationshipSectionProps,
+            actionDisabledReason: readOnlyActionReason,
           }}
           bowtieProps={{
             open: !!selectedBowtieElement,
@@ -4911,6 +5155,7 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
             relatedRows: relatedBowtieRows,
             resolveLabels: resolvePersonRelationLabels,
             relationshipSectionProps: sharedRelationshipSectionProps,
+            actionDisabledReason: readOnlyActionReason,
           }}
           groupingProps={{
             open: !!selectedGrouping,
@@ -4935,6 +5180,7 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
             relatedRows: relatedGroupingRows,
             resolveLabels: resolveGroupingRelationLabels,
             relationshipSectionProps: sharedRelationshipSectionProps,
+            actionDisabledReason: readOnlyActionReason,
           }}
           stickyProps={{
             open: !!selectedSticky,
@@ -4948,6 +5194,7 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
             },
             onSave: handleSaveStickyNote,
             onClose: () => setSelectedStickyId(null),
+            actionDisabledReason: readOnlyActionReason,
           }}
           imageProps={{
             open: !!selectedImage,
@@ -4974,6 +5221,7 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
             relatedRows: relatedImageRows,
             resolveLabels: resolvePersonRelationLabels,
             relationshipSectionProps: sharedRelationshipSectionProps,
+            actionDisabledReason: readOnlyActionReason,
           }}
           textBoxProps={{
             open: !!selectedTextBox,
@@ -4998,6 +5246,7 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
             },
             onSave: handleSaveTextBox,
             onClose: () => setSelectedTextBoxId(null),
+            actionDisabledReason: readOnlyActionReason,
           }}
           tableProps={{
             open: !!selectedTable,
@@ -5028,6 +5277,7 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
             },
             onSave: handleSaveTable,
             onClose: () => setSelectedTableId(null),
+            actionDisabledReason: readOnlyActionReason,
           }}
           flowShapeProps={{
             open: !!selectedFlowShape,
@@ -5077,6 +5327,7 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
             },
             onSave: handleSaveFlowShape,
             onClose: () => setSelectedFlowShapeId(null),
+            actionDisabledReason: readOnlyActionReason,
           }}
           documentProps={{
             open: !!selectedNode && !isMobile,
@@ -5129,6 +5380,7 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
             relatedRows,
             resolveLabels: resolveDocumentRelationLabels,
             relationshipSectionProps: sharedRelationshipSectionProps,
+            actionDisabledReason: readOnlyActionReason,
           }}
         />
         <CanvasDrilldownOverlays

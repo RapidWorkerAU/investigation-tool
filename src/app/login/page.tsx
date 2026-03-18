@@ -204,14 +204,16 @@ function LoginPageContent() {
             <span className={styles.brandText}>Investigation Tool</span>
           </div>
 
-          <div className={styles.copyBlock}>
-            <h1>{mode === "login" ? "Welcome back." : "Create your workspace."}</h1>
-            <p>
-              {mode === "login"
-                ? "Sign in to continue your incident investigation workflow, maps, evidence review, and team collaboration."
-                : "Start using investigation software built for incident workflow, evidence management, collaborative analysis, and reporting."}
-            </p>
-          </div>
+          {!(mode === "signup" && signupComplete) ? (
+            <div className={styles.copyBlock}>
+              <h1>{mode === "login" ? "Welcome back." : "Create your workspace."}</h1>
+              <p>
+                {mode === "login"
+                  ? "Sign in to continue your incident investigation workflow, maps, evidence review, and team collaboration."
+                  : "Start using investigation software built for incident workflow, evidence management, collaborative analysis, and reporting."}
+              </p>
+            </div>
+          ) : null}
 
           {!(mode === "signup" && signupComplete) ? (
             <div className={styles.modeSwitch} role="tablist" aria-label="Authentication mode">

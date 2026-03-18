@@ -264,32 +264,16 @@ export default function HomePage() {
           <div className="landing-hero">
             <div className="landing-hero-pattern" aria-hidden="true" />
             <div className="landing-hero-inner">
-              <div className="landing-note landing-note--left" aria-hidden="true">
-                <strong>Investigation map</strong>
-                <p>Capture evidence, sequence, factors, and recommendations in one visual workflow.</p>
+              <div className="landing-note landing-note--left landing-float-image" aria-hidden="true">
+                <img src="/images/sticky1.png?v=20260318a" alt="" className="landing-float-image__asset" />
               </div>
 
-              <div className="landing-panel landing-panel--left" aria-hidden="true">
-                <div className="landing-panel-badge">Workflow</div>
-                <div className="landing-panel-lines">
-                  <span />
-                  <span />
-                  <span />
-                </div>
+              <div className="landing-panel landing-panel--left landing-float-image" aria-hidden="true">
+                <img src="/images/investigationnotes.png?v=20260318a" alt="" className="landing-float-image__asset" />
               </div>
 
-              <div className="landing-reminder" aria-hidden="true">
-                <strong>Collaboration</strong>
-                <p>Assign owners, track actions, and keep the investigation moving.</p>
-              </div>
-
-              <div className="landing-panel landing-panel--right" aria-hidden="true">
-                <div className="landing-panel-badge">Investigation software</div>
-                <div className="landing-tool-chips">
-                  <span>Mind map</span>
-                  <span>Brainstorm</span>
-                  <span>Data management</span>
-                </div>
+              <div className="landing-reminder landing-float-image" aria-hidden="true">
+                <img src="/images/sticky2.png?v=20260318a" alt="" className="landing-float-image__asset" />
               </div>
 
               <div className="landing-hero-content">
@@ -390,56 +374,58 @@ export default function HomePage() {
             </div>
 
             <div className="landing-solutions-showcase">
-              <div className="landing-showcase-badge landing-showcase-badge--left" aria-hidden="true">
-                Placeholder image
+              <div className="landing-showcase-badge landing-showcase-badge--left-primary" aria-hidden="true">
+                <Image
+                  src="/images/tasknode.png"
+                  alt=""
+                  fill
+                  sizes="(max-width: 1280px) 120px, 168px"
+                  className="landing-showcase-badge-image"
+                />
+              </div>
+
+              <div className="landing-showcase-badge landing-showcase-badge--left-secondary" aria-hidden="true">
+                <Image
+                  src="/images/personnode.png"
+                  alt=""
+                  fill
+                  sizes="(max-width: 1280px) 120px, 168px"
+                  className="landing-showcase-badge-image"
+                />
               </div>
 
               <div className="landing-showcase-board">
-                <div className="landing-showcase-screen">
-                  <div className="landing-showcase-sidebar">
-                    <span />
-                    <span />
-                    <span />
-                    <span />
-                  </div>
-
-                  <div className="landing-showcase-main">
-                    <div className="landing-showcase-header">
-                      <div className="landing-showcase-heading">
-                        <strong>Example workflow visual</strong>
-                        <span>Replace with product image or annotated screenshot</span>
-                      </div>
-                      <div className="landing-showcase-chips">
-                        <span>Incident map</span>
-                        <span>Evidence</span>
-                        <span>Actions</span>
-                      </div>
-                    </div>
-
-                    <div className="landing-showcase-grid">
-                      <div className="landing-showcase-card">
-                        <strong>Sequence</strong>
-                        <span>Placeholder panel</span>
-                      </div>
-                      <div className="landing-showcase-card">
-                        <strong>Factors</strong>
-                        <span>Placeholder panel</span>
-                      </div>
-                      <div className="landing-showcase-card landing-showcase-card--tall">
-                        <strong>Evidence register</strong>
-                        <span>Placeholder panel</span>
-                      </div>
-                      <div className="landing-showcase-card landing-showcase-card--wide">
-                        <strong>Recommendation workflow</strong>
-                        <span>Placeholder image / UI capture</span>
-                      </div>
-                    </div>
-                  </div>
+                <div className="landing-showcase-screen landing-showcase-screen--media">
+                  <Image
+                    src="/images/canvasexample.png"
+                    alt="Example workflow visual"
+                    fill
+                    sizes="(max-width: 1080px) 100vw, 1460px"
+                    quality={100}
+                    unoptimized
+                    className="landing-showcase-screen-image"
+                  />
                 </div>
               </div>
 
-              <div className="landing-showcase-badge landing-showcase-badge--right" aria-hidden="true">
-                Placeholder image
+              <div className="landing-showcase-badge landing-showcase-badge--right-primary" aria-hidden="true">
+                <Image
+                  src="/images/evidencenode.png"
+                  alt=""
+                  fill
+                  sizes="(max-width: 1280px) 120px, 168px"
+                  className="landing-showcase-badge-image"
+                />
+              </div>
+
+              <div className="landing-showcase-badge landing-showcase-badge--right-secondary" aria-hidden="true">
+                <Image
+                  src="/images/factornode.png"
+                  alt=""
+                  fill
+                  sizes="(max-width: 1280px) 120px, 168px"
+                  className="landing-showcase-badge-image"
+                />
               </div>
             </div>
           </div>
@@ -449,44 +435,101 @@ export default function HomePage() {
           <div className="landing-section-card landing-features-card">
             <div className="landing-section-intro">
               <span className="landing-section-pill">Features</span>
-              <h2 id="landing-features-title">Keep investigation software, data management, and collaboration in one place</h2>
+              <h2 id="landing-features-title">Run the investigation, the reporting, and the team handoff from one system</h2>
               <p>
-                Built for incident investigation teams that need flexible investigation maps, structured brainstorming, evidence handling,
-                and action management without juggling multiple disconnected tools.
+                Built for teams that need to coordinate live investigations, capture defensible detail, and communicate progress without
+                rebuilding the story across separate tools.
               </p>
             </div>
 
             <div className="landing-feature-grid">
               <article className="landing-feature-card">
-                <div className="landing-feature-media">Placeholder image: collaboration workspace</div>
-                <h3>Seamless collaboration</h3>
-                <p>Share investigation updates, assign owners, and keep the whole workflow visible in real time.</p>
+                <div className="landing-feature-media landing-feature-media--image">
+                  <Image
+                    src="/images/dashboardexample.png"
+                    alt="Dashboard showing investigations and access controls"
+                    fill
+                    sizes="(max-width: 1080px) 100vw, 700px"
+                    quality={100}
+                    unoptimized
+                    className="landing-feature-media-image"
+                  />
+                </div>
+                <div className="landing-feature-copy">
+                  <h3>Keep every investigation visible and under control</h3>
+                  <p>
+                    See active investigations in one workspace, share maps across account holders, and manage read or edit access without
+                    losing oversight of who is contributing.
+                  </p>
+                </div>
               </article>
 
               <article className="landing-feature-card">
-                <div className="landing-feature-media">Placeholder image: schedule / planning tools</div>
-                <h3>Workflow and time visibility</h3>
-                <p>Coordinate investigation tasks, review cadence, and response deadlines without losing momentum.</p>
+                <div className="landing-feature-media landing-feature-media--image">
+                  <Image
+                    src="/images/buildwizard.png"
+                    alt="Guided wizard for building an investigation map"
+                    fill
+                    sizes="(max-width: 1080px) 100vw, 700px"
+                    quality={100}
+                    unoptimized
+                    className="landing-feature-media-image"
+                  />
+                </div>
+                <div className="landing-feature-copy">
+                  <h3>Guide new users from blank page to useful map fast</h3>
+                  <p>
+                    Use the built-in wizard to step through the incident in a logical sequence, helping beginners build confidence and
+                    giving experienced teams a faster way to get the first version of the map in front of the room.
+                  </p>
+                </div>
               </article>
 
-              <article className="landing-feature-card landing-feature-card--wide">
-                <div className="landing-feature-media">Placeholder image: map + task board composite</div>
-                <h3>Advanced investigation tracking</h3>
-                <p>
-                  Move from early curiosity and brainstorming into a defensible incident investigation workflow with linked evidence,
-                  factor analysis, and recommendation tracking.
-                </p>
+              <article className="landing-feature-card">
+                <div className="landing-feature-media landing-feature-media--image">
+                  <Image
+                    src="/images/investigationreport.png"
+                    alt="Structured investigation report generated from the map"
+                    fill
+                    sizes="(max-width: 1080px) 100vw, 900px"
+                    quality={100}
+                    unoptimized
+                    className="landing-feature-media-image"
+                  />
+                </div>
+                <div className="landing-feature-copy">
+                  <h3>Turn visual investigation work into a report people can act on</h3>
+                  <p>
+                    Convert map content into an organised report grouped by key investigation topics, making it easier to brief leaders,
+                    align stakeholders, and communicate findings without manually rebuilding the narrative.
+                  </p>
+                </div>
               </article>
 
-              <article className="landing-feature-card landing-feature-card--narrow">
-                <div className="landing-feature-media landing-feature-media--dashed">Placeholder image: customizable widgets</div>
-                <h3>Customisable workspaces</h3>
-                <p>Shape your incident investigation software around your method, templates, and reporting needs.</p>
+              <article className="landing-feature-card">
+                <div className="landing-feature-media landing-feature-media--image">
+                  <Image
+                    src="/images/printreport.png"
+                    alt="Printable PDF report export for an investigation map"
+                    fill
+                    sizes="(max-width: 1080px) 100vw, 520px"
+                    quality={100}
+                    unoptimized
+                    className="landing-feature-media-image"
+                  />
+                </div>
+                <div className="landing-feature-copy">
+                  <h3>Share the current picture quickly in PDF form</h3>
+                  <p>
+                    Print the full investigation map or selected sections to PDF so teams can circulate the latest known position quickly
+                    for reviews, briefings, and time-critical stakeholder updates.
+                  </p>
+                </div>
               </article>
             </div>
 
             <p className="landing-feature-footnote">
-              Plus investigation reporting, evidence review, recommendation follow-up, and more.
+              Designed to help teams move from capture, to analysis, to communication without losing momentum.
             </p>
           </div>
         </section>
@@ -495,32 +538,36 @@ export default function HomePage() {
           <div className="landing-section-card landing-pricing-card">
             <div className="landing-section-intro">
               <span className="landing-section-pill">Pricing</span>
-              <h2 id="landing-pricing-title">Simple pricing for investigation teams that need clarity fast</h2>
+              <h2 id="landing-pricing-title">Choose the access model that fits the pace and scale of your investigations</h2>
               <p>
-                Choose the investigation software plan that fits your workflow, from solo incident reviews to multi-user collaboration,
-                evidence management, investigation mapping, and recommendation tracking.
+                Start with a focused single-incident access window, move to ongoing monthly coverage when investigation work is continuous,
+                or speak with us about a tailored enterprise setup.
               </p>
             </div>
 
             <div className="landing-pricing-grid">
               <article className="landing-price-card">
                 <header className="landing-price-head">
-                  <h3>Starter</h3>
-                  <p>Best for single investigators and small internal reviews.</p>
+                  <h3>7 Day Trial</h3>
+                  <p>Best for testing the workflow on one live map before choosing a paid access option.</p>
                 </header>
                 <div className="landing-price-value">
-                  <strong>$29</strong>
-                  <span>/month</span>
+                  <strong>Free</strong>
+                  <span>7 day access</span>
                 </div>
-                <Link href="/subscribe" className="landing-primary-button landing-price-button">
-                  Start free trial
-                </Link>
+                <p className="landing-price-note">Best for first-time evaluation</p>
+                <div className="landing-price-actions">
+                  <Link href="/subscribe" className="landing-primary-button landing-price-button">
+                    Start 7 day trial
+                  </Link>
+                </div>
+                <p className="landing-price-trial-hint">Trial access stays separate from paid access.</p>
                 <ul className="landing-price-list">
-                  <li>Incident investigation maps</li>
-                  <li>Evidence and sequence capture</li>
-                  <li>Mind map and brainstorm workflow</li>
-                  <li>Single workspace</li>
-                  <li>Email support</li>
+                  <li>One writable investigation map</li>
+                  <li>Full editing during trial period</li>
+                  <li>No export during trial access</li>
+                  <li>Use the full mapping workflow</li>
+                  <li>Move to paid access when ready</li>
                 </ul>
               </article>
 
@@ -529,47 +576,61 @@ export default function HomePage() {
                   *
                 </div>
                 <header className="landing-price-head">
-                  <h3>Team</h3>
-                  <p>Best for investigation teams coordinating workflow, data, and actions together.</p>
+                  <h3>30 Day Access</h3>
+                  <p>Best for one live investigation that needs full working access for a defined incident window.</p>
                 </header>
                 <div className="landing-price-value">
-                  <strong>$79</strong>
-                  <span>/month</span>
+                  <strong>$49</strong>
+                  <span>AUD once-off</span>
                 </div>
-                <p className="landing-price-note">Most popular</p>
-                <Link href="/subscribe" className="landing-secondary-button landing-price-button landing-price-button--featured">
-                  Start free trial
-                </Link>
+                <p className="landing-price-note">Best for one focused incident</p>
+                <div className="landing-price-actions">
+                  <Link href="/subscribe" className="landing-secondary-button landing-price-button landing-price-button--featured">
+                    Buy 30 day access
+                  </Link>
+                  <Link href="/subscribe" className="landing-price-link">
+                    Or start with the 7 day trial
+                  </Link>
+                </div>
                 <ul className="landing-price-list">
-                  <li>Everything in Starter</li>
-                  <li>Multi-user collaboration</li>
-                  <li>Recommendation and action tracking</li>
-                  <li>Structured report tabs</li>
-                  <li>Priority support</li>
+                  <li>One investigation map allocation</li>
+                  <li>Full editing for 30 days</li>
+                  <li>Share, duplicate, and export</li>
+                  <li>PDF reporting and map printing</li>
+                  <li>Built for one live investigation</li>
                 </ul>
               </article>
 
               <article className="landing-price-card">
                 <header className="landing-price-head">
-                  <h3>Enterprise</h3>
-                  <p>For large operations, governance requirements, and organisation-wide adoption.</p>
+                  <h3>Monthly Access</h3>
+                  <p>Best for teams that need ongoing access without map limits slowing work down.</p>
                 </header>
                 <div className="landing-price-value">
-                  <strong>Custom</strong>
-                  <span>pricing</span>
+                  <strong>$99</strong>
+                  <span>AUD / month</span>
                 </div>
-                <Link href="/subscribe" className="landing-primary-button landing-price-button">
-                  Book a demo
-                </Link>
+                <p className="landing-price-note">Best for ongoing investigation work</p>
+                <div className="landing-price-actions">
+                  <Link href="/subscribe" className="landing-primary-button landing-price-button">
+                    Start monthly access
+                  </Link>
+                  <a href="mailto:support@investigationtool.com.au" className="landing-price-link">
+                    Need enterprise? Contact us
+                  </a>
+                </div>
                 <ul className="landing-price-list">
-                  <li>Advanced workspace rollout</li>
-                  <li>Implementation support</li>
-                  <li>Custom templates and onboarding</li>
-                  <li>Enterprise collaboration workflows</li>
-                  <li>Dedicated success support</li>
+                  <li>Unlimited investigation maps</li>
+                  <li>Full export, sharing, duplication</li>
+                  <li>Ongoing access while active</li>
+                  <li>Made for active investigation teams</li>
+                  <li>Enterprise options available</li>
                 </ul>
               </article>
             </div>
+            <p className="landing-price-trial-hint">
+              Enterprise options can include custom branding, multi-account setups, and tailored configuration support.
+            </p>
           </div>
         </section>
 
@@ -607,12 +668,6 @@ export default function HomePage() {
                   <Link href="#pricing">Pricing</Link>
                 </div>
                 <div>
-                  <strong>Use cases</strong>
-                  <a href="#hero">Incident investigation tool</a>
-                  <a href="#features">Investigation map</a>
-                  <a href="#workflow">Collaboration</a>
-                </div>
-                <div>
                   <strong>Company</strong>
                   <Link href="/login">Sign in</Link>
                   <Link href="/terms">Terms</Link>
@@ -622,12 +677,53 @@ export default function HomePage() {
             </div>
 
             <div className="landing-footer-icons" aria-hidden="true">
-              <span>Placeholder icon</span>
-              <span>Placeholder icon</span>
-              <span>Placeholder icon</span>
-              <span>Placeholder icon</span>
-              <span>Placeholder icon</span>
-              <span>Placeholder icon</span>
+              <span className="landing-footer-icon-tile landing-footer-icon-tile--amber">
+                <span className="landing-footer-node landing-footer-node--sticky" />
+              </span>
+              <span className="landing-footer-icon-tile landing-footer-icon-tile--sky">
+                <span className="landing-footer-node landing-footer-node--text-box">
+                  <img src="/icons/texticon.svg" alt="" className="landing-footer-node-text-icon" />
+                </span>
+              </span>
+              <span className="landing-footer-icon-tile landing-footer-icon-tile--mint">
+                <span className="landing-footer-node landing-footer-node--mini-doc landing-footer-node--factor">
+                  <span className="landing-footer-mini-doc__header" />
+                  <span className="landing-footer-mini-doc__body">
+                    <span className="landing-footer-mini-doc__line landing-footer-mini-doc__line--strong" />
+                    <span className="landing-footer-mini-doc__line" />
+                  </span>
+                </span>
+              </span>
+              <span className="landing-footer-icon-tile landing-footer-icon-tile--rose">
+                <span className="landing-footer-node landing-footer-node--person">
+                  <img src="/icons/account.svg" alt="" className="landing-footer-node-avatar" />
+                </span>
+              </span>
+              <span className="landing-footer-icon-tile landing-footer-icon-tile--violet">
+                <span className="landing-footer-node landing-footer-node--table">
+                  <span className="landing-footer-table__head" />
+                  <span className="landing-footer-table__grid">
+                    <span />
+                    <span />
+                    <span />
+                    <span />
+                    <span />
+                    <span />
+                    <span />
+                    <span />
+                    <span />
+                  </span>
+                </span>
+              </span>
+              <span className="landing-footer-icon-tile landing-footer-icon-tile--teal">
+                <span className="landing-footer-node landing-footer-node--mini-doc landing-footer-node--evidence">
+                  <span className="landing-footer-mini-doc__header" />
+                  <span className="landing-footer-mini-doc__body">
+                    <span className="landing-footer-mini-doc__line landing-footer-mini-doc__line--strong" />
+                    <span className="landing-footer-mini-doc__line" />
+                  </span>
+                </span>
+              </span>
             </div>
 
             <div className="landing-footer-bottom">

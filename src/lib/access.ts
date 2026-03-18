@@ -45,6 +45,16 @@ export function accessIsReadOnlyRestricted(state: BillingAccessState | null | un
   );
 }
 
+export function accessBlocksInvestigationEntry(state: BillingAccessState | null | undefined) {
+  if (!state) return false;
+  return state.currentAccessType === "trial_7d" && accessIsReadOnlyRestricted(state);
+}
+
+export function isExpiredTrialAccess(state: BillingAccessState | null | undefined) {
+  if (!state) return false;
+  return state.currentAccessType === "trial_7d" && state.currentAccessStatus === "expired";
+}
+
 export async function fetchAccessState(accessToken: string) {
   const response = await fetch("/api/access/state", {
     method: "GET",

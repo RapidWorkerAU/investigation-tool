@@ -8,7 +8,7 @@ type AccessPeriodReminderRow = {
   id: string;
   user_id: string;
   ends_at: string;
-  access_type: "pass_30d";
+  access_type: "trial_7d" | "pass_30d";
   access_status: string;
   reminder_3_business_days_sent_at: string | null;
   reminder_day_of_expiry_sent_at: string | null;
@@ -99,7 +99,7 @@ async function handleReminderRequest(request: NextRequest) {
     .select(
       "id,user_id,ends_at,access_type,access_status,reminder_3_business_days_sent_at,reminder_day_of_expiry_sent_at,expiry_notice_sent_at",
     )
-    .eq("access_type", "pass_30d")
+    .in("access_type", ["trial_7d", "pass_30d"])
     .in("access_status", ["active", "expired"])
     .not("ends_at", "is", null);
 
@@ -121,7 +121,7 @@ async function handleReminderRequest(request: NextRequest) {
       continue;
     }
 
-    if (daysRemaining === 3 && !row.reminder_3_business_days_sent_at) {
+    if (row.access_type === "pass_30d" && daysRemaining === 3 && !row.reminder_3_business_days_sent_at) {
       const email = emailTemplates.accessEndingSoon({
         firstName: recipient.firstName,
         endsAt: row.ends_at,
@@ -137,12 +137,24 @@ async function handleReminderRequest(request: NextRequest) {
     }
 
     if (daysRemaining === 0 && !row.reminder_day_of_expiry_sent_at) {
-      const email = emailTemplates.accessEndsToday({
-        firstName: recipient.firstName,
-        endsAt: row.ends_at,
-      });
+      const email =
+        row.access_type === "trial_7d"
+          ? emailTemplates.trialEndsToday({
+              firstName: recipient.firstName,
+              endsAt: row.ends_at,
+            })
+          : emailTemplates.accessEndsToday({
+              firstName: recipient.firstName,
+              endsAt: row.ends_at,
+            });
 
-      await sendTaggedEmail(recipient.email, email.subject, email.html, email.text, "access-ends-today");
+      await sendTaggedEmail(
+        recipient.email,
+        email.subject,
+        email.html,
+        email.text,
+        row.access_type === "trial_7d" ? "trial-ends-today" : "access-ends-today",
+      );
       await supabase
         .from("access_periods")
         .update({ reminder_day_of_expiry_sent_at: new Date().toISOString() })
@@ -152,11 +164,14 @@ async function handleReminderRequest(request: NextRequest) {
     }
 
     if (daysRemaining < 0 && !row.expiry_notice_sent_at) {
-      const email = emailTemplates.accessExpired({
-        firstName: recipient.firstName,
-      });
+      if (row.access_type === "pass_30d") {
+        const email = emailTemplates.accessExpired({
+          firstName: recipient.firstName,
+        });
 
-      await sendTaggedEmail(recipient.email, email.subject, email.html, email.text, "access-expired");
+        await sendTaggedEmail(recipient.email, email.subject, email.html, email.text, "access-expired");
+      }
+
       await supabase
         .from("access_periods")
         .update({

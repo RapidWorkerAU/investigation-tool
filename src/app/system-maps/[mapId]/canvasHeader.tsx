@@ -2,10 +2,12 @@
 
 import type { RefObject } from "react";
 import type { SystemMap } from "./canvasShared";
+import type { BillingAccessState } from "@/lib/access";
 
 type MapCanvasHeaderProps = {
   map: SystemMap;
   mapRole: "read" | "partial_write" | "full_write" | null;
+  accessState: BillingAccessState | null;
   canManageMapMetadata: boolean;
   isEditingMapTitle: boolean;
   mapTitleDraft: string;
@@ -24,6 +26,7 @@ type MapCanvasHeaderProps = {
 export function MapCanvasHeader({
   map,
   mapRole,
+  accessState,
   canManageMapMetadata,
   isEditingMapTitle,
   mapTitleDraft,
@@ -48,6 +51,32 @@ export function MapCanvasHeader({
     return "System Map";
   })();
 
+  const accessBadge = (() => {
+    if (accessState && !accessState.canEditMaps) {
+      if (accessState.currentAccessStatus === "payment_failed") {
+        return {
+          label: "Payment Failed",
+          backgroundColor: "#9a3412",
+          title: accessState.readOnlyReason || "Payment failed. This map is read only until billing is updated.",
+        };
+      }
+
+      if (accessState.currentAccessStatus === "expired" || accessState.currentAccessStatus === "cancelled") {
+        return {
+          label: "Read Only",
+          backgroundColor: "#991b1b",
+          title: accessState.readOnlyReason || "This map is read only for your current access.",
+        };
+      }
+    }
+
+    return {
+      label: mapRole === "full_write" ? "Full Write" : mapRole === "partial_write" ? "Partial Write" : "Read",
+      backgroundColor: mapRole === "full_write" ? "#166534" : mapRole === "partial_write" ? "#92400e" : "#1e3a8a",
+      title: undefined,
+    };
+  })();
+
   return (
     <header className="site-header fixed inset-x-0 top-0 z-[90] md:sticky" style={{ backgroundColor: "#000000", borderBottomColor: "#0f172a" }}>
       <div className="header-inner flex flex-col items-start gap-1.5 md:flex-row md:items-center md:justify-between" style={{ paddingLeft: "12px", paddingRight: "16px", backgroundColor: "#000000", paddingTop: "8px", paddingBottom: "8px", height: "auto", minHeight: "0" }}>
@@ -61,12 +90,13 @@ export function MapCanvasHeader({
           <div className="flex w-full items-center gap-2 overflow-hidden md:w-auto">
             <span
               className="shrink-0 rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em]"
+              title={accessBadge.title}
               style={{
-                backgroundColor: mapRole === "full_write" ? "#166534" : mapRole === "partial_write" ? "#92400e" : "#1e3a8a",
+                backgroundColor: accessBadge.backgroundColor,
                 color: "#ffffff",
               }}
             >
-              {mapRole === "full_write" ? "Full Write" : mapRole === "partial_write" ? "Partial Write" : "Read"}
+              {accessBadge.label}
             </span>
             {isEditingMapTitle ? (
               <input

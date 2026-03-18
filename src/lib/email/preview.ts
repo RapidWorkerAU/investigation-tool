@@ -30,39 +30,104 @@ function toCopyHtml(html: string) {
 
 const supabaseGreeting = "{{ if .Data.full_name }}Hi {{ .Data.full_name }},{{ else }}Hi,{{ end }}";
 
+const supabaseEmailHead = `
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta name="color-scheme" content="light">
+    <meta name="supported-color-schemes" content="light">
+    <style>
+      :root {
+        color-scheme: light;
+        supported-color-schemes: light;
+      }
+      body, table, td, div, p, a, h1 {
+        font-family: Arial, sans-serif !important;
+      }
+      .email-page {
+        background-color: #eef3fb !important;
+      }
+      .email-card {
+        background-color: #ffffff !important;
+      }
+      .email-hero {
+        background-color: #1747b9 !important;
+        background-image: linear-gradient(135deg, #1747b9 0%, #2f77df 42%, #5ba1ff 100%) !important;
+      }
+      .email-hero-text,
+      .email-hero-text div,
+      .email-hero-text h1 {
+        color: #ffffff !important;
+      }
+      .email-copy {
+        color: #425166 !important;
+      }
+      .email-highlight {
+        background-color: #f6f9ff !important;
+        border-color: #d8e4fb !important;
+      }
+      .email-highlight p {
+        color: #30435f !important;
+      }
+      .email-note {
+        color: #5a6472 !important;
+      }
+      .email-footer {
+        color: #6b7280 !important;
+        border-top-color: #e5e7eb !important;
+      }
+      .email-footer a,
+      .email-link {
+        color: #234ea8 !important;
+        text-decoration: underline !important;
+        font-weight: 600 !important;
+      }
+      .email-button-primary {
+        display: inline-block !important;
+        padding: 14px 24px !important;
+        background: #2e69d6 !important;
+        border: 1px solid #2e69d6 !important;
+        border-radius: 12px !important;
+        color: #ffffff !important;
+        text-decoration: none !important;
+        font-weight: 700 !important;
+      }
+    </style>
+  </head>`;
+
 const supabaseConfirmBody = `
 <!DOCTYPE html>
 <html lang="en">
-  <body style="margin:0;padding:0;background:#eef3fb;font-family:Arial,sans-serif;color:#1f2937;">
+  ${supabaseEmailHead}
+  <body class="email-page" style="margin:0;padding:0;background:#eef3fb;font-family:Arial,sans-serif;color:#1f2937;">
     <div style="display:none;max-height:0;overflow:hidden;opacity:0;">Confirm your account to finish setting up your Investigation Tool workspace.</div>
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef3fb;padding:24px 12px;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" bgcolor="#eef3fb" class="email-page" style="background:#eef3fb;padding:24px 12px;">
       <tr>
         <td align="center">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 20px 44px rgba(20,34,70,0.12);">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" bgcolor="#ffffff" class="email-card" style="max-width:640px;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 20px 44px rgba(20,34,70,0.12);">
             <tr>
-              <td style="padding:28px 28px 20px;background:linear-gradient(135deg,#1747b9 0%,#2f77df 42%,#5ba1ff 100%);color:#ffffff;">
+              <td bgcolor="#1747b9" class="email-hero email-hero-text" style="padding:28px 28px 20px;background:#1747b9;background-image:linear-gradient(135deg,#1747b9 0%,#2f77df 42%,#5ba1ff 100%);color:#ffffff;">
                 <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;opacity:0.84;font-weight:700;">Investigation Tool</div>
                 <h1 style="margin:10px 0 0;font-size:30px;line-height:1.1;font-weight:700;">Confirm your account</h1>
               </td>
             </tr>
             <tr>
-              <td style="padding:28px;">
-                <p style="margin:0 0 16px;font-size:16px;line-height:1.7;color:#425166;">${supabaseGreeting}</p>
-                <p style="margin:0 0 16px;font-size:16px;line-height:1.7;color:#425166;">Welcome to Investigation Tool. Please confirm your email address so you can start creating maps, managing evidence, and collaborating with your team.</p>
-                <div style="margin:20px 0;padding:18px 18px 4px;background:#f6f9ff;border:1px solid rgba(34,74,160,0.08);border-radius:16px;">
+              <td bgcolor="#ffffff" class="email-card" style="padding:28px;background:#ffffff;">
+                <p class="email-copy" style="margin:0 0 16px;font-size:16px;line-height:1.7;color:#425166;">${supabaseGreeting}</p>
+                <p class="email-copy" style="margin:0 0 16px;font-size:16px;line-height:1.7;color:#425166;">Welcome to Investigation Tool. Please confirm your email address so you can start creating maps, managing evidence, and collaborating with your team.</p>
+                <div class="email-highlight" style="margin:20px 0;padding:18px 18px 4px;background:#f6f9ff;border:1px solid #d8e4fb;border-radius:16px;">
                   <p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#30435f;">Confirming your email unlocks your workspace sign-in.</p>
                   <p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#30435f;">If you did not create this account, you can safely ignore this email.</p>
                 </div>
                 <div style="padding-top:8px;">
-                  <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:14px 24px;background:linear-gradient(180deg,#4a89f5 0%,#2e69d6 100%);color:#ffffff;text-decoration:none;font-weight:700;border-radius:12px;">Confirm account</a>
+                  <a href="{{ .ConfirmationURL }}" class="email-button-primary" style="display:inline-block;padding:14px 24px;background:#2e69d6;color:#ffffff;text-decoration:none;font-weight:700;border-radius:12px;border:1px solid #2e69d6;">Confirm account</a>
                 </div>
-                <p style="margin:22px 0 0;font-size:14px;line-height:1.6;color:#5a6472;">For security, use the latest confirmation email in your inbox if you requested more than one.</p>
+                <p class="email-note" style="margin:22px 0 0;font-size:14px;line-height:1.6;color:#5a6472;">For security, use the latest confirmation email in your inbox if you requested more than one.</p>
               </td>
             </tr>
             <tr>
-              <td style="padding:0 28px 28px;">
-                <div style="padding-top:18px;border-top:1px solid rgba(31,41,55,0.08);font-size:13px;line-height:1.7;color:#6b7280;">
-                  Need help? Reply to <a href="mailto:support@investigationtool.com.au" style="color:#234ea8;text-decoration:none;">support@investigationtool.com.au</a>.
+              <td bgcolor="#ffffff" class="email-card" style="padding:0 28px 28px;background:#ffffff;">
+                <div class="email-footer" style="padding-top:18px;border-top:1px solid #e5e7eb;font-size:13px;line-height:1.7;color:#6b7280;">
+                  Need help? Reply to <a class="email-link" href="mailto:support@investigationtool.com.au" style="color:#234ea8;text-decoration:underline;font-weight:600;">support@investigationtool.com.au</a>.
                 </div>
               </td>
             </tr>
@@ -76,36 +141,37 @@ const supabaseConfirmBody = `
 const supabaseResetBody = `
 <!DOCTYPE html>
 <html lang="en">
-  <body style="margin:0;padding:0;background:#eef3fb;font-family:Arial,sans-serif;color:#1f2937;">
+  ${supabaseEmailHead}
+  <body class="email-page" style="margin:0;padding:0;background:#eef3fb;font-family:Arial,sans-serif;color:#1f2937;">
     <div style="display:none;max-height:0;overflow:hidden;opacity:0;">Reset your Investigation Tool password.</div>
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef3fb;padding:24px 12px;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" bgcolor="#eef3fb" class="email-page" style="background:#eef3fb;padding:24px 12px;">
       <tr>
         <td align="center">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 20px 44px rgba(20,34,70,0.12);">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" bgcolor="#ffffff" class="email-card" style="max-width:640px;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 20px 44px rgba(20,34,70,0.12);">
             <tr>
-              <td style="padding:28px 28px 20px;background:linear-gradient(135deg,#1747b9 0%,#2f77df 42%,#5ba1ff 100%);color:#ffffff;">
+              <td bgcolor="#1747b9" class="email-hero email-hero-text" style="padding:28px 28px 20px;background:#1747b9;background-image:linear-gradient(135deg,#1747b9 0%,#2f77df 42%,#5ba1ff 100%);color:#ffffff;">
                 <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;opacity:0.84;font-weight:700;">Investigation Tool</div>
                 <h1 style="margin:10px 0 0;font-size:30px;line-height:1.1;font-weight:700;">Reset your password</h1>
               </td>
             </tr>
             <tr>
-              <td style="padding:28px;">
-                <p style="margin:0 0 16px;font-size:16px;line-height:1.7;color:#425166;">${supabaseGreeting}</p>
-                <p style="margin:0 0 16px;font-size:16px;line-height:1.7;color:#425166;">We received a request to reset the password for your Investigation Tool account.</p>
-                <div style="margin:20px 0;padding:18px 18px 4px;background:#f6f9ff;border:1px solid rgba(34,74,160,0.08);border-radius:16px;">
+              <td bgcolor="#ffffff" class="email-card" style="padding:28px;background:#ffffff;">
+                <p class="email-copy" style="margin:0 0 16px;font-size:16px;line-height:1.7;color:#425166;">${supabaseGreeting}</p>
+                <p class="email-copy" style="margin:0 0 16px;font-size:16px;line-height:1.7;color:#425166;">We received a request to reset the password for your Investigation Tool account.</p>
+                <div class="email-highlight" style="margin:20px 0;padding:18px 18px 4px;background:#f6f9ff;border:1px solid #d8e4fb;border-radius:16px;">
                   <p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#30435f;">Use the button below to choose a new password.</p>
                   <p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#30435f;">If you did not request this change, you can ignore this email and your password will remain the same.</p>
                 </div>
                 <div style="padding-top:8px;">
-                  <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:14px 24px;background:linear-gradient(180deg,#4a89f5 0%,#2e69d6 100%);color:#ffffff;text-decoration:none;font-weight:700;border-radius:12px;">Set a new password</a>
+                  <a href="{{ .ConfirmationURL }}" class="email-button-primary" style="display:inline-block;padding:14px 24px;background:#2e69d6;color:#ffffff;text-decoration:none;font-weight:700;border-radius:12px;border:1px solid #2e69d6;">Set a new password</a>
                 </div>
-                <p style="margin:22px 0 0;font-size:14px;line-height:1.6;color:#5a6472;">Password reset links can expire. If this link no longer works, request a new reset email from the login page.</p>
+                <p class="email-note" style="margin:22px 0 0;font-size:14px;line-height:1.6;color:#5a6472;">Password reset links can expire. If this link no longer works, request a new reset email from the login page.</p>
               </td>
             </tr>
             <tr>
-              <td style="padding:0 28px 28px;">
-                <div style="padding-top:18px;border-top:1px solid rgba(31,41,55,0.08);font-size:13px;line-height:1.7;color:#6b7280;">
-                  Need help? Reply to <a href="mailto:support@investigationtool.com.au" style="color:#234ea8;text-decoration:none;">support@investigationtool.com.au</a>.
+              <td bgcolor="#ffffff" class="email-card" style="padding:0 28px 28px;background:#ffffff;">
+                <div class="email-footer" style="padding-top:18px;border-top:1px solid #e5e7eb;font-size:13px;line-height:1.7;color:#6b7280;">
+                  Need help? Reply to <a class="email-link" href="mailto:support@investigationtool.com.au" style="color:#234ea8;text-decoration:underline;font-weight:600;">support@investigationtool.com.au</a>.
                 </div>
               </td>
             </tr>
@@ -119,35 +185,36 @@ const supabaseResetBody = `
 const supabaseEmailChangeBody = `
 <!DOCTYPE html>
 <html lang="en">
-  <body style="margin:0;padding:0;background:#eef3fb;font-family:Arial,sans-serif;color:#1f2937;">
+  ${supabaseEmailHead}
+  <body class="email-page" style="margin:0;padding:0;background:#eef3fb;font-family:Arial,sans-serif;color:#1f2937;">
     <div style="display:none;max-height:0;overflow:hidden;opacity:0;">Confirm your new email address for Investigation Tool.</div>
-    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef3fb;padding:24px 12px;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" bgcolor="#eef3fb" class="email-page" style="background:#eef3fb;padding:24px 12px;">
       <tr>
         <td align="center">
-          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 20px 44px rgba(20,34,70,0.12);">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" bgcolor="#ffffff" class="email-card" style="max-width:640px;background:#ffffff;border-radius:20px;overflow:hidden;box-shadow:0 20px 44px rgba(20,34,70,0.12);">
             <tr>
-              <td style="padding:28px 28px 20px;background:linear-gradient(135deg,#1747b9 0%,#2f77df 42%,#5ba1ff 100%);color:#ffffff;">
+              <td bgcolor="#1747b9" class="email-hero email-hero-text" style="padding:28px 28px 20px;background:#1747b9;background-image:linear-gradient(135deg,#1747b9 0%,#2f77df 42%,#5ba1ff 100%);color:#ffffff;">
                 <div style="font-size:12px;letter-spacing:0.18em;text-transform:uppercase;opacity:0.84;font-weight:700;">Investigation Tool</div>
                 <h1 style="margin:10px 0 0;font-size:30px;line-height:1.1;font-weight:700;">Confirm your new email address</h1>
               </td>
             </tr>
             <tr>
-              <td style="padding:28px;">
-                <p style="margin:0 0 16px;font-size:16px;line-height:1.7;color:#425166;">${supabaseGreeting}</p>
-                <p style="margin:0 0 16px;font-size:16px;line-height:1.7;color:#425166;">We received a request to change the email address on your Investigation Tool account.</p>
-                <div style="margin:20px 0;padding:18px 18px 4px;background:#f6f9ff;border:1px solid rgba(34,74,160,0.08);border-radius:16px;">
+              <td bgcolor="#ffffff" class="email-card" style="padding:28px;background:#ffffff;">
+                <p class="email-copy" style="margin:0 0 16px;font-size:16px;line-height:1.7;color:#425166;">${supabaseGreeting}</p>
+                <p class="email-copy" style="margin:0 0 16px;font-size:16px;line-height:1.7;color:#425166;">We received a request to change the email address on your Investigation Tool account.</p>
+                <div class="email-highlight" style="margin:20px 0;padding:18px 18px 4px;background:#f6f9ff;border:1px solid #d8e4fb;border-radius:16px;">
                   <p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#30435f;">Confirm the new email address to complete the change.</p>
                   <p style="margin:0 0 14px;font-size:15px;line-height:1.6;color:#30435f;">If you did not request this change, you can ignore this email.</p>
                 </div>
                 <div style="padding-top:8px;">
-                  <a href="{{ .ConfirmationURL }}" style="display:inline-block;padding:14px 24px;background:linear-gradient(180deg,#4a89f5 0%,#2e69d6 100%);color:#ffffff;text-decoration:none;font-weight:700;border-radius:12px;">Confirm email change</a>
+                  <a href="{{ .ConfirmationURL }}" class="email-button-primary" style="display:inline-block;padding:14px 24px;background:#2e69d6;color:#ffffff;text-decoration:none;font-weight:700;border-radius:12px;border:1px solid #2e69d6;">Confirm email change</a>
                 </div>
               </td>
             </tr>
             <tr>
-              <td style="padding:0 28px 28px;">
-                <div style="padding-top:18px;border-top:1px solid rgba(31,41,55,0.08);font-size:13px;line-height:1.7;color:#6b7280;">
-                  Need help? Reply to <a href="mailto:support@investigationtool.com.au" style="color:#234ea8;text-decoration:none;">support@investigationtool.com.au</a>.
+              <td bgcolor="#ffffff" class="email-card" style="padding:0 28px 28px;background:#ffffff;">
+                <div class="email-footer" style="padding-top:18px;border-top:1px solid #e5e7eb;font-size:13px;line-height:1.7;color:#6b7280;">
+                  Need help? Reply to <a class="email-link" href="mailto:support@investigationtool.com.au" style="color:#234ea8;text-decoration:underline;font-weight:600;">support@investigationtool.com.au</a>.
                 </div>
               </td>
             </tr>
@@ -164,6 +231,7 @@ export function buildEmailPreviews(): PreviewCard[] {
   const passwordChanged = emailTemplates.passwordChanged({ firstName: "Ashleigh", actionUrl: loginUrl });
   const welcome = emailTemplates.welcome({ firstName: "Ashleigh", actionUrl: dashboardUrl });
   const trialStarted = emailTemplates.trialStarted({ firstName: "Ashleigh", endsAt: "2026-03-24T09:00:00Z", actionUrl: dashboardUrl });
+  const trialEndsToday = emailTemplates.trialEndsToday({ firstName: "Ashleigh", endsAt: "2026-03-24T09:00:00Z", actionUrl: subscribeUrl });
   const pass30 = emailTemplates.pass30Started({
     firstName: "Ashleigh",
     endsAt: "2026-04-16T09:00:00Z",
@@ -185,7 +253,7 @@ export function buildEmailPreviews(): PreviewCard[] {
       title: "Confirm account",
       ...confirm,
       copyHtml: toCopyHtml(confirm.html),
-      supabaseSubject: "Confirm your account",
+      supabaseSubject: "Confirm Your Account",
       supabaseBody: supabaseConfirmBody,
     },
     {
@@ -193,14 +261,14 @@ export function buildEmailPreviews(): PreviewCard[] {
       title: "Forgot password",
       ...forgot,
       copyHtml: toCopyHtml(forgot.html),
-      supabaseSubject: "Reset your password",
+      supabaseSubject: "Reset Your Password",
       supabaseBody: supabaseResetBody,
     },
     {
       key: "change-email",
       title: "Change email address",
       ...confirm,
-      subject: "Confirm your new email address",
+      subject: "Confirm Your New Email Address",
       text: [
         "Confirm your new email address",
         "",
@@ -216,10 +284,8 @@ export function buildEmailPreviews(): PreviewCard[] {
         "",
         "Investigation Tool",
       ].join("\n"),
-      copyHtml: toCopyHtml(confirm.html)
-        .replace("Confirm your account", "Confirm your new email address")
-        .replace("Confirm account", "Confirm email change"),
-      supabaseSubject: "Confirm your new email address",
+      copyHtml: toCopyHtml(supabaseEmailChangeBody),
+      supabaseSubject: "Confirm Your New Email Address",
       supabaseBody: supabaseEmailChangeBody,
     },
     {
@@ -239,6 +305,12 @@ export function buildEmailPreviews(): PreviewCard[] {
       title: "Trial started",
       ...trialStarted,
       copyHtml: toCopyHtml(trialStarted.html),
+    },
+    {
+      key: "trial-ends-today",
+      title: "Trial ends today",
+      ...trialEndsToday,
+      copyHtml: toCopyHtml(trialEndsToday.html),
     },
     {
       key: "pass-30-started",

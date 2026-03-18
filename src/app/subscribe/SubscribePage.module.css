@@ -70,6 +70,35 @@
   line-height: 1.6;
 }
 
+.renewalNotice {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 14px 16px;
+  border: 1px solid rgba(94, 122, 225, 0.24);
+  background:
+    linear-gradient(135deg, rgba(232, 240, 255, 0.98) 0%, rgba(244, 247, 255, 0.98) 52%, rgba(233, 241, 255, 0.98) 100%);
+  box-shadow:
+    0 16px 30px rgba(60, 93, 176, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.62);
+  color: #425268;
+  line-height: 1.55;
+}
+
+.renewalNotice strong {
+  color: #18243b;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.renewalNoticeEyebrow {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #5167c3;
+}
+
 .checkoutState {
   display: grid;
   justify-items: center;

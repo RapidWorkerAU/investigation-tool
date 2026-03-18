@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import SystemMapCanvasClient from "./SystemMapCanvasClient";
 
 type MapPageProps = {
@@ -8,6 +8,10 @@ type MapPageProps = {
 
 export const metadata: Metadata = {
   title: "Management System Map",
+};
+
+export const viewport: Viewport = {
+  themeColor: "#000000",
 };
 
 export default async function SystemMapPage({ params, searchParams }: MapPageProps) {

@@ -14,6 +14,7 @@ function SubscribePageContent() {
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string>("");
+  const [accessState, setAccessState] = useState<Awaited<ReturnType<typeof fetchAccessState>> | null>(null);
   const [processingTrial, setProcessingTrial] = useState(false);
   const [processingPaid, setProcessingPaid] = useState<"pass_30d" | "subscription_monthly" | null>(null);
   const [routingToWorkspace, setRoutingToWorkspace] = useState(false);
@@ -34,8 +35,12 @@ function SubscribePageContent() {
 
       try {
         const state = await fetchAccessState(session.access_token);
+        setAccessState(state);
 
-        if (!accessRequiresSelection(state) && state.currentAccessStatus === "active") {
+        const keepSubscribeOpenForPassRenewal =
+          state.currentAccessType === "pass_30d" && state.currentAccessStatus === "active";
+
+        if (!keepSubscribeOpenForPassRenewal && !accessRequiresSelection(state) && state.currentAccessStatus === "active") {
           router.push("/dashboard");
           return;
         }
@@ -214,6 +219,18 @@ function SubscribePageContent() {
             </div>
           ) : notice ? (
             <div className={styles.notice}>{notice}</div>
+          ) : null}
+
+          {checkoutState === null &&
+          accessState?.currentAccessType === "pass_30d" &&
+          accessState.currentAccessStatus === "active" ? (
+            <div className={styles.renewalNotice}>
+              <span className={styles.renewalNoticeEyebrow}>30 Day Access Renewal</span>
+              <strong>Your current pass is still active.</strong>
+              <span>
+                Renewal becomes available after your first reminder email is sent. If you renew then, the next 30 day period is queued to start when your current pass ends so you receive the full additional 30 days.
+              </span>
+            </div>
           ) : null}
 
           {checkoutState ? null : <div className={styles.stack}>

@@ -79,6 +79,13 @@ function AsideShell({ isMobile, leftAsideSlideIn, title, onClose, children }: As
   );
 }
 
+const disabledAsideActionClass =
+  "disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-white disabled:hover:text-black";
+
+function wrapWithReason(reason: string | undefined, content: ReactNode) {
+  return reason ? <span title={reason}>{content}</span> : <>{content}</>;
+}
+
 type CategoryPropertiesAsideProps = {
   open: boolean;
   isMobile: boolean;
@@ -97,6 +104,7 @@ type CategoryPropertiesAsideProps = {
   onDelete: () => Promise<void>;
   onSave: () => Promise<void>;
   onClose: () => void;
+  actionDisabledReason?: string;
 };
 
 export function CategoryPropertiesAside({
@@ -117,6 +125,7 @@ export function CategoryPropertiesAside({
   onDelete,
   onSave,
   onClose,
+  actionDisabledReason,
 }: CategoryPropertiesAsideProps) {
   if (!open) return null;
   const safeColor = /^#[0-9a-fA-F]{6}$/.test(processColorDraft ?? "") ? String(processColorDraft).toUpperCase() : "#249BC7";
@@ -201,14 +210,24 @@ export function CategoryPropertiesAside({
           </div>
         </div>
       </div>
-      <div className="mt-4 flex items-center justify-between">
+      <div className="mt-4 flex items-stretch gap-2">
         <button
-          className="w-full rounded-none border border-black bg-white px-3 py-2 text-sm text-rose-700 hover:bg-slate-100"
+          className={`flex-1 rounded-none border border-black bg-white px-3 py-2 text-sm text-rose-700 hover:bg-slate-100 ${disabledAsideActionClass}`}
           onClick={() => void onDelete()}
+          disabled={!!actionDisabledReason}
         >
           Delete category
         </button>
-        <button className="ml-2 w-full rounded-none border border-black bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-slate-100" onClick={() => void onSave()}>Save category</button>
+        {wrapWithReason(
+          actionDisabledReason,
+          <button
+            className={`flex-1 rounded-none border border-black bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-slate-100 ${disabledAsideActionClass}`}
+            onClick={() => void onSave()}
+            disabled={!!actionDisabledReason}
+          >
+            Save category
+          </button>
+        )}
       </div>
     </AsideShell>
   );
@@ -230,6 +249,7 @@ type SimpleLabelAsideProps = {
   saveButtonLabel: string;
   topAction?: ReactNode;
   footerExtra?: ReactNode;
+  actionDisabledReason?: string;
 };
 
 function SimpleLabelAside({
@@ -248,6 +268,7 @@ function SimpleLabelAside({
   saveButtonLabel,
   topAction,
   footerExtra,
+  actionDisabledReason,
 }: SimpleLabelAsideProps) {
   if (!open) return null;
   return (
@@ -263,14 +284,24 @@ function SimpleLabelAside({
           />
         </label>
       </div>
-      <div className="mt-4 flex items-center justify-between">
+      <div className="mt-4 flex items-stretch gap-2">
         <button
-          className="w-full rounded-none border border-black bg-white px-3 py-2 text-sm text-rose-700 hover:bg-slate-100"
+          className={`flex-1 rounded-none border border-black bg-white px-3 py-2 text-sm text-rose-700 hover:bg-slate-100 ${disabledAsideActionClass}`}
           onClick={() => void onDelete()}
+          disabled={!!actionDisabledReason}
         >
           {deleteButtonLabel}
         </button>
-        <button className="ml-2 w-full rounded-none border border-black bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-slate-100" onClick={() => void onSave()}>{saveButtonLabel}</button>
+        {wrapWithReason(
+          actionDisabledReason,
+          <button
+            className={`flex-1 rounded-none border border-black bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-slate-100 ${disabledAsideActionClass}`}
+            onClick={() => void onSave()}
+            disabled={!!actionDisabledReason}
+          >
+            {saveButtonLabel}
+          </button>
+        )}
       </div>
       {footerExtra}
     </AsideShell>
@@ -290,6 +321,7 @@ type SystemPropertiesAsideProps = {
   relatedRows: NodeRelationRow[];
   resolveLabels: (row: NodeRelationRow) => RelationLabels;
   relationshipSectionProps: Omit<RelationshipSectionProps, "rows" | "resolveLabels">;
+  actionDisabledReason?: string;
 };
 
 export function SystemPropertiesAside(props: SystemPropertiesAsideProps) {
@@ -306,18 +338,23 @@ export function SystemPropertiesAside(props: SystemPropertiesAsideProps) {
       onDelete={props.onDelete}
       onSave={props.onSave}
       onClose={props.onClose}
+      actionDisabledReason={props.actionDisabledReason}
       deleteButtonLabel="Delete system"
       saveButtonLabel="Save name"
       topAction={
-        <button
-          title="Add Relationship"
-          aria-label="Add Relationship"
-          className="flex h-11 w-full items-center justify-center gap-2 rounded-none border border-black bg-white px-2 text-[11px] font-medium text-black hover:bg-slate-100"
-          onClick={props.onAddRelationship}
-        >
-          <img src="/icons/relationship.svg" alt="" className="h-4 w-4" />
-          <span className="truncate">Relationship</span>
-        </button>
+        wrapWithReason(
+          props.actionDisabledReason,
+          <button
+            title={undefined}
+            aria-label="Add Relationship"
+            className={`flex h-11 w-full items-center justify-center gap-2 rounded-none border border-black bg-white px-2 text-[11px] font-medium text-black hover:bg-slate-100 ${disabledAsideActionClass}`}
+            onClick={props.onAddRelationship}
+            disabled={!!props.actionDisabledReason}
+          >
+            <img src="/icons/relationship.svg" alt="" className="h-4 w-4" />
+            <span className="truncate">Relationship</span>
+          </button>
+        )
       }
       footerExtra={<RelationshipSection rows={props.relatedRows} resolveLabels={props.resolveLabels} {...props.relationshipSectionProps} />}
     />
@@ -337,6 +374,7 @@ type ProcessPropertiesAsideProps = {
   relatedRows: NodeRelationRow[];
   resolveLabels: (row: NodeRelationRow) => RelationLabels;
   relationshipSectionProps: Omit<RelationshipSectionProps, "rows" | "resolveLabels">;
+  actionDisabledReason?: string;
 };
 
 export function ProcessPropertiesAside(props: ProcessPropertiesAsideProps) {
@@ -353,18 +391,23 @@ export function ProcessPropertiesAside(props: ProcessPropertiesAsideProps) {
       onDelete={props.onDelete}
       onSave={props.onSave}
       onClose={props.onClose}
+      actionDisabledReason={props.actionDisabledReason}
       deleteButtonLabel="Delete process"
       saveButtonLabel="Save label"
       topAction={
-        <button
-          title="Add Relationship"
-          aria-label="Add Relationship"
-          className="flex h-11 w-full items-center justify-center gap-2 rounded-none border border-black bg-white px-2 text-[11px] font-medium text-black hover:bg-slate-100"
-          onClick={props.onAddRelationship}
-        >
-          <img src="/icons/relationship.svg" alt="" className="h-4 w-4" />
-          <span className="truncate">Relationship</span>
-        </button>
+        wrapWithReason(
+          props.actionDisabledReason,
+          <button
+            title={undefined}
+            aria-label="Add Relationship"
+            className={`flex h-11 w-full items-center justify-center gap-2 rounded-none border border-black bg-white px-2 text-[11px] font-medium text-black hover:bg-slate-100 ${disabledAsideActionClass}`}
+            onClick={props.onAddRelationship}
+            disabled={!!props.actionDisabledReason}
+          >
+            <img src="/icons/relationship.svg" alt="" className="h-4 w-4" />
+            <span className="truncate">Relationship</span>
+          </button>
+        )
       }
       footerExtra={<RelationshipSection rows={props.relatedRows} resolveLabels={props.resolveLabels} {...props.relationshipSectionProps} />}
     />
@@ -380,6 +423,7 @@ type StickyNoteAsideProps = {
   onDelete: () => Promise<void>;
   onSave: () => Promise<void>;
   onClose: () => void;
+  actionDisabledReason?: string;
 };
 
 export function StickyNoteAside({
@@ -391,6 +435,7 @@ export function StickyNoteAside({
   onDelete,
   onSave,
   onClose,
+  actionDisabledReason,
 }: StickyNoteAsideProps) {
   if (!open) return null;
   return (
@@ -406,14 +451,18 @@ export function StickyNoteAside({
           />
         </label>
       </div>
-      <div className="mt-4 flex items-center justify-between">
+      <div className="mt-4 flex items-stretch gap-2">
         <button
-          className="w-full rounded-none border border-black bg-white px-3 py-2 text-sm text-rose-700 hover:bg-slate-100"
+          className={`flex-1 rounded-none border border-black bg-white px-3 py-2 text-sm text-rose-700 hover:bg-slate-100 ${disabledAsideActionClass}`}
           onClick={() => void onDelete()}
+          disabled={!!actionDisabledReason}
         >
           Delete note
         </button>
-        <button className="ml-2 w-full rounded-none border border-black bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-slate-100" onClick={() => void onSave()}>Save note</button>
+        {wrapWithReason(
+          actionDisabledReason,
+          <button className={`flex-1 rounded-none border border-black bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-slate-100 ${disabledAsideActionClass}`} onClick={() => void onSave()} disabled={!!actionDisabledReason}>Save note</button>
+        )}
       </div>
     </AsideShell>
   );
@@ -432,6 +481,7 @@ type ImageAssetAsideProps = {
   relatedRows: NodeRelationRow[];
   resolveLabels: (row: NodeRelationRow) => RelationLabels;
   relationshipSectionProps: Omit<RelationshipSectionProps, "rows" | "resolveLabels">;
+  actionDisabledReason?: string;
 };
 
 export function ImageAssetAside({
@@ -447,20 +497,25 @@ export function ImageAssetAside({
   relatedRows,
   resolveLabels,
   relationshipSectionProps,
+  actionDisabledReason,
 }: ImageAssetAsideProps) {
   if (!open) return null;
   return (
     <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title="Image Properties" onClose={onClose}>
       <div className="mt-3">
-        <button
-          title="Add Relationship"
-          aria-label="Add Relationship"
-          className="flex h-11 w-full items-center justify-center gap-2 rounded-none border border-black bg-white px-2 text-[11px] font-medium text-black hover:bg-slate-100"
-          onClick={onAddRelationship}
-        >
-          <img src="/icons/relationship.svg" alt="" className="h-4 w-4" />
-          <span className="truncate">Relationship</span>
-        </button>
+        {wrapWithReason(
+          actionDisabledReason,
+          <button
+            title={undefined}
+            aria-label="Add Relationship"
+            className={`flex h-11 w-full items-center justify-center gap-2 rounded-none border border-black bg-white px-2 text-[11px] font-medium text-black hover:bg-slate-100 ${disabledAsideActionClass}`}
+            onClick={onAddRelationship}
+            disabled={!!actionDisabledReason}
+          >
+            <img src="/icons/relationship.svg" alt="" className="h-4 w-4" />
+            <span className="truncate">Relationship</span>
+          </button>
+        )}
       </div>
       <div className="mt-4 space-y-3">
         <label className="text-sm text-white">Image Description
@@ -473,16 +528,20 @@ export function ImageAssetAside({
           />
         </label>
       </div>
-      <div className="mt-4 flex items-center justify-between">
+      <div className="mt-4 flex items-stretch gap-2">
         <button
-          className="w-full rounded-none border border-black bg-white px-3 py-2 text-sm text-rose-700 hover:bg-slate-100"
+          className={`flex-1 rounded-none border border-black bg-white px-3 py-2 text-sm text-rose-700 hover:bg-slate-100 ${disabledAsideActionClass}`}
           onClick={() => void onDelete()}
+          disabled={!!actionDisabledReason}
         >
           Delete image
         </button>
-        <button className="ml-2 w-full rounded-none border border-black bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-slate-100" onClick={() => void onSave()}>
-          Save image
-        </button>
+        {wrapWithReason(
+          actionDisabledReason,
+          <button className={`flex-1 rounded-none border border-black bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-slate-100 ${disabledAsideActionClass}`} onClick={() => void onSave()} disabled={!!actionDisabledReason}>
+            Save image
+          </button>
+        )}
       </div>
       <RelationshipSection rows={relatedRows} resolveLabels={resolveLabels} {...relationshipSectionProps} />
     </AsideShell>
@@ -508,6 +567,7 @@ type TextBoxAsideProps = {
   onDelete: () => Promise<void>;
   onSave: () => Promise<void>;
   onClose: () => void;
+  actionDisabledReason?: string;
 };
 
 export function TextBoxAside({
@@ -529,6 +589,7 @@ export function TextBoxAside({
   onDelete,
   onSave,
   onClose,
+  actionDisabledReason,
 }: TextBoxAsideProps) {
   if (!open) return null;
   const textSizeOptions = [16, 20, 24, 28, 32, 36, 42, 48, 56, 64, 72, 84, 96, 112, 128, 144, 168];
@@ -598,16 +659,20 @@ export function TextBoxAside({
           </select>
         </label>
       </div>
-      <div className="mt-4 flex items-center justify-between">
+      <div className="mt-4 flex items-stretch gap-2">
         <button
-          className="w-full rounded-none border border-black bg-white px-3 py-2 text-sm text-rose-700 hover:bg-slate-100"
+          className={`flex-1 rounded-none border border-black bg-white px-3 py-2 text-sm text-rose-700 hover:bg-slate-100 ${disabledAsideActionClass}`}
           onClick={() => void onDelete()}
+          disabled={!!actionDisabledReason}
         >
           Delete text box
         </button>
-        <button className="ml-2 w-full rounded-none border border-black bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-slate-100" onClick={() => void onSave()}>
-          Save text
-        </button>
+        {wrapWithReason(
+          actionDisabledReason,
+          <button className={`flex-1 rounded-none border border-black bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-slate-100 ${disabledAsideActionClass}`} onClick={() => void onSave()} disabled={!!actionDisabledReason}>
+            Save text
+          </button>
+        )}
       </div>
     </AsideShell>
   );
@@ -644,6 +709,7 @@ type FlowShapeAsideProps = {
   onDelete: () => Promise<void>;
   onSave: () => Promise<void>;
   onClose: () => void;
+  actionDisabledReason?: string;
 };
 
 type TableAsideProps = {
@@ -671,6 +737,7 @@ type TableAsideProps = {
   onDelete: () => Promise<void>;
   onSave: () => Promise<void>;
   onClose: () => void;
+  actionDisabledReason?: string;
 };
 
 export function TableAside({
@@ -688,6 +755,7 @@ export function TableAside({
   onDelete,
   onSave,
   onClose,
+  actionDisabledReason,
 }: TableAsideProps) {
   if (!open) return null;
   const safeColor = /^#[0-9a-fA-F]{6}$/.test(tableHeaderBgDraft) ? tableHeaderBgDraft : "#1E3A8A";
@@ -829,13 +897,16 @@ export function TableAside({
           </div>
         </div>
       </div>
-      <div className="mt-4 flex items-center justify-between">
-        <button className="w-full rounded-none border border-black bg-white px-3 py-2 text-sm text-rose-700 hover:bg-slate-100" onClick={() => void onDelete()}>
+      <div className="mt-4 flex items-stretch gap-2">
+        <button className={`flex-1 rounded-none border border-black bg-white px-3 py-2 text-sm text-rose-700 hover:bg-slate-100 ${disabledAsideActionClass}`} onClick={() => void onDelete()} disabled={!!actionDisabledReason}>
           Delete table
         </button>
-        <button className="ml-2 w-full rounded-none border border-black bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-slate-100" onClick={() => void onSave()}>
-          Save table
-        </button>
+        {wrapWithReason(
+          actionDisabledReason,
+          <button className={`flex-1 rounded-none border border-black bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-slate-100 ${disabledAsideActionClass}`} onClick={() => void onSave()} disabled={!!actionDisabledReason}>
+            Save table
+          </button>
+        )}
       </div>
     </AsideShell>
   );
@@ -872,6 +943,7 @@ export function FlowShapeAside({
   onDelete,
   onSave,
   onClose,
+  actionDisabledReason,
 }: FlowShapeAsideProps) {
   if (!open) return null;
   const textSizeOptions = [16, 20, 24, 28, 32, 36, 42, 48, 56, 64, 72, 84, 96, 112, 128, 144, 168];
@@ -1034,13 +1106,16 @@ export function FlowShapeAside({
           </div>
         </div>
       </div>
-      <div className="mt-4 flex items-center justify-between">
-        <button className="w-full rounded-none border border-black bg-white px-3 py-2 text-sm text-rose-700 hover:bg-slate-100" onClick={() => void onDelete()}>
+      <div className="mt-4 flex items-stretch gap-2">
+        <button className={`flex-1 rounded-none border border-black bg-white px-3 py-2 text-sm text-rose-700 hover:bg-slate-100 ${disabledAsideActionClass}`} onClick={() => void onDelete()} disabled={!!actionDisabledReason}>
           Delete shape
         </button>
-        <button className="ml-2 w-full rounded-none border border-black bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-slate-100" onClick={() => void onSave()}>
-          Save shape
-        </button>
+        {wrapWithReason(
+          actionDisabledReason,
+          <button className={`flex-1 rounded-none border border-black bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-slate-100 ${disabledAsideActionClass}`} onClick={() => void onSave()} disabled={!!actionDisabledReason}>
+            Save shape
+          </button>
+        )}
       </div>
     </AsideShell>
   );
@@ -1073,6 +1148,7 @@ type RelationshipSectionProps = {
   onDelete: (relationId: string) => void;
   onSave: (relationId: string) => void;
   onCancelEdit: () => void;
+  actionDisabledReason?: string;
 };
 
 function RelationshipSection({
@@ -1096,6 +1172,7 @@ function RelationshipSection({
   onDelete,
   onSave,
   onCancelEdit,
+  actionDisabledReason,
 }: RelationshipSectionProps) {
   return (
     <div className="mt-6 border-t border-[#5f7894]/70 pt-4">
@@ -1116,22 +1193,30 @@ function RelationshipSection({
                 </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  <button
-                    title="Edit relationship definition"
-                    aria-label="Edit relationship definition"
-                    className="flex h-7 w-7 items-center justify-center border border-slate-300 bg-white hover:bg-slate-100"
-                    onClick={() => onStartEdit(r)}
-                  >
-                    <img src="/icons/edit.svg" alt="" className="h-4 w-4" />
-                  </button>
-                  <button
-                    title="Delete relationship"
-                    aria-label="Delete relationship"
-                    className="flex h-7 w-7 items-center justify-center border border-slate-300 bg-white hover:bg-slate-100"
-                    onClick={() => onDelete(r.id)}
-                  >
-                    <img src="/icons/delete.svg" alt="" className="h-4 w-4" />
-                  </button>
+                  {wrapWithReason(
+                    actionDisabledReason,
+                    <button
+                      title={undefined}
+                      aria-label="Edit relationship definition"
+                      className={`flex h-7 w-7 items-center justify-center border border-slate-300 bg-white hover:bg-slate-100 ${disabledAsideActionClass}`}
+                      onClick={() => onStartEdit(r)}
+                      disabled={!!actionDisabledReason}
+                    >
+                      <img src="/icons/edit.svg" alt="" className="h-4 w-4" />
+                    </button>
+                  )}
+                  {wrapWithReason(
+                    actionDisabledReason,
+                    <button
+                      title={undefined}
+                      aria-label="Delete relationship"
+                      className={`flex h-7 w-7 items-center justify-center border border-slate-300 bg-white hover:bg-slate-100 ${disabledAsideActionClass}`}
+                      onClick={() => onDelete(r.id)}
+                      disabled={!!actionDisabledReason}
+                    >
+                      <img src="/icons/delete.svg" alt="" className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               </div>
               {isEditing ? (
@@ -1212,12 +1297,16 @@ function RelationshipSection({
                     onChange={(e) => setEditingRelationDescription(e.target.value)}
                   />
                   <div className="flex justify-end gap-2">
-                    <button
-                      className="rounded-none border border-black bg-white px-2 py-1 text-xs font-semibold text-black hover:bg-slate-100"
-                      onClick={() => onSave(r.id)}
-                    >
-                      Save
-                    </button>
+                    {wrapWithReason(
+                      actionDisabledReason,
+                      <button
+                        className={`rounded-none border border-black bg-white px-2 py-1 text-xs font-semibold text-black hover:bg-slate-100 ${disabledAsideActionClass}`}
+                        onClick={() => onSave(r.id)}
+                        disabled={!!actionDisabledReason}
+                      >
+                        Save
+                      </button>
+                    )}
                     <button
                       className="rounded-none border border-black bg-white px-2 py-1 text-xs text-black hover:bg-slate-100"
                       onClick={onCancelEdit}
@@ -1273,6 +1362,7 @@ type PersonPropertiesAsideProps = {
   relatedRows: NodeRelationRow[];
   resolveLabels: (row: NodeRelationRow) => RelationLabels;
   relationshipSectionProps: Omit<RelationshipSectionProps, "rows" | "resolveLabels">;
+  actionDisabledReason?: string;
 };
 
 export function PersonPropertiesAside({
@@ -1308,21 +1398,26 @@ export function PersonPropertiesAside({
   relatedRows,
   resolveLabels,
   relationshipSectionProps,
+  actionDisabledReason,
 }: PersonPropertiesAsideProps) {
   if (!open) return null;
   const isOrgChart = mapCategoryId === "org_chart";
   return (
     <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title="Person Properties" onClose={onClose}>
       <div className="mt-3">
-        <button
-          title={isOrgChart ? "Link Direct Report" : "Add Relationship"}
-          aria-label={isOrgChart ? "Link Direct Report" : "Add Relationship"}
-          className="flex h-11 w-full items-center justify-center gap-2 rounded-none border border-black bg-white px-2 text-[11px] font-medium text-black hover:bg-slate-100"
-          onClick={onAddRelationship}
-        >
-          <img src="/icons/relationship.svg" alt="" className="h-4 w-4" />
-          <span className="truncate">{isOrgChart ? "Link Direct Report" : "Relationship"}</span>
-        </button>
+        {wrapWithReason(
+          actionDisabledReason,
+          <button
+            title={undefined}
+            aria-label={isOrgChart ? "Link Direct Report" : "Add Relationship"}
+            className={`flex h-11 w-full items-center justify-center gap-2 rounded-none border border-black bg-white px-2 text-[11px] font-medium text-black hover:bg-slate-100 ${disabledAsideActionClass}`}
+            onClick={onAddRelationship}
+            disabled={!!actionDisabledReason}
+          >
+            <img src="/icons/relationship.svg" alt="" className="h-4 w-4" />
+            <span className="truncate">{isOrgChart ? "Link Direct Report" : "Relationship"}</span>
+          </button>
+        )}
       </div>
       <div className="mt-4 space-y-3">
         {isOrgChart ? (
@@ -1429,14 +1524,18 @@ export function PersonPropertiesAside({
           </>
         )}
       </div>
-      <div className="mt-4 flex items-center justify-between">
+      <div className="mt-4 flex items-stretch gap-2">
         <button
-          className="w-full rounded-none border border-black bg-white px-3 py-2 text-sm text-rose-700 hover:bg-slate-100"
+          className={`flex-1 rounded-none border border-black bg-white px-3 py-2 text-sm text-rose-700 hover:bg-slate-100 ${disabledAsideActionClass}`}
           onClick={() => void onDelete()}
+          disabled={!!actionDisabledReason}
         >
           Delete person
         </button>
-        <button className="ml-2 w-full rounded-none border border-black bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-slate-100" onClick={() => void onSave()}>Save person</button>
+        {wrapWithReason(
+          actionDisabledReason,
+          <button className={`flex-1 rounded-none border border-black bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-slate-100 ${disabledAsideActionClass}`} onClick={() => void onSave()} disabled={!!actionDisabledReason}>Save person</button>
+        )}
       </div>
       <RelationshipSection rows={relatedRows} resolveLabels={resolveLabels} {...relationshipSectionProps} />
     </AsideShell>
@@ -1487,6 +1586,7 @@ type BowtiePropertiesAsideProps = {
   relatedRows: NodeRelationRow[];
   resolveLabels: (row: NodeRelationRow) => RelationLabels;
   relationshipSectionProps: Omit<RelationshipSectionProps, "rows" | "resolveLabels">;
+  actionDisabledReason?: string;
 };
 
 export function BowtiePropertiesAside({
@@ -1514,6 +1614,7 @@ export function BowtiePropertiesAside({
   relatedRows,
   resolveLabels,
   relationshipSectionProps,
+  actionDisabledReason,
 }: BowtiePropertiesAsideProps) {
   if (!open || !bowtieElementType) return null;
   const isRiskRating = bowtieElementType === "bowtie_risk_rating";
@@ -1569,15 +1670,19 @@ export function BowtiePropertiesAside({
   return (
     <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title={`${title} Properties`} onClose={onClose}>
       <div className="mt-3">
-        <button
-          title="Add Relationship"
-          aria-label="Add Relationship"
-          className="flex h-11 w-full items-center justify-center gap-2 rounded-none border border-black bg-white px-2 text-[11px] font-medium text-black hover:bg-slate-100"
-          onClick={onAddRelationship}
-        >
-          <img src="/icons/relationship.svg" alt="" className="h-4 w-4" />
-          <span className="truncate">Relationship</span>
-        </button>
+        {wrapWithReason(
+          actionDisabledReason,
+          <button
+            title={undefined}
+            aria-label="Add Relationship"
+            className={`flex h-11 w-full items-center justify-center gap-2 rounded-none border border-black bg-white px-2 text-[11px] font-medium text-black hover:bg-slate-100 ${disabledAsideActionClass}`}
+            onClick={onAddRelationship}
+            disabled={!!actionDisabledReason}
+          >
+            <img src="/icons/relationship.svg" alt="" className="h-4 w-4" />
+            <span className="truncate">Relationship</span>
+          </button>
+        )}
       </div>
       <div className="mt-4 space-y-3">
         {!isIncidentElement && !isRiskRating ? (
@@ -1992,8 +2097,9 @@ export function BowtiePropertiesAside({
                 {evidenceUploadPreviewUrl || evidenceUploadFileName ? (
                   <button
                     type="button"
-                    className="mt-2 rounded-none border border-black bg-white px-2 py-1 text-xs text-black hover:bg-slate-100"
+                    className={`mt-2 rounded-none border border-black bg-white px-2 py-1 text-xs text-black hover:bg-slate-100 ${disabledAsideActionClass}`}
                     onClick={onClearEvidenceUploadFile}
+                    disabled={!!actionDisabledReason}
                   >
                     Clear selected file
                   </button>
@@ -2001,8 +2107,9 @@ export function BowtiePropertiesAside({
                 {evidenceCurrentMediaUrl || String(evidenceCurrentMediaName).trim() ? (
                   <button
                     type="button"
-                    className="mt-2 w-full rounded-none border border-black bg-white px-2 py-1 text-xs text-rose-700 hover:bg-slate-100"
+                    className={`mt-2 w-full rounded-none border border-black bg-white px-2 py-1 text-xs text-rose-700 hover:bg-slate-100 ${disabledAsideActionClass}`}
                     onClick={() => void onDeleteEvidenceAttachment()}
+                    disabled={!!actionDisabledReason}
                   >
                     Delete attachment
                   </button>
@@ -2060,16 +2167,20 @@ export function BowtiePropertiesAside({
           </>
         ) : null}
       </div>
-      <div className="mt-4 flex items-center justify-between">
+      <div className="mt-4 flex items-stretch gap-2">
         <button
-          className="w-full rounded-none border border-black bg-white px-3 py-2 text-sm text-rose-700 hover:bg-slate-100"
+          className={`flex-1 rounded-none border border-black bg-white px-3 py-2 text-sm text-rose-700 hover:bg-slate-100 ${disabledAsideActionClass}`}
           onClick={() => void onDelete()}
+          disabled={!!actionDisabledReason}
         >
           Delete {title.toLowerCase()}
         </button>
-        <button className="ml-2 w-full rounded-none border border-black bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-slate-100" onClick={() => void onSave()}>
-          Save {title.toLowerCase()}
-        </button>
+        {wrapWithReason(
+          actionDisabledReason,
+          <button className={`flex-1 rounded-none border border-black bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-slate-100 ${disabledAsideActionClass}`} onClick={() => void onSave()} disabled={!!actionDisabledReason}>
+            Save {title.toLowerCase()}
+          </button>
+        )}
       </div>
       <RelationshipSection rows={relatedRows} resolveLabels={resolveLabels} {...relationshipSectionProps} />
     </AsideShell>
@@ -2093,6 +2204,7 @@ type GroupingContainerAsideProps = {
   relatedRows: NodeRelationRow[];
   resolveLabels: (row: NodeRelationRow) => RelationLabels;
   relationshipSectionProps: Omit<RelationshipSectionProps, "rows" | "resolveLabels">;
+  actionDisabledReason?: string;
 };
 
 export function GroupingContainerAside({
@@ -2112,20 +2224,25 @@ export function GroupingContainerAside({
   relatedRows,
   resolveLabels,
   relationshipSectionProps,
+  actionDisabledReason,
 }: GroupingContainerAsideProps) {
   if (!open) return null;
   return (
     <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title="Grouping Container" onClose={onClose}>
       <div className="mt-3">
-        <button
-          title="Add Relationship"
-          aria-label="Add Relationship"
-          className="flex h-11 w-full items-center justify-center gap-2 rounded-none border border-black bg-white px-2 text-[11px] font-medium text-black hover:bg-slate-100"
-          onClick={onAddRelationship}
-        >
-          <img src="/icons/relationship.svg" alt="" className="h-4 w-4" />
-          <span className="truncate">Relationship</span>
-        </button>
+        {wrapWithReason(
+          actionDisabledReason,
+          <button
+            title={undefined}
+            aria-label="Add Relationship"
+            className={`flex h-11 w-full items-center justify-center gap-2 rounded-none border border-black bg-white px-2 text-[11px] font-medium text-black hover:bg-slate-100 ${disabledAsideActionClass}`}
+            onClick={onAddRelationship}
+            disabled={!!actionDisabledReason}
+          >
+            <img src="/icons/relationship.svg" alt="" className="h-4 w-4" />
+            <span className="truncate">Relationship</span>
+          </button>
+        )}
       </div>
       <div className="mt-4 space-y-3">
         <label className="text-sm text-white">Group Label
@@ -2155,14 +2272,18 @@ export function GroupingContainerAside({
           />
         </label>
       </div>
-      <div className="mt-4 flex items-center justify-between">
+      <div className="mt-4 flex items-stretch gap-2">
         <button
-          className="w-full rounded-none border border-black bg-white px-3 py-2 text-sm text-rose-700 hover:bg-slate-100"
+          className={`flex-1 rounded-none border border-black bg-white px-3 py-2 text-sm text-rose-700 hover:bg-slate-100 ${disabledAsideActionClass}`}
           onClick={() => void onDelete()}
+          disabled={!!actionDisabledReason}
         >
           Delete container
         </button>
-        <button className="ml-2 w-full rounded-none border border-black bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-slate-100" onClick={() => void onSave()}>Save container</button>
+        {wrapWithReason(
+          actionDisabledReason,
+          <button className={`flex-1 rounded-none border border-black bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-slate-100 ${disabledAsideActionClass}`} onClick={() => void onSave()} disabled={!!actionDisabledReason}>Save container</button>
+        )}
       </div>
       <RelationshipSection rows={relatedRows} resolveLabels={resolveLabels} {...relationshipSectionProps} />
     </AsideShell>
@@ -2206,6 +2327,7 @@ type DocumentPropertiesAsideProps = {
   relatedRows: NodeRelationRow[];
   resolveLabels: (row: NodeRelationRow) => RelationLabels;
   relationshipSectionProps: Omit<RelationshipSectionProps, "rows" | "resolveLabels">;
+  actionDisabledReason?: string;
 };
 
 export function DocumentPropertiesAside({
@@ -2243,6 +2365,7 @@ export function DocumentPropertiesAside({
   relatedRows,
   resolveLabels,
   relationshipSectionProps,
+  actionDisabledReason,
 }: DocumentPropertiesAsideProps) {
   if (!open) return null;
   return (
@@ -2256,33 +2379,45 @@ export function DocumentPropertiesAside({
           <button className="w-full max-w-[110px] rounded-none border border-black bg-white px-2 py-1 text-xs text-black hover:bg-slate-100" onClick={onClose}>Close</button>
         </div>
         <div className="mt-3 grid grid-cols-3 gap-2">
-          <button
-            title="Add Relationship"
-            aria-label="Add Relationship"
-            className="flex h-11 items-center justify-center gap-2 rounded-none border border-black bg-white px-2 text-[11px] font-medium text-black hover:bg-slate-100"
-            onClick={() => void onOpenRelationship()}
-          >
-            <img src="/icons/relationship.svg" alt="" className="h-4 w-4" />
-            <span className="truncate">Relationship</span>
-          </button>
-          <button
-            title="Document Structure"
-            aria-label="Document Structure"
-            className="flex h-11 items-center justify-center gap-2 rounded-none border border-black bg-white px-2 text-[11px] font-medium text-black hover:bg-slate-100"
-            onClick={() => void onOpenStructure()}
-          >
-            <img src="/icons/structure.svg" alt="" className="h-4 w-4" />
-            <span className="truncate">Structure</span>
-          </button>
-          <button
-            title="Delete Document"
-            aria-label="Delete Document"
-            className="flex h-11 items-center justify-center gap-2 rounded-none border border-black bg-white px-2 text-[11px] font-medium text-black hover:bg-slate-100"
-            onClick={onOpenDelete}
-          >
-            <img src="/icons/deletecomponent.svg" alt="" className="h-4 w-4" />
-            <span className="truncate">Delete</span>
-          </button>
+          {wrapWithReason(
+            actionDisabledReason,
+            <button
+              title={undefined}
+              aria-label="Add Relationship"
+              className={`flex h-11 items-center justify-center gap-2 rounded-none border border-black bg-white px-2 text-[11px] font-medium text-black hover:bg-slate-100 ${disabledAsideActionClass}`}
+              onClick={() => void onOpenRelationship()}
+              disabled={!!actionDisabledReason}
+            >
+              <img src="/icons/relationship.svg" alt="" className="h-4 w-4" />
+              <span className="truncate">Relationship</span>
+            </button>
+          )}
+          {wrapWithReason(
+            actionDisabledReason,
+            <button
+              title={undefined}
+              aria-label="Document Structure"
+              className={`flex h-11 items-center justify-center gap-2 rounded-none border border-black bg-white px-2 text-[11px] font-medium text-black hover:bg-slate-100 ${disabledAsideActionClass}`}
+              onClick={() => void onOpenStructure()}
+              disabled={!!actionDisabledReason}
+            >
+              <img src="/icons/structure.svg" alt="" className="h-4 w-4" />
+              <span className="truncate">Structure</span>
+            </button>
+          )}
+          {wrapWithReason(
+            actionDisabledReason,
+            <button
+              title={undefined}
+              aria-label="Delete Document"
+              className={`flex h-11 items-center justify-center gap-2 rounded-none border border-black bg-white px-2 text-[11px] font-medium text-black hover:bg-slate-100 ${disabledAsideActionClass}`}
+              onClick={onOpenDelete}
+              disabled={!!actionDisabledReason}
+            >
+              <img src="/icons/deletecomponent.svg" alt="" className="h-4 w-4" />
+              <span className="truncate">Delete</span>
+            </button>
+          )}
         </div>
 
         <div className="mt-4 space-y-3">
@@ -2382,7 +2517,10 @@ export function DocumentPropertiesAside({
         </div>
 
         <div className="mt-4">
-          <button className="w-full rounded-none border border-black bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-slate-100" onClick={() => void onSaveNode()}>Save properties</button>
+          {wrapWithReason(
+            actionDisabledReason,
+            <button className={`w-full rounded-none border border-black bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-slate-100 ${disabledAsideActionClass}`} onClick={() => void onSaveNode()} disabled={!!actionDisabledReason}>Save properties</button>
+          )}
         </div>
         <RelationshipSection rows={relatedRows} resolveLabels={resolveLabels} {...relationshipSectionProps} />
       </div>
@@ -2543,3 +2681,4 @@ export function MobileDocumentPropertiesModal({
     </div>
   );
 }
+

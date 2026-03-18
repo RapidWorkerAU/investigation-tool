@@ -40,6 +40,46 @@ export async function POST(req: NextRequest) {
       .eq("user_id", user.userId)
       .maybeSingle();
 
+    if (plan === "pass_30d") {
+      const nowIso = new Date().toISOString();
+      const { data: activePass } = await supabase
+        .from("access_periods")
+        .select("id,ends_at,reminder_3_business_days_sent_at")
+        .eq("user_id", user.userId)
+        .eq("access_type", "pass_30d")
+        .eq("access_status", "active")
+        .lte("starts_at", nowIso)
+        .gt("ends_at", nowIso)
+        .order("ends_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const { data: queuedPass } = await supabase
+        .from("access_periods")
+        .select("id")
+        .eq("user_id", user.userId)
+        .eq("access_type", "pass_30d")
+        .eq("access_status", "active")
+        .gt("starts_at", nowIso)
+        .order("starts_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (queuedPass?.id) {
+        return NextResponse.json(
+          { error: "You already have another 30 Day Access pass queued to begin when your current pass ends." },
+          { status: 400 },
+        );
+      }
+
+      if (activePass?.id && !activePass.reminder_3_business_days_sent_at) {
+        return NextResponse.json(
+          { error: "Your current 30 Day Access does not yet need renewal. Renewal becomes available after the first reminder email is sent." },
+          { status: 400 },
+        );
+      }
+    }
+
     const session = await stripe.checkout.sessions.create({
       mode: isSubscription ? "subscription" : "payment",
       line_items: [{ price: priceId, quantity: 1 }],
