@@ -637,7 +637,13 @@ export default function DashboardWorkspace() {
     router.push("/subscribe");
   };
 
-  const renderBrandedModalHeader = (title: string, eyebrow = "Investigation Tool", pillLabel?: string, pillToneClass?: string) => (
+  const renderBrandedModalHeader = (
+    title: string,
+    eyebrow = "Investigation Tool",
+    pillLabel?: string,
+    pillToneClass?: string,
+    onClose?: () => void,
+  ) => (
     <div className={shellStyles.dashboardModalHeader}>
       <div className={shellStyles.dashboardModalBrand}>
         <Image
@@ -654,6 +660,15 @@ export default function DashboardWorkspace() {
       </div>
       {pillLabel && pillToneClass ? (
         <span className={`${shellStyles.accessStatusPill} ${pillToneClass}`}>{pillLabel}</span>
+      ) : null}
+      {onClose ? (
+        <button
+          type="button"
+          className={shellStyles.mobileModalClose}
+          onClick={onClose}
+        >
+          Close
+        </button>
       ) : null}
     </div>
   );
@@ -1561,6 +1576,12 @@ export default function DashboardWorkspace() {
                 "Investigation Tool",
                 formatAccessStatus(accessState.currentAccessStatus),
                 getAccessStatusToneClass(accessState.currentAccessStatus),
+                () => {
+                  setShowAccessRestrictedModal(false);
+                  if (mapAccessBlocked) {
+                    router.replace("/dashboard");
+                  }
+                },
               )}
             </div>
 
@@ -1606,7 +1627,10 @@ export default function DashboardWorkspace() {
           <div className={`${shellStyles.modalCard} ${shellStyles.dashboardModalCard} ${shellStyles.createInvestigationCard}`}>
             <div className={shellStyles.createInvestigationHeader}>
               <div>
-                {renderBrandedModalHeader("Create your investigation", "New investigation")}
+                {renderBrandedModalHeader("Create your investigation", "New investigation", undefined, undefined, () => {
+                  if (creating) return;
+                  resetCreateInvestigationState();
+                })}
                 <p className={shellStyles.modalText}>
                   Give the investigation a clear working title and a short description so your team can identify the purpose straight away.
                 </p>
@@ -1763,7 +1787,14 @@ export default function DashboardWorkspace() {
       {renderViewportModal(pendingDuplicateRow ? (
         <div className={shellStyles.modalBackdrop}>
           <div className={`${shellStyles.modalCard} ${shellStyles.dashboardModalCard}`}>
-            {renderBrandedModalHeader("Duplicate map?", "Investigation Tool")}
+            {renderBrandedModalHeader("Duplicate map?", "Investigation Tool", undefined, undefined, () => {
+              if (duplicatingMapId === pendingDuplicateRow.id) {
+                duplicateAbortRef.current = true;
+                setDuplicateCancelRequested(true);
+                return;
+              }
+              setPendingDuplicateRow(null);
+            })}
             <p className={shellStyles.modalText}>
               You are about to duplicate <strong>{pendingDuplicateRow.title}</strong>.
             </p>
@@ -1826,7 +1857,10 @@ export default function DashboardWorkspace() {
       {renderViewportModal(pendingDeleteRow ? (
         <div className={shellStyles.modalBackdrop}>
           <div className={`${shellStyles.modalCard} ${shellStyles.dashboardModalCard}`}>
-            {renderBrandedModalHeader("Delete map?", "Investigation Tool")}
+            {renderBrandedModalHeader("Delete map?", "Investigation Tool", undefined, undefined, () => {
+              if (deletingMapId === pendingDeleteRow.id) return;
+              setPendingDeleteRow(null);
+            })}
             <p className={shellStyles.modalText}>
               You are about to permanently delete <strong>{pendingDeleteRow.title}</strong>.
             </p>
@@ -1864,7 +1898,10 @@ export default function DashboardWorkspace() {
       {renderViewportModal(showBulkDeleteModal ? (
         <div className={shellStyles.modalBackdrop}>
           <div className={`${shellStyles.modalCard} ${shellStyles.dashboardModalCard}`}>
-            {renderBrandedModalHeader("Bulk delete selected maps?", "Investigation Tool")}
+            {renderBrandedModalHeader("Bulk delete selected maps?", "Investigation Tool", undefined, undefined, () => {
+              if (bulkDeleting) return;
+              setShowBulkDeleteModal(false);
+            })}
             <p className={shellStyles.modalText}>
               You are about to permanently delete <strong>{selectedOwnedMaps.length}</strong> selected map
               {selectedOwnedMaps.length === 1 ? "" : "s"}.

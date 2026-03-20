@@ -2140,10 +2140,10 @@ export default function InvestigationReportPage() {
                     <table className={`${styles.table} ${styles.reportDataTable}`}>
                       <colgroup>
                         <col style={{ width: "10%" }} />
-                        <col style={{ width: "30%" }} />
-                        <col style={{ width: "30%" }} />
-                        <col style={{ width: "10%" }} />
-                        <col style={{ width: "10%" }} />
+                        <col style={{ width: "27%" }} />
+                        <col style={{ width: "25%" }} />
+                        <col style={{ width: "12%" }} />
+                        <col style={{ width: "16%" }} />
                         <col style={{ width: "10%" }} />
                       </colgroup>
                       <thead>
@@ -2249,9 +2249,9 @@ export default function InvestigationReportPage() {
                   <div className={`${styles.tableWrap} ${styles.reportDataTableWrap}`}>
                     <table className={`${styles.table} ${styles.reportDataTable}`}>
                       <colgroup>
-                        <col style={{ width: "20%" }} />
-                        <col style={{ width: "30%" }} />
-                        <col style={{ width: "15%" }} />
+                        <col style={{ width: "19%" }} />
+                        <col style={{ width: "28%" }} />
+                        <col style={{ width: "17%" }} />
                         <col style={{ width: "35%" }} />
                       </colgroup>
                       <thead>
@@ -2345,12 +2345,12 @@ export default function InvestigationReportPage() {
                   <div className={`${styles.tableWrap} ${styles.reportDataTableWrap}`}>
                     <table className={`${styles.table} ${styles.reportDataTable}`}>
                       <colgroup>
-                        <col style={{ width: "20%" }} />
-                        <col style={{ width: "30%" }} />
-                        <col style={{ width: "12.5%" }} />
-                        <col style={{ width: "12.5%" }} />
-                        <col style={{ width: "12.5%" }} />
-                        <col style={{ width: "12.5%" }} />
+                        <col style={{ width: "18%" }} />
+                        <col style={{ width: "26%" }} />
+                        <col style={{ width: "14%" }} />
+                        <col style={{ width: "14%" }} />
+                        <col style={{ width: "12%" }} />
+                        <col style={{ width: "16%" }} />
                       </colgroup>
                       <thead>
                       <tr>
@@ -2570,8 +2570,8 @@ export default function InvestigationReportPage() {
                       <colgroup>
                         <col style={{ width: "8%" }} />
                         <col style={{ width: "25%" }} />
-                        <col style={{ width: "47%" }} />
-                        <col style={{ width: "20%" }} />
+                        <col style={{ width: "45%" }} />
+                        <col style={{ width: "22%" }} />
                       </colgroup>
                       <thead>
                       <tr>
@@ -2665,8 +2665,8 @@ export default function InvestigationReportPage() {
                       <colgroup>
                         <col style={{ width: "8%" }} />
                         <col style={{ width: "20%" }} />
-                        <col style={{ width: "32%" }} />
-                        <col style={{ width: "12%" }} />
+                        <col style={{ width: "28%" }} />
+                        <col style={{ width: "16%" }} />
                         <col style={{ width: "16%" }} />
                         <col style={{ width: "12%" }} />
                       </colgroup>

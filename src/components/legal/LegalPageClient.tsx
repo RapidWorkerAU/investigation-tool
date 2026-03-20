@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { accessRequiresSelection, fetchAccessState } from "@/lib/access";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
 import styles from "./LegalPage.module.css";
@@ -12,6 +12,13 @@ export type LegalSection = {
   id: string;
   title: string;
   paragraphs: string[];
+  lists?: string[][];
+  subsections?: {
+    id: string;
+    title: string;
+    paragraphs: string[];
+    lists?: string[][];
+  }[];
 };
 
 type LegalPageClientProps = {
@@ -27,7 +34,6 @@ export function LegalPageClient({
 }: LegalPageClientProps) {
   const router = useRouter();
   const supabase = useMemo(() => createSupabaseBrowser(), []);
-  const containerRef = useRef<HTMLDivElement | null>(null);
   const [activeSection, setActiveSection] = useState(sections[0]?.id ?? "");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isAuthed, setIsAuthed] = useState(false);
@@ -72,9 +78,6 @@ export function LegalPageClient({
   }, [mobileMenuOpen]);
 
   useEffect(() => {
-    const root = containerRef.current;
-    if (!root) return;
-
     const observer = new IntersectionObserver(
       (entries) => {
         const visible = entries
@@ -86,14 +89,13 @@ export function LegalPageClient({
         }
       },
       {
-        root,
-        threshold: [0.45, 0.6, 0.75],
-        rootMargin: "-10% 0px -35% 0px",
+        threshold: [0.12, 0.2, 0.35],
+        rootMargin: "-12% 0px -55% 0px",
       },
     );
 
     for (const sectionId of sectionIds) {
-      const element = root.querySelector<HTMLElement>(`#${sectionId}`);
+      const element = document.getElementById(sectionId);
       if (element) observer.observe(element);
     }
 
@@ -101,8 +103,7 @@ export function LegalPageClient({
   }, [sectionIds]);
 
   function jumpToSection(sectionId: string) {
-    const root = containerRef.current;
-    const target = root?.querySelector<HTMLElement>(`#${sectionId}`);
+    const target = document.getElementById(sectionId);
     if (!target) return;
 
     target.scrollIntoView({
@@ -330,13 +331,45 @@ export function LegalPageClient({
             </nav>
           </aside>
 
-          <div ref={containerRef} className={styles.viewport}>
+          <div className={styles.viewport}>
             {sections.map((section) => (
               <section key={section.id} id={section.id} className={styles.section}>
                 <h2>{section.title}</h2>
                 {section.paragraphs.map((paragraph, index) => (
                   <p key={`${section.id}-${index}`}>{paragraph}</p>
                 ))}
+                {section.lists?.map((items, listIndex) => (
+                  <ul key={`${section.id}-list-${listIndex}`} className={styles.sectionList}>
+                    {items.map((item, itemIndex) => (
+                      <li key={`${section.id}-list-${listIndex}-item-${itemIndex}`}>{item}</li>
+                    ))}
+                  </ul>
+                ))}
+                {section.subsections?.map((subsection) => {
+                  const [subsectionNumber, ...subsectionTitleParts] = subsection.title.split(" ");
+                  const subsectionTitle = subsectionTitleParts.join(" ");
+
+                  return (
+                    <div key={`${section.id}-${subsection.id}`} className={styles.subsection}>
+                      <div className={styles.subsectionHeading}>
+                        <span className={styles.subsectionNumber}>{subsectionNumber}</span>
+                        <span className={styles.subsectionTitle}>{subsectionTitle}</span>
+                      </div>
+                      <div className={styles.subsectionBody}>
+                        {subsection.paragraphs.map((paragraph, index) => (
+                          <p key={`${section.id}-${subsection.id}-${index}`}>{paragraph}</p>
+                        ))}
+                        {subsection.lists?.map((items, listIndex) => (
+                          <ul key={`${section.id}-${subsection.id}-list-${listIndex}`} className={styles.sectionList}>
+                            {items.map((item, itemIndex) => (
+                              <li key={`${section.id}-${subsection.id}-list-${listIndex}-item-${itemIndex}`}>{item}</li>
+                            ))}
+                          </ul>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
               </section>
             ))}
           </div>
