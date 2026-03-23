@@ -466,6 +466,27 @@ export const emailTemplates = {
     });
   },
 
+  subscriptionCancelled({ firstName, renewalDate, actionUrl }: BillingTemplateArgs): TemplateResult {
+    const endLabel = formatAccessDateTime(renewalDate) ?? "the end of your current billing period";
+    return renderTemplate({
+      preheader: "Your subscription cancellation has been scheduled.",
+      title: "Subscription cancellation confirmed",
+      intro: [
+        greeting(firstName),
+        "Your monthly Investigation Tool subscription has been cancelled successfully.",
+      ],
+      highlights: [
+        `Your access remains active until ${endLabel}.`,
+        "After that date, monthly renewal charges will stop unless you start a new subscription.",
+      ],
+      ctaLabel: "Open dashboard",
+      ctaUrl: actionUrl || absoluteUrl("/dashboard"),
+      secondaryCtaLabel: "Manage billing",
+      secondaryCtaUrl: absoluteUrl("/account"),
+      note: `Access times shown in Investigation Tool are displayed in ${getAccessTimeZoneLabel()}.`,
+    });
+  },
+
   paymentFailed({ firstName, actionUrl }: BillingTemplateArgs): TemplateResult {
     return renderTemplate({
       preheader: "Your latest subscription payment did not complete.",

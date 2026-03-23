@@ -26,6 +26,21 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Access state not found." }, { status: 404 });
   }
 
+  let cancellationScheduled = false;
+
+  if (row.current_access_period_id) {
+    const { data: period } = await supabase
+      .from("access_periods")
+      .select("stripe_payment_status")
+      .eq("id", row.current_access_period_id)
+      .maybeSingle();
+
+    cancellationScheduled =
+      row.current_access_type === "subscription_monthly" &&
+      row.current_access_status === "active" &&
+      period?.stripe_payment_status === "cancel_at_period_end";
+  }
+
   return NextResponse.json({
     userId: row.user_id,
     stripeCustomerId: row.stripe_customer_id ?? null,
@@ -35,6 +50,7 @@ export async function GET(request: NextRequest) {
     currentAccessPeriodId: row.current_access_period_id ?? null,
     currentStripeSubscriptionId: row.current_stripe_subscription_id ?? null,
     currentStripePriceId: row.current_stripe_price_id ?? null,
+    cancellationScheduled,
     currentPeriodStartsAt: row.current_period_starts_at ?? null,
     currentPeriodEndsAt: row.current_period_ends_at ?? null,
     readOnlyReason: row.read_only_reason ?? null,

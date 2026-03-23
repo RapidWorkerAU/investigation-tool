@@ -228,6 +228,7 @@ export async function POST(req: NextRequest) {
         const userId = subscription.metadata?.user_id;
         const customerId = typeof subscription.customer === "string" ? subscription.customer : null;
         const status = mapSubscriptionStatus(subscription.status);
+        const cancellationScheduled = subscription.cancel_at_period_end === true;
         const startsAt = new Date(subscription.current_period_start * 1000).toISOString();
         const endsAt = new Date(subscription.current_period_end * 1000).toISOString();
         const priceId = subscription.items.data[0]?.price?.id ?? null;
@@ -248,12 +249,14 @@ export async function POST(req: NextRequest) {
         if (userId) {
           const existing = await supabase
             .from("access_periods")
-            .select("id,access_status")
+            .select("id,access_status,stripe_payment_status")
             .eq("stripe_subscription_id", subscription.id)
             .eq("starts_at", startsAt)
             .maybeSingle();
 
           let createdNewPeriod = false;
+          const previousStatus = existing.data?.access_status ?? null;
+          const previousPaymentStatus = existing.data?.stripe_payment_status ?? null;
 
           if (existing.data?.id) {
             await supabase
@@ -261,7 +264,7 @@ export async function POST(req: NextRequest) {
               .update({
                 access_status: status,
                 stripe_price_id: priceId,
-                stripe_payment_status: subscription.status,
+                stripe_payment_status: cancellationScheduled ? "cancel_at_period_end" : subscription.status,
                 ends_at: endsAt,
                 export_allowed: status === "active",
                 write_allowed: status === "active",
@@ -278,7 +281,7 @@ export async function POST(req: NextRequest) {
               access_source: "stripe_subscription",
               stripe_subscription_id: subscription.id,
               stripe_price_id: priceId,
-              stripe_payment_status: subscription.status,
+              stripe_payment_status: cancellationScheduled ? "cancel_at_period_end" : subscription.status,
               starts_at: startsAt,
               ends_at: endsAt,
               map_limit: null,
@@ -294,30 +297,49 @@ export async function POST(req: NextRequest) {
           await refreshProfileForUser(userId);
 
           if (status === "active") {
-            if (event.type === "customer.subscription.created") {
-              await sendLifecycleEmail(
-                supabase,
-                userId,
-                emailTemplates.subscriptionStarted({
-                  renewalDate: endsAt,
-                  actionUrl: `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/dashboard`,
-                }),
-                "subscription-started",
-              );
-
-              if (createdNewPeriod) {
-                await sendWelcomeEmailIfFirstAccess(supabase, userId);
+            if (cancellationScheduled) {
+              if (previousPaymentStatus !== "cancel_at_period_end") {
+                await sendLifecycleEmail(
+                  supabase,
+                  userId,
+                  emailTemplates.subscriptionCancelled({
+                    renewalDate: endsAt,
+                    actionUrl: `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/dashboard`,
+                  }),
+                  "subscription-cancelled",
+                );
               }
-            } else if (createdNewPeriod || existing.data?.access_status === "payment_failed") {
-              await sendLifecycleEmail(
-                supabase,
-                userId,
-                emailTemplates.subscriptionRenewed({
-                  renewalDate: endsAt,
-                  actionUrl: `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/dashboard`,
-                }),
-                "subscription-renewed",
-              );
+            } else {
+              const firstActivation =
+                createdNewPeriod ||
+                previousStatus === "pending_activation" ||
+                event.type === "customer.subscription.created";
+
+              if (firstActivation) {
+                await sendLifecycleEmail(
+                  supabase,
+                  userId,
+                  emailTemplates.subscriptionStarted({
+                    renewalDate: endsAt,
+                    actionUrl: `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/dashboard`,
+                  }),
+                  "subscription-started",
+                );
+
+                if (createdNewPeriod || previousStatus === "pending_activation") {
+                  await sendWelcomeEmailIfFirstAccess(supabase, userId);
+                }
+              } else if (previousStatus === "payment_failed") {
+                await sendLifecycleEmail(
+                  supabase,
+                  userId,
+                  emailTemplates.subscriptionRenewed({
+                    renewalDate: endsAt,
+                    actionUrl: `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/dashboard`,
+                  }),
+                  "subscription-renewed",
+                );
+              }
             }
           }
         }

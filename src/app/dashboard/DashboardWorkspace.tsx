@@ -412,12 +412,18 @@ export default function DashboardWorkspace() {
   const accessStatus = accessState?.currentAccessStatus ?? null;
   const expiredTrialAccess = isExpiredTrialAccess(accessState);
   const accountAccessSummary =
-    accessState?.currentAccessStatus === "active" &&
-    accessState.currentPeriodEndsAt &&
-    (accessState.currentAccessType === "trial_7d" || accessState.currentAccessType === "pass_30d")
-      ? `${
-          accessState.currentAccessType === "trial_7d" ? "7 Day Trial" : "30 Day Access"
-        } until ${formatAccessExpiry(accessState.currentPeriodEndsAt)}`
+    accessState?.currentPeriodEndsAt
+      ? accessState.currentAccessType === "trial_7d" && accessState.currentAccessStatus === "active"
+        ? `7 Day Trial until ${formatAccessExpiry(accessState.currentPeriodEndsAt)}`
+        : accessState.currentAccessType === "pass_30d" && accessState.currentAccessStatus === "active"
+          ? `30 Day Access until ${formatAccessExpiry(accessState.currentPeriodEndsAt)}`
+          : accessState.currentAccessType === "subscription_monthly" && accessState.cancellationScheduled
+            ? `Ongoing Subscription cancels on ${formatAccessExpiry(accessState.currentPeriodEndsAt)}`
+            : accessState.currentAccessType === "subscription_monthly" && accessState.currentAccessStatus === "active"
+            ? `Ongoing Subscription renews on ${formatAccessExpiry(accessState.currentPeriodEndsAt)}`
+            : accessState.currentAccessType === "subscription_monthly" && accessState.currentAccessStatus === "cancelled"
+              ? `Ongoing Subscription cancels on ${formatAccessExpiry(accessState.currentPeriodEndsAt)}`
+              : null
       : null;
   const bulkDeleteEnabled = selectedOwnedMaps.length > 0 && !bulkDeleting && canEditMaps;
   const accessRestrictionHeading =

@@ -14,6 +14,7 @@ export type BillingAccessState = {
   currentAccessPeriodId: string | null;
   currentStripeSubscriptionId: string | null;
   currentStripePriceId: string | null;
+  cancellationScheduled: boolean;
   currentPeriodStartsAt: string | null;
   currentPeriodEndsAt: string | null;
   readOnlyReason: string | null;
