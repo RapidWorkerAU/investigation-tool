@@ -242,6 +242,7 @@ export function buildEmailPreviews(): PreviewCard[] {
   const subscriptionStarted = emailTemplates.subscriptionStarted({ firstName: "Ashleigh", renewalDate: "2026-04-16T09:00:00Z", actionUrl: dashboardUrl });
   const subscriptionRenewed = emailTemplates.subscriptionRenewed({ firstName: "Ashleigh", renewalDate: "2026-05-16T09:00:00Z", actionUrl: dashboardUrl });
   const subscriptionCancelled = emailTemplates.subscriptionCancelled({ firstName: "Ashleigh", renewalDate: "2026-04-16T09:00:00Z", actionUrl: dashboardUrl });
+  const subscriptionReactivated = emailTemplates.subscriptionReactivated({ firstName: "Ashleigh", renewalDate: "2026-04-16T09:00:00Z", actionUrl: dashboardUrl });
   const paymentFailed = emailTemplates.paymentFailed({ firstName: "Ashleigh", actionUrl: accountUrl });
   const paymentReceipt = emailTemplates.paymentReceipt({ firstName: "Ashleigh", amountLabel: "AUD 149.00", actionUrl: dashboardUrl });
   const endingSoon = emailTemplates.accessEndingSoon({ firstName: "Ashleigh", endsAt: "2026-04-13T09:00:00Z", actionUrl: subscribeUrl });
@@ -337,6 +338,12 @@ export function buildEmailPreviews(): PreviewCard[] {
       title: "Subscription cancelled",
       ...subscriptionCancelled,
       copyHtml: toCopyHtml(subscriptionCancelled.html),
+    },
+    {
+      key: "subscription-reactivated",
+      title: "Subscription reactivated",
+      ...subscriptionReactivated,
+      copyHtml: toCopyHtml(subscriptionReactivated.html),
     },
     {
       key: "payment-failed",

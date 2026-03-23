@@ -249,7 +249,7 @@ export async function POST(req: NextRequest) {
         if (userId) {
           const existing = await supabase
             .from("access_periods")
-            .select("id,access_status,stripe_payment_status,subscription_cancellation_email_sent_at")
+            .select("id,access_status,stripe_payment_status,subscription_cancellation_email_sent_at,subscription_reactivated_email_sent_at")
             .eq("stripe_subscription_id", subscription.id)
             .eq("starts_at", startsAt)
             .maybeSingle();
@@ -257,6 +257,7 @@ export async function POST(req: NextRequest) {
           let createdNewPeriod = false;
           const previousStatus = existing.data?.access_status ?? null;
           const existingPeriodId = existing.data?.id ?? null;
+          const previousCancellationScheduled = existing.data?.stripe_payment_status === "cancel_at_period_end";
           const eventContext = {
             eventId: event.id,
             eventType: event.type,
@@ -278,6 +279,9 @@ export async function POST(req: NextRequest) {
                 subscription_cancellation_email_sent_at: cancellationScheduled
                   ? existing.data?.subscription_cancellation_email_sent_at ?? null
                   : null,
+                subscription_reactivated_email_sent_at: cancellationScheduled
+                  ? null
+                  : existing.data?.subscription_reactivated_email_sent_at ?? null,
                 ends_at: endsAt,
                 export_allowed: status === "active",
                 write_allowed: status === "active",
@@ -296,6 +300,7 @@ export async function POST(req: NextRequest) {
               stripe_price_id: priceId,
               stripe_payment_status: cancellationScheduled ? "cancel_at_period_end" : subscription.status,
               subscription_cancellation_email_sent_at: null,
+              subscription_reactivated_email_sent_at: null,
               starts_at: startsAt,
               ends_at: endsAt,
               map_limit: null,
@@ -346,18 +351,42 @@ export async function POST(req: NextRequest) {
 
                 console.info("Stripe subscription cancellation email sent", eventContext);
               }
-            } else {
-              if (existingPeriodId && existing.data?.subscription_cancellation_email_sent_at) {
-                await supabase
+            } else if (previousCancellationScheduled) {
+              let shouldSendReactivatedEmail = false;
+
+              if (existingPeriodId) {
+                const { data: claimedPeriod } = await supabase
                   .from("access_periods")
                   .update({
-                    subscription_cancellation_email_sent_at: null,
+                    subscription_reactivated_email_sent_at: new Date().toISOString(),
                   })
-                  .eq("id", existingPeriodId);
+                  .eq("id", existingPeriodId)
+                  .is("subscription_reactivated_email_sent_at", null)
+                  .select("id")
+                  .maybeSingle();
 
-                console.info("Stripe subscription cancellation marker cleared", eventContext);
+                shouldSendReactivatedEmail = Boolean(claimedPeriod?.id);
               }
 
+              console.info("Stripe subscription cancellation removed", {
+                ...eventContext,
+                emailAlreadySent: !shouldSendReactivatedEmail,
+              });
+
+              if (shouldSendReactivatedEmail) {
+                await sendLifecycleEmail(
+                  supabase,
+                  userId,
+                  emailTemplates.subscriptionReactivated({
+                    renewalDate: endsAt,
+                    actionUrl: `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/dashboard`,
+                  }),
+                  "subscription-reactivated",
+                );
+
+                console.info("Stripe subscription reactivated email sent", eventContext);
+              }
+            } else {
               const firstActivation =
                 createdNewPeriod ||
                 previousStatus === "pending_activation" ||

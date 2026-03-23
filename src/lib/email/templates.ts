@@ -487,6 +487,27 @@ export const emailTemplates = {
     });
   },
 
+  subscriptionReactivated({ firstName, renewalDate, actionUrl }: BillingTemplateArgs): TemplateResult {
+    const renewalLabel = formatAccessDateTime(renewalDate) ?? "your next billing date";
+    return renderTemplate({
+      preheader: "Your subscription cancellation has been removed.",
+      title: "Monthly access remains active",
+      intro: [
+        greeting(firstName),
+        "Your scheduled subscription cancellation has been removed and your monthly Investigation Tool access remains active.",
+      ],
+      highlights: [
+        `Your current billing period runs through ${renewalLabel}.`,
+        "Your subscription will continue renewing normally unless you cancel again.",
+      ],
+      ctaLabel: "Open dashboard",
+      ctaUrl: actionUrl || absoluteUrl("/dashboard"),
+      secondaryCtaLabel: "Manage billing",
+      secondaryCtaUrl: absoluteUrl("/account"),
+      note: `Access times shown in Investigation Tool are displayed in ${getAccessTimeZoneLabel()}.`,
+    });
+  },
+
   paymentFailed({ firstName, actionUrl }: BillingTemplateArgs): TemplateResult {
     return renderTemplate({
       preheader: "Your latest subscription payment did not complete.",
