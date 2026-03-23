@@ -7,6 +7,8 @@ import type { NodePaletteKind } from "./mapCategories";
 
 type CanvasActionButtonsProps = {
   isMobile: boolean;
+  backHref: string;
+  backTitle: string;
   showMapInfoAside: boolean;
   onToggleMapInfo: () => void;
   rf: {
@@ -67,17 +69,20 @@ type CanvasActionButtonsProps = {
   handleAddIncidentRecommendation: () => void;
   allowedNodeKinds: NodePaletteKind[];
   canSaveTemplate: boolean;
+  isPlatformAdmin: boolean;
+  saveAsGlobalTemplate: boolean;
+  setSaveAsGlobalTemplate: (updater: (prev: boolean) => boolean) => void;
   templateDisabledReason?: string;
   showTemplateMenu: boolean;
   setShowTemplateMenu: (updater: (prev: boolean) => boolean) => void;
   templateMenuRef: RefObject<HTMLDivElement | null>;
   templateQuery: string;
   setTemplateQuery: (value: string) => void;
-  templateResults: Array<{ id: string; name: string; updatedAt: string }>;
+  templateResults: Array<{ id: string; name: string; updatedAt: string; isGlobal: boolean }>;
   isLoadingTemplates: boolean;
   isSavingTemplate: boolean;
   templateSaveMessage: string | null;
-  onSelectTemplate: (id: string, name: string) => void;
+  onSelectTemplate: (id: string, name: string, isGlobal: boolean) => void;
   onSaveTemplate: () => void;
   showPrintMenu: boolean;
   setShowPrintMenu: (updater: (prev: boolean) => boolean) => void;
@@ -89,6 +94,8 @@ type CanvasActionButtonsProps = {
 
 export function CanvasActionButtons({
   isMobile,
+  backHref,
+  backTitle,
   showMapInfoAside,
   onToggleMapInfo,
   rf,
@@ -146,6 +153,9 @@ export function CanvasActionButtons({
   handleAddIncidentRecommendation,
   allowedNodeKinds,
   canSaveTemplate,
+  isPlatformAdmin,
+  saveAsGlobalTemplate,
+  setSaveAsGlobalTemplate,
   templateDisabledReason,
   showTemplateMenu,
   setShowTemplateMenu,
@@ -446,7 +456,7 @@ export function CanvasActionButtons({
 
         <div className="fixed inset-x-0 bottom-0 z-[95] px-3 pb-[calc(env(safe-area-inset-bottom,0px)+72px)] md:hidden">
           <div className="mx-auto flex max-w-max items-center gap-2 rounded-[24px] border border-slate-300/80 bg-white/94 px-2.5 py-2.5 shadow-[0_18px_40px_rgba(15,23,42,0.22)] backdrop-blur">
-            <Link href="/dashboard" aria-label="Back to dashboard" title="Back" className={floatingButtonClass}>
+            <Link href={backHref} aria-label={backTitle} title={backTitle} className={floatingButtonClass}>
               <span
                 aria-hidden="true"
                 className="h-6 w-6 bg-current"
@@ -514,9 +524,9 @@ export function CanvasActionButtons({
   return (
     <>
       <Link
-        href="/dashboard"
-        aria-label="Back to dashboard"
-        title="Dashboard"
+        href={backHref}
+        aria-label={backTitle}
+        title={backTitle}
         className="fixed left-[20px] top-[82px] z-[74] group flex h-[62px] w-[62px] items-center justify-center rounded-2xl border border-slate-200 bg-white text-black shadow-[0_10px_24px_rgba(15,23,42,0.14)] transition-all duration-150 hover:-translate-y-0.5 hover:bg-[#102a43] hover:text-white hover:shadow-[0_14px_28px_rgba(15,23,42,0.22)]"
       >
         <span
@@ -558,7 +568,7 @@ export function CanvasActionButtons({
             >
               <span
                 aria-hidden="true"
-                className="h-7 w-7 bg-current"
+                className="h-[22px] w-[22px] bg-current"
                 style={{ WebkitMaskImage: "url('/icons/template.svg')", maskImage: "url('/icons/template.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
               />
             </button>
@@ -577,6 +587,7 @@ export function CanvasActionButtons({
               />
               <div className="px-2 pb-1 text-[11px] text-slate-500">
                 Select an existing template to overwrite it, or enter a new name to save a fresh template.
+                {isPlatformAdmin ? ` ${saveAsGlobalTemplate ? "This save will update the shared global template library." : "Switch on Global template to publish this for every user."}` : ""}
               </div>
               {templateQuery.trim().length > 0 || isLoadingTemplates || templateResults.length > 0 ? (
                 <div className="mt-1 max-h-56 overflow-auto rounded-none border border-slate-300 bg-white">
@@ -588,10 +599,13 @@ export function CanvasActionButtons({
                         key={result.id}
                         type="button"
                         className="block w-full px-3 py-2 text-left text-sm text-slate-800 hover:bg-slate-100"
-                        onClick={() => onSelectTemplate(result.id, result.name)}
+                        onClick={() => onSelectTemplate(result.id, result.name, result.isGlobal)}
                       >
                         <div className="font-semibold text-slate-900">{result.name}</div>
-                        <div className="text-xs text-slate-500">Updated {result.updatedAt}</div>
+                        <div className="text-xs text-slate-500">
+                          Updated {result.updatedAt}
+                          {result.isGlobal ? " · Global template" : ""}
+                        </div>
                       </button>
                     ))
                   ) : (
@@ -601,16 +615,44 @@ export function CanvasActionButtons({
                   )}
                 </div>
               ) : null}
-              <div className="mt-2 flex items-center justify-end gap-2 border-t border-slate-200 pt-2">
+              <div className="mt-2 flex items-center justify-between gap-2 border-t border-slate-200 pt-2">
                 {templateSaveMessage ? <div className="mr-auto text-xs font-medium text-emerald-600">{templateSaveMessage}</div> : null}
-                <button
-                  type="button"
-                  className="rounded-none border border-black bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-                  onClick={onSaveTemplate}
-                  disabled={isSavingTemplate || !templateQuery.trim()}
-                >
-                  {isSavingTemplate ? "Saving..." : "Save Template"}
-                </button>
+                <div className="flex flex-1 items-stretch gap-2">
+                  {isPlatformAdmin ? (
+                    <label
+                      className={`flex min-h-[46px] items-stretch border px-3 py-2 text-left transition-colors ${
+                        saveAsGlobalTemplate
+                          ? "border-sky-700 bg-[#102a43] text-white"
+                          : "border-slate-300 bg-white text-slate-900"
+                      }`}
+                      title="Save the current map as a global template for every Investigation Tool user."
+                    >
+                      <div className="flex flex-col justify-center pr-4 leading-tight">
+                        <span className="text-[10px] font-semibold uppercase tracking-[0.22em]">Global template</span>
+                        <span className={`mt-0.5 text-[11px] ${saveAsGlobalTemplate ? "text-slate-200" : "text-slate-500"}`}>
+                          {saveAsGlobalTemplate ? "Visible to every user" : "Save only to your library"}
+                        </span>
+                      </div>
+                      <div className="flex min-w-[24px] items-center justify-center self-stretch">
+                        <input
+                          type="checkbox"
+                          checked={saveAsGlobalTemplate}
+                          onChange={() => setSaveAsGlobalTemplate((prev) => !prev)}
+                          className="h-4 w-4 cursor-pointer accent-slate-900"
+                          aria-label="Save as global template"
+                        />
+                      </div>
+                    </label>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="flex-1 rounded-none border border-black bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    onClick={onSaveTemplate}
+                    disabled={isSavingTemplate || !templateQuery.trim()}
+                  >
+                    {isSavingTemplate ? "Saving..." : "Save Template"}
+                  </button>
+                </div>
               </div>
             </div>
           ) : null}

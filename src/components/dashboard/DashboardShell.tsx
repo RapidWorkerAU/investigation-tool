@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
 import styles from "./DashboardShell.module.css";
 
-type NavKey = "dashboard" | "account" | "export";
+type NavKey = "dashboard" | "templates" | "account" | "export";
 
 type DashboardShellProps = {
   activeNav?: NavKey;
@@ -21,6 +21,7 @@ type DashboardShellProps = {
 
 const sidebarLinks = [
   { key: "dashboard" as const, href: "/dashboard", label: "Dashboard", icon: "/icons/house.svg" },
+  { key: "templates" as const, href: "/templates", label: "Templates", icon: "/icons/template.svg" },
   { key: "account" as const, href: "/account", label: "Edit Account", icon: "/icons/account.svg" },
 ];
 
@@ -251,6 +252,9 @@ export default function DashboardShell({
           <nav className={styles.mobileMenuNav} aria-label="Dashboard mobile navigation">
             <Link href="/dashboard" onClick={() => setMobileMenuOpen(false)}>
               Home
+            </Link>
+            <Link href="/templates" onClick={() => setMobileMenuOpen(false)}>
+              Templates
             </Link>
             <Link href="/account" onClick={() => setMobileMenuOpen(false)}>
               Account

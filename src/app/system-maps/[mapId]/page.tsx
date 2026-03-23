@@ -3,7 +3,7 @@ import SystemMapCanvasClient from "./SystemMapCanvasClient";
 
 type MapPageProps = {
   params: Promise<{ mapId: string }>;
-  searchParams: Promise<{ welcome?: string }>;
+  searchParams: Promise<{ welcome?: string; templateEditor?: string; templateId?: string; templateName?: string; templateGlobal?: string; from?: string }>;
 };
 
 export const metadata: Metadata = {
@@ -16,7 +16,16 @@ export const viewport: Viewport = {
 
 export default async function SystemMapPage({ params, searchParams }: MapPageProps) {
   const { mapId } = await params;
-  const { welcome } = await searchParams;
+  const { welcome, templateEditor, templateId, templateName, templateGlobal, from } = await searchParams;
 
-  return <SystemMapCanvasClient mapId={mapId} showWelcomeOnLoad={welcome === "1"} />;
+  return (
+    <SystemMapCanvasClient
+      mapId={mapId}
+      showWelcomeOnLoad={welcome === "1"}
+      templateEditorTemplateId={templateEditor === "1" ? templateId ?? null : null}
+      templateEditorTemplateName={templateEditor === "1" ? templateName ?? null : null}
+      templateEditorIsGlobal={templateEditor === "1" ? templateGlobal === "1" : false}
+      entrySource={from === "templates" ? "templates" : "dashboard"}
+    />
+  );
 }

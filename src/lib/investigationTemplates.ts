@@ -4,6 +4,8 @@ export type InvestigationTemplateOption = {
   id: string;
   name: string;
   updated_at: string;
+  is_global: boolean;
+  can_edit: boolean;
 };
 
 export type InvestigationTemplateSnapshot = {
@@ -14,11 +16,15 @@ export type InvestigationTemplateSnapshot = {
   outlineItems: Array<Record<string, unknown>>;
 };
 
-export const templateAccessDisabledReason = "Templates are only available for active subscription holders.";
-export const templateCreateDisabledReason = "Creating from templates is only available for active subscription holders.";
+export const templateAccessDisabledReason = "Saving templates is only available for active subscription holders.";
+export const templateCreateDisabledReason = "Templates are only available when your account can create investigation maps.";
 
 export function hasActiveTemplateAccess(state: BillingAccessState | null | undefined) {
   return state?.currentAccessType === "subscription_monthly" && state.currentAccessStatus === "active";
+}
+
+export function hasTemplateBrowseAccess(state: BillingAccessState | null | undefined) {
+  return Boolean(state?.canCreateMaps);
 }
 
 export async function listInvestigationTemplates(

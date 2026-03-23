@@ -1,4 +1,23 @@
-export function SystemMapLoadingView() {
+type SystemMapLoadingViewProps = {
+  progress?: number;
+  message?: string;
+};
+
+const loadingQuips = [
+  { progress: 25, text: "Checking who is allowed near the whiteboard." },
+  { progress: 50, text: "Unjamming the virtual sticky-note dispenser." },
+  { progress: 75, text: "Convincing the map nodes to stop clustering like a toolbox drawer." },
+  { progress: 100, text: "Putting the kettle on for the final render." },
+];
+
+export function SystemMapLoadingView({
+  progress = 25,
+  message = "Preparing the investigation canvas...",
+}: SystemMapLoadingViewProps) {
+  const allowedProgressSteps = new Set([25, 50, 75, 100]);
+  const clampedProgress = allowedProgressSteps.has(Math.round(progress)) ? Math.round(progress) : 25;
+  const quip = loadingQuips.find((item) => item.progress === clampedProgress)?.text ?? loadingQuips[0].text;
+
   return (
     <div className="min-h-screen bg-[#eef1f4]">
       <header
@@ -39,20 +58,20 @@ export function SystemMapLoadingView() {
             Investigation Tool
           </p>
           <h1 className="text-3xl font-semibold tracking-tight text-slate-950">Loading map</h1>
-          <p className="mt-3 max-w-md text-sm leading-6 text-slate-600">
-            Preparing the investigation canvas, map structure, and latest workspace data.
-          </p>
+          <p className="mt-3 max-w-md text-sm leading-6 text-slate-600">{message}</p>
 
-          <div className="mt-8 grid w-full grid-cols-3 gap-3">
-            <div className="h-2 rounded-full bg-slate-200">
-              <div className="h-2 w-4/5 animate-pulse rounded-full bg-[#05c3dd]" />
+          <div className="mt-8 w-full max-w-md">
+            <div className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+              <span>Progress</span>
+              <span>{clampedProgress}%</span>
             </div>
-            <div className="h-2 rounded-full bg-slate-200">
-              <div className="h-2 w-3/5 animate-pulse rounded-full bg-slate-400 [animation-delay:150ms]" />
+            <div className="h-3 overflow-hidden rounded-full bg-slate-200">
+              <div
+                className="h-full rounded-full bg-[linear-gradient(90deg,#05c3dd_0%,#2563eb_50%,#0f766e_100%)] transition-[width] duration-500 ease-out"
+                style={{ width: `${clampedProgress}%` }}
+              />
             </div>
-            <div className="h-2 rounded-full bg-slate-200">
-              <div className="h-2 w-2/3 animate-pulse rounded-full bg-slate-300 [animation-delay:300ms]" />
-            </div>
+            <p className="mt-4 text-sm font-medium text-slate-700">{quip}</p>
           </div>
         </div>
       </main>

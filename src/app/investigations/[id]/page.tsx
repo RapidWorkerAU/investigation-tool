@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import DashboardShell from "@/components/dashboard/DashboardShell";
 import styles from "@/components/dashboard/DashboardShell.module.css";
+import { DashboardPageSkeleton } from "@/components/dashboard/DashboardTableLoadingState";
 import { accessBlocksInvestigationEntry, accessRequiresSelection, fetchAccessState, type BillingAccessState } from "@/lib/access";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
 
@@ -1746,6 +1747,10 @@ export default function InvestigationReportPage() {
   const pagedEvidence = getPagedRows(filteredEvidenceRows, "evidence");
   const pagedFindings = getPagedRows(filteredFindingRows, "finding");
   const pagedRecommendations = getPagedRows(filteredRecommendationRows, "recommendation");
+
+  if (loading) {
+    return <DashboardPageSkeleton title="Investigation report" />;
+  }
 
   return (
     <DashboardShell

@@ -6,6 +6,7 @@ import type { BillingAccessState } from "@/lib/access";
 
 type MapCanvasHeaderProps = {
   map: SystemMap;
+  isTemplateEditor: boolean;
   mapRole: "read" | "partial_write" | "full_write" | null;
   accessState: BillingAccessState | null;
   canManageMapMetadata: boolean;
@@ -25,6 +26,7 @@ type MapCanvasHeaderProps = {
 
 export function MapCanvasHeader({
   map,
+  isTemplateEditor,
   mapRole,
   accessState,
   canManageMapMetadata,
@@ -42,6 +44,7 @@ export function MapCanvasHeader({
   setError,
 }: MapCanvasHeaderProps) {
   const mapCategoryHeaderLabel = (() => {
+    if (isTemplateEditor) return "Create / Edit Template Canvas";
     const category = (map.map_category || "").toLowerCase();
     if (category === "document_map") return "Document Map";
     if (category === "bow_tie") return "Bow Tie Builder";

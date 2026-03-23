@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import DashboardShell from "@/components/dashboard/DashboardShell";
 import styles from "@/components/dashboard/DashboardShell.module.css";
+import { DashboardPageSkeleton } from "@/components/dashboard/DashboardTableLoadingState";
 import { type BillingAccessState, fetchAccessState } from "@/lib/access";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
 
@@ -167,6 +168,10 @@ export default function AccountPage() {
 
     void loadUser();
   }, [supabase]);
+
+  if (loading) {
+    return <DashboardPageSkeleton title="Account" />;
+  }
 
   const save = async () => {
     setSubmitAttempted(true);

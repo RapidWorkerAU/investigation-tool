@@ -173,6 +173,7 @@ export default function SystemMapsListClient() {
       .from("system_maps")
       .select("id,title,description,owner_id,map_code,map_category,updated_at,created_at")
       .in("id", mapIds)
+      .eq("is_template_editor", false)
       .order("updated_at", { ascending: false });
 
     if (mapsError) {

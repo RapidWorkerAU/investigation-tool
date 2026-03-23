@@ -259,7 +259,7 @@ function SubscribePageContent() {
                   <p>One new writable map with full investigation access for a single incident window.</p>
                 </div>
                 <div className={styles.priceBlock}>
-                  <span className={styles.price}>$49</span>
+                  <span className={styles.price}>$19.95</span>
                   <span className={styles.priceMeta}>AUD once-off</span>
                 </div>
               </div>
@@ -282,7 +282,7 @@ function SubscribePageContent() {
                   <p>Unlimited investigation maps with full export, sharing, duplication, and reporting.</p>
                 </div>
                 <div className={styles.priceBlock}>
-                  <span className={styles.price}>$99</span>
+                  <span className={styles.price}>$44.95</span>
                   <span className={styles.priceMeta}>AUD / month</span>
                 </div>
               </div>

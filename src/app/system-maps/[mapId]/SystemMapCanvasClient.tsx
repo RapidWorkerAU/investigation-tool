@@ -194,8 +194,10 @@ import {
   loadHtmlToImage,
 } from "./canvasPrintUtils";
 import { SystemMapLoadingView } from "./SystemMapLoadingView";
+
 const canvasElementSelectColumns =
   "id,map_id,element_type,heading,color_hex,created_by_user_id,element_config,pos_x,pos_y,width,height,created_at,updated_at";
+const platformAdminUserId = "420266a0-2087-4f36-8c28-340443dd1a82";
 const isMethodologyElementType = (elementType: string) =>
   elementType.startsWith("bowtie_") || elementType.startsWith("incident_");
 
@@ -239,7 +241,21 @@ const stepElementTypesByWizardStep: Record<SystemMapWizardCommitPayload["step"],
   recommendation: ["incident_recommendation"],
 };
 
-function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; showWelcomeOnLoad: boolean }) {
+function SystemMapCanvasInner({
+  mapId,
+  showWelcomeOnLoad,
+  templateEditorTemplateId,
+  templateEditorTemplateName,
+  templateEditorIsGlobal,
+  entrySource,
+}: {
+  mapId: string;
+  showWelcomeOnLoad: boolean;
+  templateEditorTemplateId: string | null;
+  templateEditorTemplateName: string | null;
+  templateEditorIsGlobal: boolean;
+  entrySource: "dashboard" | "templates";
+}) {
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const relationshipPopupRef = useRef<HTMLDivElement | null>(null);
   const addMenuRef = useRef<HTMLDivElement | null>(null);
@@ -271,6 +287,8 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
   const [elements, setElements] = useState<CanvasElementRow[]>([]);
   const [relations, setRelations] = useState<NodeRelationRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingProgress, setLoadingProgress] = useState(25);
+  const [loadingMessage, setLoadingMessage] = useState("Checking workspace access...");
   const [error, setError] = useState<string | null>(null);
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -307,10 +325,12 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
   const [showTemplateMenu, setShowTemplateMenu] = useState(false);
   const [templateQuery, setTemplateQuery] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
-  const [templateResults, setTemplateResults] = useState<Array<{ id: string; name: string; updatedAt: string }>>([]);
+  const [templateResults, setTemplateResults] = useState<Array<{ id: string; name: string; updatedAt: string; isGlobal: boolean }>>([]);
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
   const [templateSaveMessage, setTemplateSaveMessage] = useState<string | null>(null);
+  const [saveAsGlobalTemplate, setSaveAsGlobalTemplate] = useState(false);
+  const [templateEditorStatus, setTemplateEditorStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [showSearchMenu, setShowSearchMenu] = useState(false);
   const [showPrintMenu, setShowPrintMenu] = useState(false);
   const [isPreparingPrint, setIsPreparingPrint] = useState(false);
@@ -361,6 +381,8 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
   }, [rf, snapToMinorGrid]);
   const accessAllowsEditing = accessState?.canEditMaps ?? true;
   const canSaveTemplate = hasActiveTemplateAccess(accessState);
+  const isTemplateEditor = Boolean(templateEditorTemplateId);
+  const isPlatformAdmin = userId === platformAdminUserId || accessState?.userId === platformAdminUserId;
   const canWriteMap = accessAllowsEditing && (mapRole === "partial_write" || mapRole === "full_write");
   const canManageMapMetadata = accessAllowsEditing && mapRole === "full_write" && !!map && !!userId && map.owner_id === userId;
   const canUseContextMenu = accessAllowsEditing && mapRole !== "read";
@@ -370,6 +392,8 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
   const readOnlyActionReason = !accessAllowsEditing
     ? accessState?.readOnlyReason || "This map is read only for your current access."
     : undefined;
+  const backHref = entrySource === "templates" ? "/templates" : "/dashboard";
+  const backTitle = entrySource === "templates" ? "Back to templates" : "Back to dashboard";
   const canPrintMap = accessAllowsEditing;
   const addDisabledReason = !accessAllowsEditing
     ? accessState?.readOnlyReason || "This map is read only for your current access."
@@ -444,10 +468,13 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
         setIsLoadingTemplates(true);
         const results = await listInvestigationTemplates(supabaseBrowser, query, 24);
         setTemplateResults(
-          results.map((item) => ({
+          results
+            .filter((item) => item.can_edit)
+            .map((item) => ({
             id: item.id,
             name: item.name,
             updatedAt: formatStickyDate(item.updated_at) || "Recently saved",
+            isGlobal: item.is_global,
           }))
         );
       } catch (templateError) {
@@ -473,11 +500,96 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
     [canSaveTemplate, loadTemplateResults]
   );
 
-  const handleSelectTemplateResult = useCallback((id: string, name: string) => {
+  const handleSelectTemplateResult = useCallback((id: string, name: string, isGlobal: boolean) => {
     setSelectedTemplateId(id);
     setTemplateQuery(name);
     setTemplateSaveMessage(null);
+    if (isPlatformAdmin) {
+      setSaveAsGlobalTemplate(isGlobal);
+    }
+  }, [isPlatformAdmin]);
+
+  const handleToggleGlobalTemplateSave = useCallback((updater: (prev: boolean) => boolean) => {
+    setSelectedTemplateId(null);
+    setTemplateSaveMessage(null);
+    setSaveAsGlobalTemplate((prev) => updater(prev));
   }, []);
+
+  const buildTemplateSnapshot = useCallback(async () => {
+    const { data: outlineData, error: outlineError } = await supabaseBrowser
+      .schema("ms")
+      .from("document_outline_items")
+      .select("id,map_id,node_id,kind,heading_level,parent_heading_id,heading_id,title,content_text,sort_order")
+      .eq("map_id", mapId)
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true });
+
+    if (outlineError) throw outlineError;
+
+    const snapshot: InvestigationTemplateSnapshot = {
+      types: types.map((item) => ({
+        id: item.id,
+        name: item.name,
+        level_rank: item.level_rank,
+        band_y_min: item.band_y_min,
+        band_y_max: item.band_y_max,
+        is_active: item.is_active,
+      })),
+      nodes: nodes.map((item) => ({
+        id: item.id,
+        type_id: item.type_id,
+        title: item.title,
+        document_number: item.document_number,
+        discipline: item.discipline,
+        owner_user_id: item.owner_user_id,
+        owner_name: item.owner_name,
+        user_group: item.user_group,
+        pos_x: item.pos_x,
+        pos_y: item.pos_y,
+        width: item.width,
+        height: item.height,
+        is_archived: item.is_archived,
+      })),
+      elements: elements.map((item) => ({
+        id: item.id,
+        element_type: item.element_type,
+        heading: item.heading,
+        color_hex: item.color_hex,
+        element_config: item.element_config,
+        pos_x: item.pos_x,
+        pos_y: item.pos_y,
+        width: item.width,
+        height: item.height,
+      })),
+      relations: relations.map((item) => ({
+        id: item.id,
+        from_node_id: item.from_node_id,
+        to_node_id: item.to_node_id,
+        source_grouping_element_id: item.source_grouping_element_id,
+        target_grouping_element_id: item.target_grouping_element_id,
+        source_system_element_id: item.source_system_element_id,
+        target_system_element_id: item.target_system_element_id,
+        relation_type: item.relation_type,
+        relationship_description: item.relationship_description,
+        relationship_disciplines: item.relationship_disciplines,
+        relationship_category: item.relationship_category,
+        relationship_custom_type: item.relationship_custom_type,
+      })),
+      outlineItems: (outlineData ?? []).map((item) => ({
+        id: item.id,
+        node_id: item.node_id,
+        kind: item.kind,
+        heading_level: item.heading_level,
+        parent_heading_id: item.parent_heading_id,
+        heading_id: item.heading_id,
+        title: item.title,
+        content_text: item.content_text,
+        sort_order: item.sort_order,
+      })),
+    };
+
+    return snapshot;
+  }, [elements, mapId, nodes, relations, types]);
 
   const handleSaveTemplate = useCallback(async () => {
     if (!canSaveTemplate) return;
@@ -492,83 +604,13 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
       setIsSavingTemplate(true);
       setTemplateSaveMessage(null);
       setError(null);
-
-      const { data: outlineData, error: outlineError } = await supabaseBrowser
-        .schema("ms")
-        .from("document_outline_items")
-        .select("id,map_id,node_id,kind,heading_level,parent_heading_id,heading_id,title,content_text,sort_order")
-        .eq("map_id", mapId)
-        .order("sort_order", { ascending: true })
-        .order("created_at", { ascending: true });
-
-      if (outlineError) throw outlineError;
-
-      const snapshot: InvestigationTemplateSnapshot = {
-        types: types.map((item) => ({
-          id: item.id,
-          name: item.name,
-          level_rank: item.level_rank,
-          band_y_min: item.band_y_min,
-          band_y_max: item.band_y_max,
-          is_active: item.is_active,
-        })),
-        nodes: nodes.map((item) => ({
-          id: item.id,
-          type_id: item.type_id,
-          title: item.title,
-          document_number: item.document_number,
-          discipline: item.discipline,
-          owner_user_id: item.owner_user_id,
-          owner_name: item.owner_name,
-          user_group: item.user_group,
-          pos_x: item.pos_x,
-          pos_y: item.pos_y,
-          width: item.width,
-          height: item.height,
-          is_archived: item.is_archived,
-        })),
-        elements: elements.map((item) => ({
-          id: item.id,
-          element_type: item.element_type,
-          heading: item.heading,
-          color_hex: item.color_hex,
-          element_config: item.element_config,
-          pos_x: item.pos_x,
-          pos_y: item.pos_y,
-          width: item.width,
-          height: item.height,
-        })),
-        relations: relations.map((item) => ({
-          id: item.id,
-          from_node_id: item.from_node_id,
-          to_node_id: item.to_node_id,
-          source_grouping_element_id: item.source_grouping_element_id,
-          target_grouping_element_id: item.target_grouping_element_id,
-          source_system_element_id: item.source_system_element_id,
-          target_system_element_id: item.target_system_element_id,
-          relation_type: item.relation_type,
-          relationship_description: item.relationship_description,
-          relationship_disciplines: item.relationship_disciplines,
-          relationship_category: item.relationship_category,
-          relationship_custom_type: item.relationship_custom_type,
-        })),
-        outlineItems: (outlineData ?? []).map((item) => ({
-          id: item.id,
-          node_id: item.node_id,
-          kind: item.kind,
-          heading_level: item.heading_level,
-          parent_heading_id: item.parent_heading_id,
-          heading_id: item.heading_id,
-          title: item.title,
-          content_text: item.content_text,
-          sort_order: item.sort_order,
-        })),
-      };
+      const snapshot = await buildTemplateSnapshot();
 
       const { data, error: saveError } = await supabaseBrowser.rpc("save_investigation_template", {
         p_name: normalizedName,
         p_snapshot: snapshot,
         p_template_id: selectedTemplateId,
+        p_is_global: saveAsGlobalTemplate,
       });
 
       if (saveError) throw saveError;
@@ -580,14 +622,23 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
       if (savedRow?.name) {
         setTemplateQuery(savedRow.name as string);
       }
-      setTemplateSaveMessage(savedRow?.was_overwritten ? "Template updated." : "Template saved.");
+      const savedIsGlobal = Boolean(savedRow?.is_global);
+      setTemplateSaveMessage(
+        savedRow?.was_overwritten
+          ? savedIsGlobal
+            ? "Global template updated."
+            : "Template updated."
+          : savedIsGlobal
+            ? "Global template saved."
+            : "Template saved."
+      );
       await loadTemplateResults(normalizedName.length >= 4 ? normalizedName : "");
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Unable to save template.");
     } finally {
       setIsSavingTemplate(false);
     }
-  }, [canSaveTemplate, templateQuery, mapId, types, nodes, elements, relations, selectedTemplateId, loadTemplateResults]);
+  }, [buildTemplateSnapshot, canSaveTemplate, templateQuery, selectedTemplateId, saveAsGlobalTemplate, loadTemplateResults]);
   const openPrintPreviewFromDataUrl = useCallback(
     (imageDataUrl: string) => {
       setPrintPreviewImageDataUrl(imageDataUrl);
@@ -2241,14 +2292,76 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
   }, []);
 
   useEffect(() => {
+    if (isPlatformAdmin) return;
+    setSaveAsGlobalTemplate(false);
+  }, [isPlatformAdmin]);
+
+  useEffect(() => {
+    if (!isTemplateEditor || !templateEditorTemplateId || loading || !canSaveTemplate) return;
+
+    setTemplateEditorStatus("saving");
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const snapshot = await buildTemplateSnapshot();
+          const { error: saveError } = await supabaseBrowser.rpc("save_investigation_template", {
+            p_name: templateEditorTemplateName?.trim() || map?.title || "Untitled Template",
+            p_snapshot: snapshot,
+            p_template_id: templateEditorTemplateId,
+            p_is_global: templateEditorIsGlobal,
+          });
+
+          if (saveError) throw saveError;
+          setTemplateEditorStatus("saved");
+        } catch (templateSyncError) {
+          setTemplateEditorStatus("error");
+          setError(templateSyncError instanceof Error ? templateSyncError.message : "Unable to sync template changes.");
+        }
+      })();
+    }, 900);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [
+    buildTemplateSnapshot,
+    canSaveTemplate,
+    isPlatformAdmin,
+    isTemplateEditor,
+    loading,
+    map?.title,
+    nodes,
+    elements,
+    relations,
+    types,
+    outlineItems,
+    templateEditorTemplateId,
+    templateEditorIsGlobal,
+    templateEditorTemplateName,
+  ]);
+
+  useEffect(() => {
     let cancelled = false;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
     const run = async (attempt: number) => {
+      const setLoadingStage = (progress: number, message: string) => {
+        if (cancelled) return;
+        setLoadingProgress((current) => {
+          const next = Math.max(current, progress);
+          if (next > current) {
+            setLoadingMessage(message);
+          }
+          return next;
+        });
+      };
+      let shouldRetry = false;
+
       if (cancelled) return;
       if (attempt === 0) {
         setLoading(true);
         setError(null);
+        setLoadingStage(25, "Checking workspace access...");
       }
       try {
         const user = await ensurePortalSupabaseUser();
@@ -2258,6 +2371,7 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
           return;
         }
         setUserId(user.id);
+        setLoadingStage(25, "Confirming your account session...");
 
         const {
           data: { session },
@@ -2268,6 +2382,7 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
           return;
         }
 
+        setLoadingStage(25, "Checking billing and map permissions...");
         const nextAccessState = await fetchAccessState(session.access_token);
         if (cancelled) return;
         setAccessState(nextAccessState);
@@ -2282,6 +2397,7 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
           return;
         }
 
+        setLoadingStage(50, "Loading map shell, nodes, and canvas data...");
         const [memberRes, mapRes, typeRes, nodeRes, elementRes, relRes, viewRes] = await Promise.all([
           supabaseBrowser.schema("ms").from("map_members").select("role").eq("map_id", mapId).eq("user_id", user.id).maybeSingle(),
           supabaseBrowser.schema("ms").from("system_maps").select("id,title,description,owner_id,updated_by_user_id,map_code,map_category,updated_at,created_at").eq("id", mapId).maybeSingle(),
@@ -2315,9 +2431,11 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
         setMap(loadedMap);
         const nextCategory = (loadedMap.map_category || defaultMapCategoryId) as MapCategoryId;
         setMapCategoryId(nextCategory);
+        setLoadingStage(75, "Loading collaborators and investigation structure...");
         await loadMapMembers(loadedMap.owner_id);
         let loadedTypes = (typeRes.data ?? []) as DocumentTypeRow[];
         if (!loadedTypes.length) {
+          setLoadingStage(75, "Rebuilding the default investigation structure...");
           const { data: createdTypes, error: createTypesError } = await supabaseBrowser
             .schema("ms")
             .from("document_types")
@@ -2346,6 +2464,7 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
         const existingCanonicalTypeNames = new Set(loadedTypes.map((t) => getCanonicalTypeName(t.name)));
         const missingFallback = fallbackHierarchy.filter((item) => !existingCanonicalTypeNames.has(getCanonicalTypeName(item.name)));
         if (missingFallback.length) {
+          setLoadingStage(75, "Filling in any missing structure labels...");
           const { data: insertedMissing, error: insertMissingError } = await supabaseBrowser
             .schema("ms")
             .from("document_types")
@@ -2380,6 +2499,7 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
         loadedNodes.forEach((n) => (nextSaved[n.id] = { x: n.pos_x, y: n.pos_y }));
         savedPos.current = nextSaved;
 
+        setLoadingStage(75, "Restoring your saved viewport...");
         if (viewRes.data) {
           const viewData = viewRes.data;
           setHasStoredViewport(true);
@@ -2387,9 +2507,11 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
         } else {
           setHasStoredViewport(false);
         }
+        setLoadingStage(100, "Straightening lines and sharpening pencils...");
       } catch (err) {
         if (cancelled) return;
         if (isAbortLikeError(err) && attempt < 3) {
+          shouldRetry = true;
           retryTimer = setTimeout(() => {
             void run(attempt + 1);
           }, 250);
@@ -2398,7 +2520,11 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
         const message = err instanceof Error ? err.message : String(err);
         setError(message || "Unable to load map.");
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && !shouldRetry) {
+          setLoadingProgress(100);
+          setLoadingMessage("Canvas ready.");
+          setLoading(false);
+        }
       }
     };
 
@@ -4504,7 +4630,7 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
   );
 
   if (loading) {
-    return <SystemMapLoadingView />;
+    return <SystemMapLoadingView progress={loadingProgress} message={loadingMessage} />;
   }
 
   if (!map) {
@@ -4515,6 +4641,7 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
     <div className="flex h-dvh min-h-dvh flex-col overflow-hidden bg-stone-50 md:min-h-screen">
       <MapCanvasHeader
         map={map}
+        isTemplateEditor={isTemplateEditor}
         mapRole={mapRole}
         accessState={accessState}
         canManageMapMetadata={canManageMapMetadata}
@@ -4534,13 +4661,18 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
 
       <CanvasActionButtons
         isMobile={isMobile}
+        backHref={backHref}
+        backTitle={backTitle}
         showMapInfoAside={showMapInfoAside}
         onToggleMapInfo={handleToggleMapInfoAside}
         rf={rf}
         setShowAddMenu={setShowAddMenu}
         showAddMenu={showAddMenu}
         addMenuRef={addMenuRef}
-        canSaveTemplate={canSaveTemplate}
+        canSaveTemplate={!isTemplateEditor && canSaveTemplate}
+        isPlatformAdmin={isPlatformAdmin}
+        saveAsGlobalTemplate={saveAsGlobalTemplate}
+        setSaveAsGlobalTemplate={handleToggleGlobalTemplateSave}
         templateDisabledReason={templateDisabledReason}
         showTemplateMenu={showTemplateMenu}
         setShowTemplateMenu={setShowTemplateMenu}
@@ -5567,9 +5699,17 @@ function SystemMapCanvasInner({ mapId, showWelcomeOnLoad }: { mapId: string; sho
 export default function SystemMapCanvasClient({
   mapId,
   showWelcomeOnLoad = false,
+  templateEditorTemplateId = null,
+  templateEditorTemplateName = null,
+  templateEditorIsGlobal = false,
+  entrySource = "dashboard",
 }: {
   mapId: string;
   showWelcomeOnLoad?: boolean;
+  templateEditorTemplateId?: string | null;
+  templateEditorTemplateName?: string | null;
+  templateEditorIsGlobal?: boolean;
+  entrySource?: "dashboard" | "templates";
 }) {
   useEffect(() => {
     const body = document.body;
@@ -5586,7 +5726,14 @@ export default function SystemMapCanvasClient({
 
   return (
     <ReactFlowProvider>
-      <SystemMapCanvasInner mapId={mapId} showWelcomeOnLoad={showWelcomeOnLoad} />
+      <SystemMapCanvasInner
+        mapId={mapId}
+        showWelcomeOnLoad={showWelcomeOnLoad}
+        templateEditorTemplateId={templateEditorTemplateId}
+        templateEditorTemplateName={templateEditorTemplateName}
+        templateEditorIsGlobal={templateEditorIsGlobal}
+        entrySource={entrySource}
+      />
     </ReactFlowProvider>
   );
 }

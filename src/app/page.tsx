@@ -580,7 +580,7 @@ export default function HomePage() {
                   <p>Best for one live investigation that needs full working access for a defined incident window.</p>
                 </header>
                 <div className="landing-price-value">
-                  <strong>$49</strong>
+                  <strong>$19.95</strong>
                   <span>AUD once-off</span>
                 </div>
                 <p className="landing-price-note">Best for one focused incident</p>
@@ -607,7 +607,7 @@ export default function HomePage() {
                   <p>Best for teams that need ongoing access without map limits slowing work down.</p>
                 </header>
                 <div className="landing-price-value">
-                  <strong>$99</strong>
+                  <strong>$44.95</strong>
                   <span>AUD / month</span>
                 </div>
                 <p className="landing-price-note">Best for ongoing investigation work</p>

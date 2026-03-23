@@ -6,9 +6,10 @@ import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import DashboardShell from "@/components/dashboard/DashboardShell";
 import shellStyles from "@/components/dashboard/DashboardShell.module.css";
+import { DashboardMobileLoadingState, DashboardPageSkeleton, DashboardTableLoadingState } from "@/components/dashboard/DashboardTableLoadingState";
 import { accessIsReadOnlyRestricted, accessRequiresSelection, fetchAccessState, isExpiredTrialAccess, type BillingAccessState } from "@/lib/access";
 import {
-  hasActiveTemplateAccess,
+  hasTemplateBrowseAccess,
   listInvestigationTemplates,
   templateCreateDisabledReason,
   type InvestigationTemplateOption,
@@ -321,6 +322,7 @@ export default function DashboardWorkspace() {
           .schema("ms")
           .from("system_maps")
           .select("id,title,description,map_code,owner_id,updated_by_user_id,created_at,updated_at")
+          .eq("is_template_editor", false)
           .order("updated_at", { ascending: false }),
         supabase
           .schema("ms")
@@ -404,7 +406,7 @@ export default function DashboardWorkspace() {
   const canEditMaps = accessState?.canEditMaps ?? false;
   const canShareMaps = accessState?.canShareMaps ?? false;
   const canDuplicateMaps = accessState?.canDuplicateMaps ?? false;
-  const canUseTemplates = hasActiveTemplateAccess(accessState);
+  const canUseTemplates = hasTemplateBrowseAccess(accessState);
   const accessStatus = accessState?.currentAccessStatus ?? null;
   const expiredTrialAccess = isExpiredTrialAccess(accessState);
   const accountAccessSummary =
@@ -1177,6 +1179,10 @@ export default function DashboardWorkspace() {
     }
   };
 
+  if (loading) {
+    return <DashboardPageSkeleton title="Investigation dashboard" />;
+  }
+
   return (
     <DashboardShell
       activeNav="dashboard"
@@ -1304,10 +1310,7 @@ export default function DashboardWorkspace() {
               {loading ? (
                 <tr>
                   <td colSpan={8} className={shellStyles.tableStateCell}>
-                    <div className={shellStyles.tableLoadingState}>
-                      <div className={shellStyles.tableLoadingBar} aria-hidden="true" />
-                      <span>Loading investigations...</span>
-                    </div>
+                    <DashboardTableLoadingState message="Loading investigations..." />
                   </td>
                 </tr>
               ) : maps.length === 0 ? (
@@ -1419,10 +1422,7 @@ export default function DashboardWorkspace() {
 
         <div className={shellStyles.dashboardMobileList}>
           {loading ? (
-            <div className={shellStyles.dashboardMobileState}>
-              <div className={shellStyles.tableLoadingBar} aria-hidden="true" />
-              <span>Loading investigations...</span>
-            </div>
+            <DashboardMobileLoadingState message="Loading investigations..." />
           ) : maps.length === 0 ? (
             <div className={shellStyles.dashboardMobileState}>Create a new map or link an existing one.</div>
           ) : (
@@ -1723,7 +1723,10 @@ export default function DashboardWorkspace() {
                             }}
                           >
                             <strong>{option.name}</strong>
-                            <span>Updated {formatMobileDate(option.updated_at)}</span>
+                            <span>
+                              Updated {formatMobileDate(option.updated_at)}
+                              {option.is_global ? " · Global template" : ""}
+                            </span>
                           </button>
                         ))
                       ) : (

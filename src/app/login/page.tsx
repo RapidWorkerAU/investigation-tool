@@ -88,9 +88,31 @@ function LoginPageContent() {
         return;
       }
 
+      const normalizedEmail = email.trim().toLowerCase();
+      const { data: emailExists, error: emailExistsError } = await supabase.rpc("email_exists_for_auth", {
+        p_email: normalizedEmail,
+      });
+
+      if (emailExistsError) {
+        setNotice({ type: "error", text: "Unable to verify that email address right now. Please try again." });
+        setLoading(false);
+        return;
+      }
+
+      if (emailExists) {
+        setMode("login");
+        setSignupComplete(false);
+        setNotice({
+          type: "error",
+          text: "That email address is already registered. Please sign in instead.",
+        });
+        setLoading(false);
+        return;
+      }
+
       const redirectTo = `${process.env.NEXT_PUBLIC_SITE_URL || window.location.origin}/confirm-account`;
       const { error } = await supabase.auth.signUp({
-        email,
+        email: normalizedEmail,
         password,
         options: {
           emailRedirectTo: redirectTo,
