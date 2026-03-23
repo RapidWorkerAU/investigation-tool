@@ -257,6 +257,16 @@ export async function POST(req: NextRequest) {
           let createdNewPeriod = false;
           const previousStatus = existing.data?.access_status ?? null;
           const existingPeriodId = existing.data?.id ?? null;
+          const eventContext = {
+            eventId: event.id,
+            eventType: event.type,
+            subscriptionId: subscription.id,
+            userId,
+            status,
+            cancellationScheduled,
+            previousStatus,
+            existingPeriodId,
+          };
 
           if (existing.data?.id) {
             await supabase
@@ -318,6 +328,11 @@ export async function POST(req: NextRequest) {
                 shouldSendCancellationEmail = Boolean(claimedPeriod?.id);
               }
 
+              console.info("Stripe subscription cancellation scheduled", {
+                ...eventContext,
+                emailAlreadySent: !shouldSendCancellationEmail,
+              });
+
               if (shouldSendCancellationEmail) {
                 await sendLifecycleEmail(
                   supabase,
@@ -328,8 +343,21 @@ export async function POST(req: NextRequest) {
                   }),
                   "subscription-cancelled",
                 );
+
+                console.info("Stripe subscription cancellation email sent", eventContext);
               }
             } else {
+              if (existingPeriodId && existing.data?.subscription_cancellation_email_sent_at) {
+                await supabase
+                  .from("access_periods")
+                  .update({
+                    subscription_cancellation_email_sent_at: null,
+                  })
+                  .eq("id", existingPeriodId);
+
+                console.info("Stripe subscription cancellation marker cleared", eventContext);
+              }
+
               const firstActivation =
                 createdNewPeriod ||
                 previousStatus === "pending_activation" ||
