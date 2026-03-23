@@ -23,7 +23,7 @@ export default function HomePage() {
       } = await supabase.auth.getSession();
 
       if (mounted) {
-        setIsAuthed(Boolean(session));
+        setIsAuthed(Boolean(session?.access_token));
       }
     };
 
@@ -32,7 +32,7 @@ export default function HomePage() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setIsAuthed(Boolean(session));
+      setIsAuthed(Boolean(session?.access_token));
     });
 
     return () => {
@@ -79,8 +79,9 @@ export default function HomePage() {
       router.push(accessRequiresSelection(accessState) ? "/subscribe" : "/dashboard");
       router.refresh();
     } catch {
+      setIsAuthed(false);
       setMobileMenuOpen(false);
-      router.push("/dashboard");
+      router.push("/login?returnTo=%2Fdashboard");
       router.refresh();
     } finally {
       setDashboardLoading(false);

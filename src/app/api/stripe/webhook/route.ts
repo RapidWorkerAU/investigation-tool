@@ -249,14 +249,14 @@ export async function POST(req: NextRequest) {
         if (userId) {
           const existing = await supabase
             .from("access_periods")
-            .select("id,access_status,stripe_payment_status")
+            .select("id,access_status,stripe_payment_status,subscription_cancellation_email_sent_at")
             .eq("stripe_subscription_id", subscription.id)
             .eq("starts_at", startsAt)
             .maybeSingle();
 
           let createdNewPeriod = false;
           const previousStatus = existing.data?.access_status ?? null;
-          const previousPaymentStatus = existing.data?.stripe_payment_status ?? null;
+          const existingPeriodId = existing.data?.id ?? null;
 
           if (existing.data?.id) {
             await supabase
@@ -265,6 +265,9 @@ export async function POST(req: NextRequest) {
                 access_status: status,
                 stripe_price_id: priceId,
                 stripe_payment_status: cancellationScheduled ? "cancel_at_period_end" : subscription.status,
+                subscription_cancellation_email_sent_at: cancellationScheduled
+                  ? existing.data?.subscription_cancellation_email_sent_at ?? null
+                  : null,
                 ends_at: endsAt,
                 export_allowed: status === "active",
                 write_allowed: status === "active",
@@ -282,6 +285,7 @@ export async function POST(req: NextRequest) {
               stripe_subscription_id: subscription.id,
               stripe_price_id: priceId,
               stripe_payment_status: cancellationScheduled ? "cancel_at_period_end" : subscription.status,
+              subscription_cancellation_email_sent_at: null,
               starts_at: startsAt,
               ends_at: endsAt,
               map_limit: null,
@@ -298,7 +302,23 @@ export async function POST(req: NextRequest) {
 
           if (status === "active") {
             if (cancellationScheduled) {
-              if (previousPaymentStatus !== "cancel_at_period_end") {
+              let shouldSendCancellationEmail = false;
+
+              if (existingPeriodId) {
+                const { data: claimedPeriod } = await supabase
+                  .from("access_periods")
+                  .update({
+                    subscription_cancellation_email_sent_at: new Date().toISOString(),
+                  })
+                  .eq("id", existingPeriodId)
+                  .is("subscription_cancellation_email_sent_at", null)
+                  .select("id")
+                  .maybeSingle();
+
+                shouldSendCancellationEmail = Boolean(claimedPeriod?.id);
+              }
+
+              if (shouldSendCancellationEmail) {
                 await sendLifecycleEmail(
                   supabase,
                   userId,

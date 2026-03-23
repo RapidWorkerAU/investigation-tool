@@ -50,7 +50,7 @@ export function LegalPageClient({
       } = await supabase.auth.getSession();
 
       if (mounted) {
-        setIsAuthed(Boolean(session));
+        setIsAuthed(Boolean(session?.access_token));
       }
     };
 
@@ -59,7 +59,7 @@ export function LegalPageClient({
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setIsAuthed(Boolean(session));
+      setIsAuthed(Boolean(session?.access_token));
     });
 
     return () => {
@@ -142,8 +142,9 @@ export function LegalPageClient({
       router.push(accessRequiresSelection(accessState) ? "/subscribe" : "/dashboard");
       router.refresh();
     } catch {
+      setIsAuthed(false);
       setMobileMenuOpen(false);
-      router.push("/dashboard");
+      router.push("/login?returnTo=%2Fdashboard");
       router.refresh();
     } finally {
       setDashboardLoading(false);
