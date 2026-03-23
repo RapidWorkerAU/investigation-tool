@@ -42,6 +42,13 @@ Use these templates as the content source when configuring Supabase Auth email t
 
 - `confirmAccount`
 - `forgotPassword`
+- change email confirmation template from `src/lib/email/preview.ts`
+
+For Supabase auth emails, the button target must use Supabase placeholders, not hardcoded app routes:
+
+- `{{ .ConfirmationURL }}`
+
+Do not point account confirmation, password reset, or email change buttons directly at `/login`, `/confirm-account`, or `/auth/set-password`. Supabase must receive the confirmation click first, and then it will redirect back into the app using the configured redirect URL.
 
 Because those emails are initiated by Supabase, they are not sent from Next.js routes unless you replace Supabase's default auth email flow with a custom implementation.
 

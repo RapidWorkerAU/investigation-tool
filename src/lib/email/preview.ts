@@ -15,6 +15,7 @@ const dashboardUrl = `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:30
 const loginUrl = `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/login`;
 const subscribeUrl = `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/subscribe`;
 const accountUrl = `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/account`;
+const supabaseConfirmationUrl = "{{ .ConfirmationURL }}";
 const publicSiteUrl =
   process.env.NEXT_PUBLIC_SITE_URL && !process.env.NEXT_PUBLIC_SITE_URL.includes("localhost")
     ? process.env.NEXT_PUBLIC_SITE_URL
@@ -226,8 +227,8 @@ const supabaseEmailChangeBody = `
 </html>`.trim();
 
 export function buildEmailPreviews(): PreviewCard[] {
-  const confirm = emailTemplates.confirmAccount({ firstName: "Ashleigh", actionUrl: loginUrl });
-  const forgot = emailTemplates.forgotPassword({ firstName: "Ashleigh", actionUrl: loginUrl });
+  const confirm = emailTemplates.confirmAccount({ firstName: "Ashleigh", actionUrl: supabaseConfirmationUrl });
+  const forgot = emailTemplates.forgotPassword({ firstName: "Ashleigh", actionUrl: supabaseConfirmationUrl });
   const passwordChanged = emailTemplates.passwordChanged({ firstName: "Ashleigh", actionUrl: loginUrl });
   const welcome = emailTemplates.welcome({ firstName: "Ashleigh", actionUrl: dashboardUrl });
   const trialStarted = emailTemplates.trialStarted({ firstName: "Ashleigh", endsAt: "2026-03-24T09:00:00Z", actionUrl: dashboardUrl });
@@ -267,8 +268,8 @@ export function buildEmailPreviews(): PreviewCard[] {
     {
       key: "change-email",
       title: "Change email address",
-      ...confirm,
       subject: "Confirm Your New Email Address",
+      html: supabaseEmailChangeBody,
       text: [
         "Confirm your new email address",
         "",
