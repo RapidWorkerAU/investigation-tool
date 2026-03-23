@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { formatAccessDateTime, getAccessTimeZoneLabel } from "@/lib/accessTime";
 
 type TemplateResult = {
   subject: string;
@@ -60,21 +61,6 @@ function siteUrl() {
 function absoluteUrl(path: string) {
   if (/^https?:\/\//i.test(path)) return path;
   return `${siteUrl()}${path.startsWith("/") ? path : `/${path}`}`;
-}
-
-function formatDateTime(value?: string | null) {
-  if (!value) return null;
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-
-  return new Intl.DateTimeFormat("en-AU", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
 }
 
 function greeting(firstName?: string | null) {
@@ -379,11 +365,12 @@ export const emailTemplates = {
       ],
       ctaLabel: "Open dashboard",
       ctaUrl: actionUrl,
+      note: `Access times shown in Investigation Tool are displayed in ${getAccessTimeZoneLabel()}.`,
     });
   },
 
   trialStarted({ firstName, endsAt, actionUrl }: AccessTemplateArgs): TemplateResult {
-    const endsLabel = formatDateTime(endsAt) ?? "in 7 days";
+    const endsLabel = formatAccessDateTime(endsAt) ?? "in 7 days";
     return renderTemplate({
       preheader: "Your 7 day trial is active.",
       title: "Your 7 day trial is active",
@@ -397,11 +384,12 @@ export const emailTemplates = {
       ],
       ctaLabel: "Open dashboard",
       ctaUrl: actionUrl || absoluteUrl("/dashboard"),
+      note: `Access times shown in Investigation Tool are displayed in ${getAccessTimeZoneLabel()}.`,
     });
   },
 
   trialEndsToday({ firstName, endsAt, actionUrl }: AccessTemplateArgs): TemplateResult {
-    const endsLabel = formatDateTime(endsAt) ?? "today";
+    const endsLabel = formatAccessDateTime(endsAt) ?? "today";
     return renderTemplate({
       preheader: "Your 7 day trial ends today.",
       title: "Your 7 day trial ends today",
@@ -415,11 +403,12 @@ export const emailTemplates = {
       ],
       ctaLabel: "View paid access",
       ctaUrl: actionUrl || absoluteUrl("/subscribe"),
+      note: `Access times shown in Investigation Tool are displayed in ${getAccessTimeZoneLabel()}.`,
     });
   },
 
   pass30Started({ firstName, endsAt, actionUrl, amountLabel }: AccessTemplateArgs & { amountLabel?: string | null }): TemplateResult {
-    const endsLabel = formatDateTime(endsAt) ?? "in 30 days";
+    const endsLabel = formatAccessDateTime(endsAt) ?? "in 30 days";
     return renderTemplate({
       preheader: "Your 30 day investigation access is active.",
       title: "30 day access confirmed",
@@ -433,11 +422,12 @@ export const emailTemplates = {
       ],
       ctaLabel: "Open dashboard",
       ctaUrl: actionUrl || absoluteUrl("/dashboard"),
+      note: `Access times shown in Investigation Tool are displayed in ${getAccessTimeZoneLabel()}.`,
     });
   },
 
   subscriptionStarted({ firstName, renewalDate, actionUrl }: BillingTemplateArgs): TemplateResult {
-    const renewalLabel = formatDateTime(renewalDate) ?? "your next billing date";
+    const renewalLabel = formatAccessDateTime(renewalDate) ?? "your next billing date";
     return renderTemplate({
       preheader: "Your monthly subscription is active.",
       title: "Monthly access is active",
@@ -451,11 +441,12 @@ export const emailTemplates = {
       ],
       ctaLabel: "Open dashboard",
       ctaUrl: actionUrl || absoluteUrl("/dashboard"),
+      note: `Access times shown in Investigation Tool are displayed in ${getAccessTimeZoneLabel()}.`,
     });
   },
 
   subscriptionRenewed({ firstName, renewalDate, actionUrl }: BillingTemplateArgs): TemplateResult {
-    const renewalLabel = formatDateTime(renewalDate) ?? "your next billing date";
+    const renewalLabel = formatAccessDateTime(renewalDate) ?? "your next billing date";
     return renderTemplate({
       preheader: "Your subscription has renewed successfully.",
       title: "Subscription renewed successfully",
@@ -471,6 +462,7 @@ export const emailTemplates = {
       ctaUrl: actionUrl || absoluteUrl("/dashboard"),
       secondaryCtaLabel: "Manage billing",
       secondaryCtaUrl: absoluteUrl("/account"),
+      note: `Access times shown in Investigation Tool are displayed in ${getAccessTimeZoneLabel()}.`,
     });
   },
 
@@ -492,7 +484,7 @@ export const emailTemplates = {
   },
 
   accessEndingSoon({ firstName, endsAt, actionUrl }: AccessTemplateArgs): TemplateResult {
-    const endsLabel = formatDateTime(endsAt) ?? "soon";
+    const endsLabel = formatAccessDateTime(endsAt) ?? "soon";
     return renderTemplate({
       preheader: "Your 30 day access ends in 3 business days.",
       title: "Your access ends in 3 business days",
@@ -506,11 +498,12 @@ export const emailTemplates = {
       ],
       ctaLabel: "Review access options",
       ctaUrl: actionUrl || absoluteUrl("/subscribe"),
+      note: `Access times shown in Investigation Tool are displayed in ${getAccessTimeZoneLabel()}.`,
     });
   },
 
   accessEndsToday({ firstName, endsAt, actionUrl }: AccessTemplateArgs): TemplateResult {
-    const endsLabel = formatDateTime(endsAt) ?? "today";
+    const endsLabel = formatAccessDateTime(endsAt) ?? "today";
     return renderTemplate({
       preheader: "Your 30 day access ends today.",
       title: "Your access ends today",
@@ -524,6 +517,7 @@ export const emailTemplates = {
       ],
       ctaLabel: "Renew access",
       ctaUrl: actionUrl || absoluteUrl("/subscribe"),
+      note: `Access times shown in Investigation Tool are displayed in ${getAccessTimeZoneLabel()}.`,
     });
   },
 

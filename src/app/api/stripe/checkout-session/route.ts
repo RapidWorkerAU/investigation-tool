@@ -3,6 +3,48 @@ import Stripe from "stripe";
 import { getUserFromAuthHeader } from "@/lib/supabase/auth";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 
+async function getOrCreateStripeCustomerId(
+  stripe: Stripe,
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  userId: string,
+  email: string,
+  existingCustomerId?: string | null,
+) {
+  if (existingCustomerId) {
+    return existingCustomerId;
+  }
+
+  const customers = await stripe.customers.list({
+    email,
+    limit: 10,
+  });
+
+  const matchedCustomer = customers.data.find((customer) => !customer.deleted && customer.email === email) ?? null;
+
+  const customerId =
+    matchedCustomer?.id ??
+    (
+      await stripe.customers.create({
+        email,
+        metadata: {
+          user_id: userId,
+        },
+      })
+    ).id;
+
+  await supabase
+    .from("billing_profiles")
+    .upsert(
+      {
+        user_id: userId,
+        stripe_customer_id: customerId,
+      },
+      { onConflict: "user_id" },
+    );
+
+  return customerId;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { plan } = await req.json();
@@ -39,6 +81,13 @@ export async function POST(req: NextRequest) {
       .select("stripe_customer_id")
       .eq("user_id", user.userId)
       .maybeSingle();
+    const stripeCustomerId = await getOrCreateStripeCustomerId(
+      stripe,
+      supabase,
+      user.userId,
+      user.email,
+      billingProfile?.stripe_customer_id,
+    );
 
     if (plan === "pass_30d") {
       const nowIso = new Date().toISOString();
@@ -84,8 +133,12 @@ export async function POST(req: NextRequest) {
       mode: isSubscription ? "subscription" : "payment",
       line_items: [{ price: priceId, quantity: 1 }],
       allow_promotion_codes: true,
-      customer: billingProfile?.stripe_customer_id || undefined,
-      customer_email: billingProfile?.stripe_customer_id ? undefined : user.email,
+      customer: stripeCustomerId,
+      invoice_creation: isSubscription
+        ? undefined
+        : {
+            enabled: true,
+          },
       client_reference_id: user.userId,
       metadata: {
         user_id: user.userId,
@@ -105,7 +158,10 @@ export async function POST(req: NextRequest) {
     });
 
     return NextResponse.json({ url: session.url });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || "Checkout session failed" }, { status: 500 });
+  } catch (error: unknown) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Checkout session failed" },
+      { status: 500 },
+    );
   }
 }

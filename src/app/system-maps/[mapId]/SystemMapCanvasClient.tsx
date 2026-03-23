@@ -354,6 +354,7 @@ function SystemMapCanvasInner({
     height: number;
   } | null>(null);
   const [showPrintSelectionConfirm, setShowPrintSelectionConfirm] = useState(false);
+  const [hasCurrentPassAssignment, setHasCurrentPassAssignment] = useState(true);
   const printPreviewHtml = useMemo(
     () =>
       printPreviewImageDataUrl
@@ -379,7 +380,11 @@ function SystemMapCanvasInner({
       y: snapToMinorGrid(flowPoint.y),
     };
   }, [rf, snapToMinorGrid]);
-  const accessAllowsEditing = accessState?.canEditMaps ?? true;
+  const passScopedWriteBlocked =
+    accessState?.currentAccessStatus === "active" &&
+    accessState.currentAccessType === "pass_30d" &&
+    !hasCurrentPassAssignment;
+  const accessAllowsEditing = (accessState?.canEditMaps ?? true) && !passScopedWriteBlocked;
   const canSaveTemplate = hasActiveTemplateAccess(accessState);
   const isTemplateEditor = Boolean(templateEditorTemplateId);
   const isPlatformAdmin = userId === platformAdminUserId || accessState?.userId === platformAdminUserId;
@@ -390,7 +395,9 @@ function SystemMapCanvasInner({
   const allowedNodeKinds = useMemo(() => getAllowedNodeKindsForCategory(mapCategoryId), [mapCategoryId]);
   const canUseWizard = canWriteMap && allowedNodeKinds.some((kind) => kind.startsWith("incident_"));
   const readOnlyActionReason = !accessAllowsEditing
-    ? accessState?.readOnlyReason || "This map is read only for your current access."
+    ? passScopedWriteBlocked
+      ? "This map belongs to an older 30 Day Access period. Start monthly access to restore full editing across older pass maps."
+      : accessState?.readOnlyReason || "This map is read only for your current access."
     : undefined;
   const backHref = entrySource === "templates" ? "/templates" : "/dashboard";
   const backTitle = entrySource === "templates" ? "Back to templates" : "Back to dashboard";
@@ -2433,6 +2440,24 @@ function SystemMapCanvasInner({
         setMapCategoryId(nextCategory);
         setLoadingStage(75, "Loading collaborators and investigation structure...");
         await loadMapMembers(loadedMap.owner_id);
+        if (nextAccessState.currentAccessStatus === "active" && nextAccessState.currentAccessType === "pass_30d" && nextAccessState.currentAccessPeriodId) {
+          const { data: assignment, error: assignmentError } = await supabaseBrowser
+            .from("map_access_assignments")
+            .select("id")
+            .eq("access_period_id", nextAccessState.currentAccessPeriodId)
+            .eq("map_id", mapId)
+            .eq("user_id", user.id)
+            .maybeSingle();
+
+          if (assignmentError) {
+            setError(assignmentError.message || "Unable to confirm this map's current access period.");
+            return;
+          }
+
+          setHasCurrentPassAssignment(Boolean(assignment?.id));
+        } else {
+          setHasCurrentPassAssignment(true);
+        }
         let loadedTypes = (typeRes.data ?? []) as DocumentTypeRow[];
         if (!loadedTypes.length) {
           setLoadingStage(75, "Rebuilding the default investigation structure...");

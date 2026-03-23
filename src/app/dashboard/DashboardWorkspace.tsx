@@ -14,6 +14,7 @@ import {
   templateCreateDisabledReason,
   type InvestigationTemplateOption,
 } from "@/lib/investigationTemplates";
+import { formatAccessDateTime } from "@/lib/accessTime";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
 
 type MapRecord = {
@@ -188,12 +189,7 @@ const formatMobileDate = (value: string) =>
     year: "numeric",
   });
 
-const formatAccessExpiry = (value: string) =>
-  new Date(value).toLocaleDateString("en-AU", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+const formatAccessExpiry = (value: string) => formatAccessDateTime(value) ?? value;
 
 const formatAccessStatus = (value: BillingAccessState["currentAccessStatus"] | null) => {
   if (!value) return "Unknown";
@@ -404,8 +400,14 @@ export default function DashboardWorkspace() {
 
   const canCreateMaps = accessState?.canCreateMaps ?? false;
   const canEditMaps = accessState?.canEditMaps ?? false;
-  const canShareMaps = accessState?.canShareMaps ?? false;
-  const canDuplicateMaps = accessState?.canDuplicateMaps ?? false;
+  const pass30LimitReached =
+    accessState?.currentAccessType === "pass_30d" &&
+    accessState.currentAccessStatus === "active" &&
+    !canCreateMaps;
+  const canShareMaps = (accessState?.canShareMaps ?? false) && !pass30LimitReached;
+  const canDuplicateMaps =
+    (accessState?.canDuplicateMaps ?? false) &&
+    !(accessState?.currentAccessType === "pass_30d" && accessState.currentAccessStatus === "active");
   const canUseTemplates = hasTemplateBrowseAccess(accessState);
   const accessStatus = accessState?.currentAccessStatus ?? null;
   const expiredTrialAccess = isExpiredTrialAccess(accessState);
@@ -493,27 +495,38 @@ export default function DashboardWorkspace() {
                   title: "30 Day Access",
                   description: "Choose a shorter paid access window if you only need access for one investigation cycle.",
                 },
-                {
-                  title: "Data Retained",
-                  description: "Your current map remains stored and can be reopened once paid access is active again.",
-                },
-              ]
-            : [
-                {
-                  title: "30 Day Access",
+            {
+              title: "Data Retained",
+              description: "Your current map remains stored and can be reopened once paid access is active again.",
+            },
+            {
+              title: "Billing History",
+              description: "Your Stripe billing portal remains available so you can review previous invoices and receipts.",
+            },
+          ]
+        : [
+            {
+              title: "30 Day Access",
                   description: "Restore access to the investigation through a focused paid access period.",
                 },
                 {
                   title: "Monthly Access",
                   description: "Return to full ongoing access with unlimited maps and continued access to this investigation.",
                 },
-                {
-                  title: "Data Retained",
-                  description: "Your investigation content is still stored, but access remains locked until billing is active again.",
-                },
-              ];
+            {
+              title: "Data Retained",
+              description: "Your investigation content is still stored, but access remains locked until billing is active again.",
+            },
+            {
+              title: "Billing History",
+              description: "If Stripe has a customer record for this account, you can still open the billing portal to view previous invoices and receipts.",
+            },
+          ];
   const linkMapDisabledReason = (() => {
     if (canShareMaps) return null;
+    if (pass30LimitReached) {
+      return "Map linking is unavailable because your 30 Day Access has already used its single map allocation. Linking a map by code counts toward that limit.";
+    }
     if (accessStatus === "expired") return "Map linking is unavailable because your access has expired.";
     if (accessStatus === "payment_failed") return "Map linking is unavailable until your payment details are updated.";
     if (accessStatus === "cancelled") return "Map linking is unavailable because your access has been cancelled.";
@@ -539,6 +552,9 @@ export default function DashboardWorkspace() {
   const getDuplicateDisabledReason = (map: MapRecord) => {
     if (duplicatingMapId === map.id) return "This investigation is currently being duplicated.";
     if ((Boolean(map.role) || map.owner_id === userId) && canDuplicateMaps) return null;
+    if (accessState?.currentAccessType === "pass_30d" && accessStatus === "active") {
+      return "Map duplication is not available on 30 Day Access. This access type allows one map allocation only.";
+    }
     if (accessStatus === "expired") return "Map duplication is unavailable because your access has expired.";
     if (accessStatus === "payment_failed") return "Map duplication is unavailable until your payment details are updated.";
     if (accessStatus === "cancelled") return "Map duplication is unavailable because your access has been cancelled.";
@@ -1648,9 +1664,6 @@ export default function DashboardWorkspace() {
                   placeholder="Example: Forklift collision in warehouse"
                   maxLength={120}
                 />
-                <span className={shellStyles.createInvestigationHint}>
-                  Use a short title that identifies the event, location, or incident being examined.
-                </span>
               </label>
 
               <label className={shellStyles.accountField}>
@@ -1739,11 +1752,6 @@ export default function DashboardWorkspace() {
                     </div>
                   ) : null}
                 </div>
-                <span className={shellStyles.createInvestigationHint}>
-                  {canUseTemplates
-                    ? "Optional. Browse the list or type 4 characters to filter your saved templates, then select one to start from that layout."
-                    : "Template-based map creation is available to active subscription holders."}
-                </span>
               </label>
 
               <label className={shellStyles.accountField}>
@@ -1756,9 +1764,6 @@ export default function DashboardWorkspace() {
                   rows={5}
                   maxLength={600}
                 />
-                <span className={shellStyles.createInvestigationHint}>
-                  Add context such as what happened, who is involved, or what the investigation needs to establish.
-                </span>
               </label>
             </div>
 

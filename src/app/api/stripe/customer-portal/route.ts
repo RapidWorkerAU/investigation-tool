@@ -3,6 +3,48 @@ import Stripe from "stripe";
 import { getUserFromAuthHeader } from "@/lib/supabase/auth";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 
+async function getOrCreateStripeCustomerId(
+  stripe: Stripe,
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  userId: string,
+  email: string,
+  existingCustomerId?: string | null,
+) {
+  if (existingCustomerId) {
+    return existingCustomerId;
+  }
+
+  const customers = await stripe.customers.list({
+    email,
+    limit: 10,
+  });
+
+  const matchedCustomer = customers.data.find((customer) => !customer.deleted && customer.email === email) ?? null;
+
+  const customerId =
+    matchedCustomer?.id ??
+    (
+      await stripe.customers.create({
+        email,
+        metadata: {
+          user_id: userId,
+        },
+      })
+    ).id;
+
+  await supabase
+    .from("billing_profiles")
+    .upsert(
+      {
+        user_id: userId,
+        stripe_customer_id: customerId,
+      },
+      { onConflict: "user_id" },
+    );
+
+  return customerId;
+}
+
 export async function POST(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
   const user = await getUserFromAuthHeader(authHeader);
@@ -29,13 +71,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  if (!billingProfile?.stripe_customer_id) {
-    return NextResponse.json({ error: "No Stripe customer is linked to this account." }, { status: 400 });
-  }
-
   const stripe = new Stripe(secretKey, { apiVersion: "2023-10-16" });
+  const stripeCustomerId = await getOrCreateStripeCustomerId(
+    stripe,
+    supabase,
+    user.userId,
+    user.email,
+    billingProfile?.stripe_customer_id,
+  );
+
   const session = await stripe.billingPortal.sessions.create({
-    customer: billingProfile.stripe_customer_id,
+    customer: stripeCustomerId,
     return_url: `${siteUrl}/dashboard`,
   });
 

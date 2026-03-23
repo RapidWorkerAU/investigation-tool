@@ -53,6 +53,41 @@ async function sendLifecycleEmail(
   }
 }
 
+async function sendWelcomeEmailIfFirstAccess(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  userId: string,
+) {
+  const { count } = await supabase
+    .from("access_periods")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId);
+
+  if (count !== 1) return;
+
+  const recipient = await loadEmailRecipientByUserId(supabase, userId);
+  if (!recipient) return;
+
+  try {
+    const welcome = emailTemplates.welcome({
+      firstName: recipient.firstName,
+      actionUrl: `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/dashboard`,
+    });
+
+    await sendResendEmail({
+      to: recipient.email,
+      subject: welcome.subject,
+      html: welcome.html,
+      text: welcome.text,
+      tags: [
+        { name: "category", value: "lifecycle" },
+        { name: "template", value: "welcome" },
+      ],
+    });
+  } catch (error) {
+    console.error("Failed to send welcome email", error);
+  }
+}
+
 export async function POST(req: NextRequest) {
   const signature = req.headers.get("stripe-signature");
   const secretKey = process.env.STRIPE_SECRET_KEY;
@@ -106,6 +141,7 @@ export async function POST(req: NextRequest) {
 
         if (userId && accessType === "pass_30d") {
           let lifecycleEndsAt: string | null = null;
+          let createdAccessPeriod = false;
           const existing = await supabase
             .from("access_periods")
             .select("id")
@@ -144,6 +180,7 @@ export async function POST(req: NextRequest) {
                 : nowIso;
             const endsAt = new Date(new Date(startsAt).getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
             lifecycleEndsAt = endsAt;
+            createdAccessPeriod = true;
 
             await supabase.from("access_periods").insert({
               user_id: userId,
@@ -160,7 +197,7 @@ export async function POST(req: NextRequest) {
               export_allowed: true,
               write_allowed: true,
               share_allowed: true,
-              duplicate_allowed: true,
+              duplicate_allowed: false,
               notes: "30 day access pass",
             });
           }
@@ -176,6 +213,10 @@ export async function POST(req: NextRequest) {
             }),
             "pass-30-started",
           );
+
+          if (createdAccessPeriod) {
+            await sendWelcomeEmailIfFirstAccess(supabase, userId);
+          }
         }
 
         break;
@@ -263,6 +304,10 @@ export async function POST(req: NextRequest) {
                 }),
                 "subscription-started",
               );
+
+              if (createdNewPeriod) {
+                await sendWelcomeEmailIfFirstAccess(supabase, userId);
+              }
             } else if (createdNewPeriod || existing.data?.access_status === "payment_failed") {
               await sendLifecycleEmail(
                 supabase,

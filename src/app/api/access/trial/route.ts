@@ -24,6 +24,33 @@ export async function POST(request: NextRequest) {
 
   const recipient = await loadEmailRecipientByUserId(supabase, user.userId);
   if (recipient) {
+    const { count: accessPeriodCount } = await supabase
+      .from("access_periods")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.userId);
+
+    if (accessPeriodCount === 1) {
+      const welcome = emailTemplates.welcome({
+        firstName: recipient.firstName,
+        actionUrl: `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/dashboard`,
+      });
+
+      try {
+        await sendResendEmail({
+          to: recipient.email,
+          subject: welcome.subject,
+          html: welcome.html,
+          text: welcome.text,
+          tags: [
+            { name: "category", value: "lifecycle" },
+            { name: "template", value: "welcome" },
+          ],
+        });
+      } catch (error) {
+        console.error("Failed to send welcome email", error);
+      }
+    }
+
     const email = emailTemplates.trialStarted({
       firstName: recipient.firstName,
       endsAt: row?.current_period_ends_at ?? null,

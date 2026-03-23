@@ -167,24 +167,15 @@ function SubscribePageContent() {
             <span className={styles.brandText}>Investigation Tool</span>
           </div>
 
-          <div className={styles.copyBlock}>
-            {checkoutState === "success" ? null : (
-              <>
-                <h1>
-                  {checkoutState === "failed"
-                    ? "Payment failed."
-                    : userEmail
-                      ? `Choose your access for ${userEmail}.`
-                      : "Choose your access."}
-                </h1>
-                <p>
-                  {checkoutState === "failed"
-                    ? "We could not complete your payment. Choose an access type and try again when you are ready."
-                    : "Start with a free trial, buy a single 30 day investigation pass, or enable ongoing monthly access for unrestricted incident investigation workflow, mapping, collaboration, and reporting."}
-                </p>
-              </>
-            )}
-          </div>
+          {checkoutState ? null : (
+            <div className={styles.copyBlock}>
+              <h1>{userEmail ? `Choose your access for ${userEmail}.` : "Choose your access."}</h1>
+              <p>
+                Start with a free trial, buy a single 30 day investigation pass, or enable ongoing monthly access for unrestricted
+                incident investigation workflow, mapping, collaboration, and reporting.
+              </p>
+            </div>
+          )}
 
           {checkoutState === "success" ? (
             <div className={styles.checkoutState}>

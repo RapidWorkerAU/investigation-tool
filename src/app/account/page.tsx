@@ -7,6 +7,7 @@ import DashboardShell from "@/components/dashboard/DashboardShell";
 import styles from "@/components/dashboard/DashboardShell.module.css";
 import { DashboardPageSkeleton } from "@/components/dashboard/DashboardTableLoadingState";
 import { type BillingAccessState, fetchAccessState } from "@/lib/access";
+import { getAccessTimeZoneLabel } from "@/lib/accessTime";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
 
 type AccountSectionId = "user-info" | "my-access" | "delete-account";
@@ -19,14 +20,40 @@ const accountTabs: Array<{ id: AccountSectionId; label: string }> = [
 
 const formatDateTime = (value: string | null) =>
   value
-    ? new Date(value).toLocaleString("en-AU", {
+    ? new Intl.DateTimeFormat("en-AU", {
         day: "2-digit",
         month: "short",
         year: "numeric",
         hour: "2-digit",
         minute: "2-digit",
-      })
+        timeZone: "Australia/Perth",
+      }).format(new Date(value))
     : "Not available";
+const accessTimeZoneLabel = getAccessTimeZoneLabel();
+
+function renderAccessDateTimeTable(value: string | null) {
+  const formatted = formatDateTime(value);
+  const hasTimestamp = value && formatted !== "Not available";
+
+  return (
+    <span>
+      {formatted}
+      {hasTimestamp ? <><br />{`(${accessTimeZoneLabel})`}</> : null}
+    </span>
+  );
+}
+
+function renderAccessDateTimeMobile(value: string | null) {
+  const formatted = formatDateTime(value);
+  const hasTimestamp = value && formatted !== "Not available";
+
+  return (
+    <span className={styles.reportScopeReadValue}>
+      {formatted}
+      {hasTimestamp ? <><br />{`(${accessTimeZoneLabel})`}</> : null}
+    </span>
+  );
+}
 
 const formatAccessType = (value: BillingAccessState["currentAccessType"]) => {
   switch (value) {
@@ -330,9 +357,7 @@ export default function AccountPage() {
     }
   };
 
-  const canOpenBillingPortal =
-    accessState?.currentAccessType === "subscription_monthly" ||
-    accessState?.currentAccessStatus === "payment_failed";
+  const canOpenBillingPortal = Boolean(accessState);
 
   const canPurchasePass30 =
     accessState?.currentAccessType === "pass_30d" &&
@@ -635,8 +660,8 @@ export default function AccountPage() {
                             {formatAccessStatus(accessState?.currentAccessStatus ?? null)}
                           </span>
                         </td>
-                        <td>{formatDateTime(accessState?.currentPeriodStartsAt ?? null)}</td>
-                        <td>{formatDateTime(accessState?.currentPeriodEndsAt ?? null)}</td>
+                        <td>{renderAccessDateTimeTable(accessState?.currentPeriodStartsAt ?? null)}</td>
+                        <td>{renderAccessDateTimeTable(accessState?.currentPeriodEndsAt ?? null)}</td>
                         <td>
                           <div className={styles.accessActionGroup}>
                             <button
@@ -688,11 +713,11 @@ export default function AccountPage() {
                     </div>
                     <div className={styles.accountAccessMobileItem}>
                       <span className={styles.reportScopeReadLabel}>Started</span>
-                      <span className={styles.reportScopeReadValue}>{formatDateTime(accessState?.currentPeriodStartsAt ?? null)}</span>
+                      {renderAccessDateTimeMobile(accessState?.currentPeriodStartsAt ?? null)}
                     </div>
                     <div className={styles.accountAccessMobileItem}>
                       <span className={styles.reportScopeReadLabel}>Expires</span>
-                      <span className={styles.reportScopeReadValue}>{formatDateTime(accessState?.currentPeriodEndsAt ?? null)}</span>
+                      {renderAccessDateTimeMobile(accessState?.currentPeriodEndsAt ?? null)}
                     </div>
                   </div>
 
