@@ -5,6 +5,7 @@ import {
   Handle,
   type Node,
   type NodeProps,
+  NodeToolbar,
   NodeResizeControl,
   Position,
 } from "@xyflow/react";
@@ -16,6 +17,8 @@ import {
   type FlowData,
   groupingMinHeight,
   groupingMinWidth,
+  incidentCardHeight,
+  incidentCardWidth,
   minorGridSize,
   parsePersonLabels,
   personIconSize,
@@ -52,10 +55,16 @@ function NodeInfoBadge({
   text,
   wrapperClassName,
   buttonClassName,
+  iconSrc,
+  iconClassName,
+  iconMaskClassName,
 }: {
   text: string;
   wrapperClassName?: string;
   buttonClassName?: string;
+  iconSrc?: string;
+  iconClassName?: string;
+  iconMaskClassName?: string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const infoRef = useRef<HTMLDivElement | null>(null);
@@ -87,7 +96,26 @@ function NodeInfoBadge({
           setIsOpen((prev) => !prev);
         }}
       >
-        i
+        {iconSrc ? (
+          iconMaskClassName ? (
+            <span
+              aria-hidden="true"
+              className={iconMaskClassName}
+              style={{
+                WebkitMaskImage: `url('${iconSrc}')`,
+                maskImage: `url('${iconSrc}')`,
+                WebkitMaskRepeat: "no-repeat",
+                maskRepeat: "no-repeat",
+                WebkitMaskPosition: "center",
+                maskPosition: "center",
+                WebkitMaskSize: "contain",
+                maskSize: "contain",
+              }}
+            />
+          ) : (
+            <img src={iconSrc} alt="" className={iconClassName || "h-3.5 w-3.5"} />
+          )
+        ) : "i"}
       </button>
       {isOpen ? (
         <div className="absolute right-0 top-7 w-56 rounded border border-slate-300 bg-white px-2 py-1.5 text-[10px] leading-snug text-slate-700 shadow-[0_6px_18px_rgba(15,23,42,0.2)]">
@@ -170,6 +198,7 @@ function DocumentTileNode({ data }: NodeProps<Node<FlowData>>) {
 function ProcessHeadingNode({ data, selected }: NodeProps<Node<FlowData>>) {
   const categoryColor = data.categoryColor ?? defaultCategoryColor;
   const headingTextColor = categoryColor.toLowerCase() === defaultCategoryColor ? "#ffffff" : "#000000";
+  const fontSize = Math.max(10, Math.min(72, Number(data.textStyle?.fontSize ?? 12) || 12));
   return (
     <div
       className="relative flex h-full w-full flex-col border px-2 py-1 shadow-[0_6px_20px_rgba(15,23,42,0.18)]"
@@ -198,7 +227,7 @@ function ProcessHeadingNode({ data, selected }: NodeProps<Node<FlowData>>) {
         </>
       ) : null}
       <div className="text-center text-[9px] font-semibold uppercase tracking-[0.18em]">Category</div>
-      <div className="flex flex-1 items-center justify-center overflow-hidden text-center text-[12px] font-semibold leading-tight">
+      <div className="flex flex-1 items-center justify-center overflow-hidden text-center font-semibold leading-tight" style={{ fontSize: `${fontSize}px` }}>
         <span className="line-clamp-3 break-words whitespace-normal">{data.title || "New Category"}</span>
       </div>
     </div>
@@ -385,8 +414,10 @@ function FlowTableNode({ data, selected }: NodeProps<Node<FlowData>>) {
   const [draftCellTexts, setDraftCellTexts] = useState<string[]>(normalizedCellTexts);
   const [draftCellStyles, setDraftCellStyles] = useState(normalizedCellStyles);
   const tableRootRef = useRef<HTMLDivElement | null>(null);
+  const editingTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   const toolbarInteractionUntilRef = useRef<number>(0);
+  const pendingCursorToEndCellRef = useRef<number | null>(null);
   const showResizeHandles = Boolean(data.canEdit) && selected;
   const markToolbarInteraction = useCallback(() => {
     toolbarInteractionUntilRef.current = Date.now() + 700;
@@ -480,6 +511,25 @@ function FlowTableNode({ data, selected }: NodeProps<Node<FlowData>>) {
     setRangeAnchorCellIndex(null);
     setSelectedCellIndices(new Set());
   }, [selectedCellIndex, commitCellAtIndex]);
+  const moveSelectedCell = useCallback(
+    (cellIndex: number, direction: "up" | "down" | "left" | "right") => {
+      const rowIndex = Math.floor(cellIndex / columns);
+      const columnIndex = cellIndex % columns;
+      let nextRow = rowIndex;
+      let nextColumn = columnIndex;
+      if (direction === "up") nextRow -= 1;
+      if (direction === "down") nextRow += 1;
+      if (direction === "left") nextColumn -= 1;
+      if (direction === "right") nextColumn += 1;
+      if (nextRow < 0 || nextRow >= rows || nextColumn < 0 || nextColumn >= columns) return;
+      const nextIndex = nextRow * columns + nextColumn;
+      setSelectedCellIndex(nextIndex);
+      setRangeAnchorCellIndex(nextIndex);
+      setSelectedCellIndices(new Set([nextIndex]));
+      setEditingCellIndex(null);
+    },
+    [columns, rows]
+  );
   const applyStyleToEditingCell = useCallback(
     (nextStyle: {
       bold?: boolean;
@@ -551,6 +601,65 @@ function FlowTableNode({ data, selected }: NodeProps<Node<FlowData>>) {
     document.addEventListener("pointerdown", handleDocumentPointerDown);
     return () => document.removeEventListener("pointerdown", handleDocumentPointerDown);
   }, [selectedCellIndex, commitAndClearSelection]);
+  useEffect(() => {
+    if (!canEdit || !selected || selectedCellIndex == null || editingCellIndex != null) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const tagName = target?.tagName?.toLowerCase() ?? "";
+      if (target?.isContentEditable || tagName === "input" || tagName === "textarea" || tagName === "select") return;
+
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        moveSelectedCell(selectedCellIndex, "up");
+        return;
+      }
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        moveSelectedCell(selectedCellIndex, "down");
+        return;
+      }
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        moveSelectedCell(selectedCellIndex, "left");
+        return;
+      }
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        moveSelectedCell(selectedCellIndex, "right");
+        return;
+      }
+
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.key.length !== 1) return;
+
+      event.preventDefault();
+      setDraftCellTexts((prev) => {
+        const next = [...prev];
+        next[selectedCellIndex] = `${next[selectedCellIndex] ?? ""}${event.key}`;
+        return next;
+      });
+      pendingCursorToEndCellRef.current = selectedCellIndex;
+      setEditingCellIndex(selectedCellIndex);
+      setSelectedCellIndices(new Set([selectedCellIndex]));
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [canEdit, selected, selectedCellIndex, editingCellIndex, moveSelectedCell]);
+  useEffect(() => {
+    if (editingCellIndex == null) return;
+    if (pendingCursorToEndCellRef.current !== editingCellIndex) return;
+    const textarea = editingTextareaRef.current;
+    if (!textarea) return;
+    const setCursorToEnd = () => {
+      const end = textarea.value.length;
+      textarea.focus();
+      textarea.setSelectionRange(end, end);
+      pendingCursorToEndCellRef.current = null;
+    };
+    const frame = requestAnimationFrame(setCursorToEnd);
+    return () => cancelAnimationFrame(frame);
+  }, [editingCellIndex]);
 
   const headerTextColor = (() => {
     if (!headerBg) return "#111827";
@@ -605,9 +714,14 @@ function FlowTableNode({ data, selected }: NodeProps<Node<FlowData>>) {
     <div ref={tableRootRef} className="relative h-full w-full overflow-visible">
       <HiddenEdgeHandles />
       {canEdit && selectedCellIndices.size > 0 && editingCellIndex == null && activeCellStyle ? (
+        <NodeToolbar
+          isVisible
+          position={Position.Top}
+          offset={12}
+        >
         <div
           ref={toolbarRef}
-          className="nodrag nopan absolute left-1/2 top-0 z-30 flex -translate-x-1/2 -translate-y-[calc(100%+8px)] items-center gap-2 rounded-xl border border-slate-200 bg-white px-2 py-1.5 shadow-[0_10px_28px_rgba(15,23,42,0.18)]"
+          className="nodrag nopan flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-2 py-1.5 shadow-[0_10px_28px_rgba(15,23,42,0.18)]"
           onPointerDown={(event) => {
             markToolbarInteraction();
             event.stopPropagation();
@@ -765,6 +879,7 @@ function FlowTableNode({ data, selected }: NodeProps<Node<FlowData>>) {
             U
           </button>
         </div>
+        </NodeToolbar>
       ) : null}
       <div
         className="relative h-full w-full overflow-hidden border bg-white"
@@ -890,6 +1005,7 @@ function FlowTableNode({ data, selected }: NodeProps<Node<FlowData>>) {
               >
                 {isEditing && canEdit ? (
                   <textarea
+                    ref={isEditing ? editingTextareaRef : null}
                     autoFocus
                     className="nodrag h-full w-full resize-none bg-transparent p-0 text-[10px] font-medium leading-tight outline-none"
                     style={{
@@ -1029,6 +1145,19 @@ function TextBoxNode({ data, selected }: NodeProps<Node<FlowData>>) {
   const style = data.textStyle ?? {};
   const fontSize = Number(style.fontSize ?? 14);
   const safeFontSize = Number.isFinite(fontSize) ? Math.min(168, Math.max(16, fontSize)) : 16;
+  const backgroundColor =
+    typeof style.backgroundColor === "string" && /^#[0-9a-fA-F]{6}$/.test(style.backgroundColor) ? style.backgroundColor : "#FFFFFF";
+  const getContrastColor = (hex: string) => {
+    const normalized = hex.replace("#", "");
+    const r = Number.parseInt(normalized.slice(0, 2), 16) / 255;
+    const g = Number.parseInt(normalized.slice(2, 4), 16) / 255;
+    const b = Number.parseInt(normalized.slice(4, 6), 16) / 255;
+    const toLinear = (value: number) => (value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+    const luminance = 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b);
+    return luminance > 0.42 ? "#111827" : "#FFFFFF";
+  };
+  const contrastTextColor = getContrastColor(backgroundColor);
+  const hasOutline = Boolean(style.outline);
   return (
     <div className="relative h-full w-full overflow-visible">
       {selected ? (
@@ -1050,7 +1179,9 @@ function TextBoxNode({ data, selected }: NodeProps<Node<FlowData>>) {
       <div
         className="h-full w-full px-2 py-1 text-[14px] leading-snug text-slate-900"
         style={{
-          background: "rgba(255,255,255,0.5)",
+          background: backgroundColor,
+          color: contrastTextColor,
+          border: hasOutline ? `2px solid ${contrastTextColor}` : "none",
           textAlign: style.align ?? "left",
           fontWeight: style.bold ? 700 : 400,
           fontStyle: style.italic ? "italic" : "normal",
@@ -1655,7 +1786,55 @@ function BowtieRiskRatingNode({ data }: NodeProps<Node<FlowData>>) {
   );
 }
 
-function IncidentCard({
+const incidentNodeShadow = "0 14px 30px rgba(15,23,42,0.14)";
+const incidentFloatingShadow = "0 10px 24px rgba(15,23,42,0.16)";
+const incidentNodeMinHeight = incidentCardHeight;
+
+function hexToRgb(hex: string) {
+  const normalized = hex.replace("#", "").trim();
+  if (!/^[0-9a-f]{6}$/i.test(normalized)) return null;
+  return {
+    r: Number.parseInt(normalized.slice(0, 2), 16),
+    g: Number.parseInt(normalized.slice(2, 4), 16),
+    b: Number.parseInt(normalized.slice(4, 6), 16),
+  };
+}
+
+function mixHex(hex: string, targetHex: string, ratio: number) {
+  const source = hexToRgb(hex);
+  const target = hexToRgb(targetHex);
+  if (!source || !target) return hex;
+  const blend = (from: number, to: number) => Math.round(from + (to - from) * ratio);
+  const r = blend(source.r, target.r);
+  const g = blend(source.g, target.g);
+  const b = blend(source.b, target.b);
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+function incidentBannerGradient(base: string) {
+  return `linear-gradient(135deg, ${mixHex(base, "#0f172a", 0.2)} 0%, ${mixHex(base, "#1d4ed8", 0.08)} 45%, ${mixHex(base, "#ffffff", 0.08)} 100%)`;
+}
+
+function IncidentResizeHandles() {
+  return (
+    <>
+      <NodeResizeControl
+        position={Position.Right}
+        minWidth={incidentCardWidth}
+        minHeight={incidentNodeMinHeight}
+        style={{ width: 10, height: 10, borderRadius: 0, border: "1px solid #334155", background: "#ffffff" }}
+      />
+      <NodeResizeControl
+        position={Position.Bottom}
+        minWidth={incidentCardWidth}
+        minHeight={incidentNodeMinHeight}
+        style={{ width: 10, height: 10, borderRadius: 0, border: "1px solid #334155", background: "#ffffff" }}
+      />
+    </>
+  );
+}
+
+function ModernIncidentNode({
   data,
   selected,
   fallbackTitle,
@@ -1666,351 +1845,56 @@ function IncidentCard({
   fallbackTitle: string;
   fallbackType: string;
 }) {
-  return (
-    <div className="relative h-full w-full overflow-visible">
-      <NodeInfoBadge text={getNodeInfoText(data)} />
-      <HiddenEdgeHandles />
-      {selected ? (
-        <>
-          <NodeResizeControl
-            position={Position.Right}
-            minWidth={bowtieDefaultWidth}
-            minHeight={bowtieControlHeight}
-            style={{ width: 10, height: 10, borderRadius: 0, border: "1px solid #334155", background: "#ffffff" }}
-          />
-          <NodeResizeControl
-            position={Position.Bottom}
-            minWidth={bowtieDefaultWidth}
-            minHeight={bowtieControlHeight}
-            style={{ width: 10, height: 10, borderRadius: 0, border: "1px solid #334155", background: "#ffffff" }}
-          />
-        </>
-      ) : null}
-      <div className="flex h-full w-full flex-col overflow-hidden border border-slate-300 bg-white text-slate-900 shadow-[0_6px_20px_rgba(15,23,42,0.16)]">
-        <div
-          className="flex h-5 items-center justify-center px-2 text-[9px] font-semibold uppercase tracking-[0.08em]"
-          style={{ backgroundColor: data.bannerBg || "#64748b", color: data.bannerText || "#ffffff" }}
-        >
-          {data.typeName || fallbackType}
-        </div>
-        <div className="flex flex-1 flex-col px-3 py-2 text-center text-slate-900">
-          {data.metaSubLabel ? (
-            <div className="w-full text-center text-[10px] font-medium leading-tight text-slate-600">
-              {data.metaSubLabel}
-            </div>
-          ) : null}
-          <div className="flex flex-1 items-center justify-center text-[11px] font-semibold leading-tight">
-            {data.description || data.title || fallbackTitle}
-          </div>
-        </div>
-      </div>
-      {data.metaLabel ? (
-        <div
-          className="pointer-events-none absolute left-0 right-0 top-full mt-1 border px-2 py-1 text-center text-[9px] font-semibold leading-tight"
-          style={{
-            backgroundColor: data.metaLabelBg || "#000000",
-            color: data.metaLabelText || "#ffffff",
-            borderColor: data.metaLabelBorder || "#000000",
-          }}
-        >
-          <span>{data.metaLabel}</span>
-          {data.metaLabelSecondary ? <span className="ml-1 font-normal">{data.metaLabelSecondary}</span> : null}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function IncidentSequenceStepNode({ data, selected }: NodeProps<Node<FlowData>>) {
-  const locationLabel = (data.metaSubLabel || "").trim();
-  return (
-    <div className="relative h-full w-full overflow-visible">
-      <NodeInfoBadge text={getNodeInfoText(data)} />
-      <HiddenEdgeHandles />
-      {selected ? (
-        <>
-          <NodeResizeControl
-            position={Position.Right}
-            minWidth={bowtieDefaultWidth}
-            minHeight={bowtieControlHeight}
-            style={{ width: 10, height: 10, borderRadius: 0, border: "1px solid #334155", background: "#ffffff" }}
-          />
-          <NodeResizeControl
-            position={Position.Bottom}
-            minWidth={bowtieDefaultWidth}
-            minHeight={bowtieControlHeight}
-            style={{ width: 10, height: 10, borderRadius: 0, border: "1px solid #334155", background: "#ffffff" }}
-          />
-        </>
-      ) : null}
-      <div className="flex h-full w-full flex-col overflow-hidden border border-slate-300 bg-white text-slate-900 shadow-[0_6px_20px_rgba(15,23,42,0.16)]">
-        <div
-          className="flex h-5 items-center justify-center px-2 text-[9px] font-semibold uppercase tracking-[0.08em]"
-          style={{ backgroundColor: data.bannerBg || "#64748b", color: data.bannerText || "#ffffff" }}
-        >
-          {data.typeName || "Sequence Step"}
-        </div>
-        <div className="flex flex-1 flex-col px-3 py-2 text-center text-slate-900">
-          <div className="flex flex-1 items-center justify-center text-[11px] font-semibold leading-tight">
-            {data.description || data.title || "Sequence Step"}
-          </div>
-          {locationLabel ? (
-            <div className="mt-1 w-full text-center text-[10px] font-normal leading-tight text-slate-600">
-              ({locationLabel})
-            </div>
-          ) : null}
-        </div>
-      </div>
-      {data.metaLabel ? (
-        <div
-          className="pointer-events-none absolute left-0 right-0 top-full mt-1 border px-2 py-1 text-center text-[9px] font-semibold leading-tight"
-          style={{
-            backgroundColor: data.metaLabelBg || "#000000",
-            color: data.metaLabelText || "#ffffff",
-            borderColor: data.metaLabelBorder || "#000000",
-          }}
-        >
-          <span>{data.metaLabel}</span>
-          {data.metaLabelSecondary ? <span className="ml-1 font-normal">{data.metaLabelSecondary}</span> : null}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function IncidentOutcomeNode({ data, selected }: NodeProps<Node<FlowData>>) {
-  return <IncidentCard data={data} selected={selected} fallbackTitle="Outcome" fallbackType="Outcome" />;
-}
-
-function IncidentTaskConditionNode({ data, selected }: NodeProps<Node<FlowData>>) {
-  return <IncidentCard data={data} selected={selected} fallbackTitle="Task / Condition" fallbackType="Task / Condition" />;
-}
-
-function IncidentFactorNode({ data, selected }: NodeProps<Node<FlowData>>) {
-  const classification = (data.metaLabelSecondary || "").trim().toLowerCase();
-  const classificationBorder =
-    classification === "essential"
-      ? "#dc2626"
-      : classification === "contributing"
-      ? "#f59e0b"
-      : classification === "predisposing"
-      ? "#7c3aed"
-      : "#64748b";
-  return (
-    <div className="relative h-full w-full overflow-visible">
-      <NodeInfoBadge text={getNodeInfoText(data)} />
-      <HiddenEdgeHandles />
-      {selected ? (
-        <>
-          <NodeResizeControl
-            position={Position.Right}
-            minWidth={bowtieDefaultWidth}
-            minHeight={bowtieControlHeight}
-            style={{ width: 10, height: 10, borderRadius: 0, border: "1px solid #334155", background: "#ffffff" }}
-          />
-          <NodeResizeControl
-            position={Position.Bottom}
-            minWidth={bowtieDefaultWidth}
-            minHeight={bowtieControlHeight}
-            style={{ width: 10, height: 10, borderRadius: 0, border: "1px solid #334155", background: "#ffffff" }}
-          />
-        </>
-      ) : null}
-      <div className="flex h-full w-full flex-col overflow-hidden border border-slate-300 bg-white text-slate-900 shadow-[0_6px_20px_rgba(15,23,42,0.16)]">
-        <div
-          className="flex h-5 items-center justify-center px-2 text-[9px] font-semibold uppercase tracking-[0.08em]"
-          style={{ backgroundColor: data.bannerBg || "#64748b", color: data.bannerText || "#ffffff" }}
-        >
-          {data.typeName || "Factor"}
-        </div>
-        <div className="flex flex-1 flex-col px-3 py-2 text-center text-slate-900">
-          <div className="flex flex-1 items-center justify-center text-[11px] font-semibold leading-tight">
-            {data.description || data.title || "Factor"}
-          </div>
-          {data.metaSubLabel ? (
-            <div className="mt-1 w-full text-center text-[10px] font-normal leading-tight text-slate-600">
-              {data.metaSubLabel}
-            </div>
-          ) : null}
-        </div>
-      </div>
-      {data.metaLabel ? (
-        <div className="pointer-events-none absolute left-0 right-0 top-full mt-1 flex flex-col gap-1">
-          <div
-            className="border px-2 py-1 text-center text-[9px] font-semibold leading-tight"
-            style={{
-              backgroundColor: data.metaLabelBg || "#16a34a",
-              color: data.metaLabelText || "#ffffff",
-              borderColor: data.metaLabelBg || "#16a34a",
-            }}
-          >
-            {data.metaLabel}
-          </div>
-          {data.metaLabelSecondary ? (
-            <div
-              className="border bg-white px-2 py-1 text-center text-[9px] font-semibold leading-tight text-slate-800"
-              style={{ borderColor: classificationBorder }}
-            >
-              {data.metaLabelSecondary}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function IncidentSystemFactorNode({ data, selected }: NodeProps<Node<FlowData>>) {
-  const classification = (data.metaLabelSecondary || "").trim().toLowerCase();
-  const classificationBorder =
-    classification === "essential"
-      ? "#dc2626"
-      : classification === "contributing"
-      ? "#f59e0b"
-      : classification === "predisposing"
-      ? "#7c3aed"
-      : "#64748b";
-  return (
-    <div className="relative h-full w-full overflow-visible">
-      <NodeInfoBadge text={getNodeInfoText(data)} />
-      <HiddenEdgeHandles />
-      {selected ? (
-        <>
-          <NodeResizeControl
-            position={Position.Right}
-            minWidth={bowtieDefaultWidth}
-            minHeight={bowtieControlHeight}
-            style={{ width: 10, height: 10, borderRadius: 0, border: "1px solid #334155", background: "#ffffff" }}
-          />
-          <NodeResizeControl
-            position={Position.Bottom}
-            minWidth={bowtieDefaultWidth}
-            minHeight={bowtieControlHeight}
-            style={{ width: 10, height: 10, borderRadius: 0, border: "1px solid #334155", background: "#ffffff" }}
-          />
-        </>
-      ) : null}
-      <div className="flex h-full w-full flex-col overflow-hidden border border-slate-300 bg-white text-slate-900 shadow-[0_6px_20px_rgba(15,23,42,0.16)]">
-        <div
-          className="flex h-5 items-center justify-center px-2 text-[9px] font-semibold uppercase tracking-[0.08em]"
-          style={{ backgroundColor: data.bannerBg || "#64748b", color: data.bannerText || "#ffffff" }}
-        >
-          {data.typeName || "System Factor"}
-        </div>
-        <div className="flex flex-1 flex-col px-3 py-2 text-center text-slate-900">
-          <div className="flex flex-1 items-center justify-center text-[11px] font-semibold leading-tight">
-            {data.description || data.title || "System Factor"}
-          </div>
-          {data.metaSubLabel ? (
-            <div className="mt-1 w-full text-center text-[10px] font-normal leading-tight text-slate-600">
-              {data.metaSubLabel}
-            </div>
-          ) : null}
-        </div>
-      </div>
-      {data.metaLabel ? (
-        <div className="pointer-events-none absolute left-0 right-0 top-full mt-1 flex flex-col gap-1">
-          <div
-            className="border px-2 py-1 text-center text-[9px] font-semibold leading-tight"
-            style={{
-              backgroundColor: data.metaLabelBg || "#16a34a",
-              color: data.metaLabelText || "#ffffff",
-              borderColor: data.metaLabelBg || "#16a34a",
-            }}
-          >
-            {data.metaLabel}
-          </div>
-          {data.metaLabelSecondary ? (
-            <div
-              className="border bg-white px-2 py-1 text-center text-[9px] font-semibold leading-tight text-slate-800"
-              style={{ borderColor: classificationBorder }}
-            >
-              {data.metaLabelSecondary}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function IncidentControlBarrierNode({ data, selected }: NodeProps<Node<FlowData>>) {
-  return (
-    <div className="relative h-full w-full overflow-visible">
-      <NodeInfoBadge text={getNodeInfoText(data)} />
-      <HiddenEdgeHandles />
-      {selected ? (
-        <>
-          <NodeResizeControl
-            position={Position.Right}
-            minWidth={bowtieDefaultWidth}
-            minHeight={bowtieControlHeight}
-            style={{ width: 10, height: 10, borderRadius: 0, border: "1px solid #334155", background: "#ffffff" }}
-          />
-          <NodeResizeControl
-            position={Position.Bottom}
-            minWidth={bowtieDefaultWidth}
-            minHeight={bowtieControlHeight}
-            style={{ width: 10, height: 10, borderRadius: 0, border: "1px solid #334155", background: "#ffffff" }}
-          />
-        </>
-      ) : null}
-      <div className="flex h-full w-full flex-col overflow-hidden border border-slate-300 bg-white text-slate-900 shadow-[0_6px_20px_rgba(15,23,42,0.16)]">
-        <div
-          className="flex h-5 items-center justify-center px-2 text-[9px] font-semibold uppercase tracking-[0.08em]"
-          style={{ backgroundColor: data.bannerBg || "#64748b", color: data.bannerText || "#ffffff" }}
-        >
-          {data.typeName || "Control / Barrier"}
-        </div>
-        <div className="flex flex-1 flex-col px-3 py-2 text-center text-slate-900">
-          <div className="flex flex-1 items-center justify-center text-[11px] font-semibold leading-tight">
-            {data.description || data.title || "Control / Barrier"}
-          </div>
-          {data.metaSubLabel ? (
-            <div className="mt-1 w-full text-center text-[10px] font-normal leading-tight text-slate-600">
-              {data.metaSubLabel}
-            </div>
-          ) : null}
-        </div>
-      </div>
-      {data.metaLabel ? (
-        <div
-          className="pointer-events-none absolute left-0 right-0 top-full mt-1 border px-2 py-1 text-center text-[9px] font-semibold leading-tight"
-          style={{
-            backgroundColor: data.metaLabelBg || "#000000",
-            color: data.metaLabelText || "#ffffff",
-            borderColor: data.metaLabelBorder || "#000000",
-          }}
-        >
-          <span>{data.metaLabel}</span>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function IncidentEvidenceNode({ data, selected }: NodeProps<Node<FlowData>>) {
-  const hasPreview = Boolean(data.evidenceShowPreview && data.evidenceMediaUrl);
-  const isPdf = (data.evidenceMediaMime || "").toLowerCase().includes("pdf");
-  const previewName = data.evidenceMediaName || (isPdf ? "PDF Document" : "Evidence File");
-  const rotationDeg = data.evidenceMediaRotationDeg ?? 0;
+  const tags = data.incidentTags ?? [];
+  const hasTags = tags.length > 0;
+  const isEvidenceNode = data.entityKind === "incident_evidence";
+  const hasEvidencePreview = Boolean(data.evidenceShowPreview && data.evidenceMediaUrl);
+  const isEvidencePdf = (data.evidenceMediaMime || "").toLowerCase().includes("pdf");
+  const evidencePreviewName = data.evidenceMediaName || (isEvidencePdf ? "PDF Document" : "Evidence File");
+  const evidenceRotationDeg = data.evidenceMediaRotationDeg ?? 0;
+  const [detailOpen, setDetailOpen] = useState(Boolean(data.incidentDetailOpen));
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [isInfoAnimating, setIsInfoAnimating] = useState(false);
   const [imageAspectRatio, setImageAspectRatio] = useState(3 / 4);
   const [imagePreviewErrored, setImagePreviewErrored] = useState(false);
   const [renderImageUrl, setRenderImageUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDetailOpen(Boolean(data.incidentDetailOpen));
+  }, [data.incidentDetailOpen]);
+
+  useEffect(() => {
+    if (!infoOpen) return;
+    const handlePointerDown = () => {
+      setInfoOpen(false);
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [infoOpen]);
+
+  const triggerInfoFlip = useCallback((nextOpen: boolean) => {
+    setIsInfoAnimating(true);
+    setInfoOpen(nextOpen);
+    window.setTimeout(() => {
+      setIsInfoAnimating(false);
+    }, 320);
+  }, []);
+
   useEffect(() => {
     setImagePreviewErrored(false);
     setImageAspectRatio(3 / 4);
   }, [data.evidenceMediaUrl]);
+
   useEffect(() => {
     let cancelled = false;
-    if (!data.evidenceMediaUrl || isPdf) {
+    if (!data.evidenceMediaUrl || isEvidencePdf) {
       setRenderImageUrl(data.evidenceMediaUrl || null);
       return;
     }
-      if (rotationDeg === 0) {
-        setRenderImageUrl(data.evidenceMediaUrl ?? null);
-        return;
-      }
+    if (evidenceRotationDeg === 0) {
+      setRenderImageUrl(data.evidenceMediaUrl ?? null);
+      return;
+    }
     const image = new Image();
     image.crossOrigin = "anonymous";
     image.onload = () => {
@@ -2023,7 +1907,7 @@ function IncidentEvidenceNode({ data, selected }: NodeProps<Node<FlowData>>) {
           return;
         }
         const canvas = document.createElement("canvas");
-        if (rotationDeg === 90 || rotationDeg === 270) {
+        if (evidenceRotationDeg === 90 || evidenceRotationDeg === 270) {
           canvas.width = ih;
           canvas.height = iw;
         } else {
@@ -2035,10 +1919,11 @@ function IncidentEvidenceNode({ data, selected }: NodeProps<Node<FlowData>>) {
           setRenderImageUrl(data.evidenceMediaUrl ?? null);
           return;
         }
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.translate(canvas.width / 2, canvas.height / 2);
-        ctx.rotate((rotationDeg * Math.PI) / 180);
+        ctx.rotate((evidenceRotationDeg * Math.PI) / 180);
         ctx.drawImage(image, -iw / 2, -ih / 2);
-        setRenderImageUrl(canvas.toDataURL("image/jpeg", 0.92));
+        setRenderImageUrl(canvas.toDataURL("image/png"));
       } catch {
         setRenderImageUrl(data.evidenceMediaUrl ?? null);
       }
@@ -2051,83 +1936,192 @@ function IncidentEvidenceNode({ data, selected }: NodeProps<Node<FlowData>>) {
     return () => {
       cancelled = true;
     };
-  }, [data.evidenceMediaUrl, isPdf, rotationDeg]);
+  }, [data.evidenceMediaUrl, isEvidencePdf, evidenceRotationDeg]);
+
+  const showDetailToggle = hasTags || hasEvidencePreview;
+
   return (
     <div className="relative h-full w-full overflow-visible">
-      <NodeInfoBadge text={getNodeInfoText(data)} />
       <HiddenEdgeHandles />
-      {selected ? (
-        <>
-          <NodeResizeControl
-            position={Position.Right}
-            minWidth={bowtieDefaultWidth}
-            minHeight={bowtieControlHeight}
-            style={{ width: 10, height: 10, borderRadius: 0, border: "1px solid #334155", background: "#ffffff" }}
-          />
-          <NodeResizeControl
-            position={Position.Bottom}
-            minWidth={bowtieDefaultWidth}
-            minHeight={bowtieControlHeight}
-            style={{ width: 10, height: 10, borderRadius: 0, border: "1px solid #334155", background: "#ffffff" }}
-          />
-        </>
-      ) : null}
-      <div className="flex h-full w-full flex-col overflow-hidden border border-slate-300 bg-white text-slate-900 shadow-[0_6px_20px_rgba(15,23,42,0.16)]">
-        <div
-          className="flex h-5 items-center justify-center px-2 text-[9px] font-semibold uppercase tracking-[0.08em]"
-          style={{ backgroundColor: data.bannerBg || "#64748b", color: data.bannerText || "#ffffff" }}
-        >
-          {data.typeName || "Evidence"}
-        </div>
-        <div className="flex flex-1 flex-col px-3 py-2 text-center text-slate-900">
-          <div className="flex flex-1 items-center justify-center text-[11px] font-semibold leading-tight">
-            {data.description || data.title || "Evidence"}
-          </div>
-          {data.metaSubLabel ? (
-            <div className="mt-1 w-full text-center text-[10px] font-normal leading-tight text-slate-600">
-              {data.metaSubLabel}
-            </div>
-          ) : null}
-        </div>
-      </div>
-      {hasPreview ? (
+      {selected ? <IncidentResizeHandles /> : null}
+      {!infoOpen ? (
         <button
           type="button"
-          className="nodrag nopan absolute left-0 top-full mt-2 w-full cursor-pointer border-0 bg-transparent p-0 text-left"
-          style={{ maxWidth: `${minorGridSize * 7}px` }}
+          className="nodrag nopan absolute right-3 top-[15px] z-[140] flex h-[20px] w-[20px] -translate-y-1/2 items-center justify-center bg-transparent p-0 transition"
+          aria-label="Node information"
+          title="Node information"
+          onPointerDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            triggerInfoFlip(true);
+          }}
+        >
+          <span
+            aria-hidden="true"
+            className="block h-[20px] w-[20px] bg-white"
+            style={{
+              WebkitMaskImage: "url('/icons/infoicon.svg')",
+              maskImage: "url('/icons/infoicon.svg')",
+              WebkitMaskRepeat: "no-repeat",
+              maskRepeat: "no-repeat",
+              WebkitMaskPosition: "center",
+              maskPosition: "center",
+              WebkitMaskSize: "contain",
+              maskSize: "contain",
+            }}
+          />
+        </button>
+      ) : null}
+      <div className={`h-full w-full ${isInfoAnimating ? "[perspective:1200px]" : ""}`}>
+        <div
+          className={`relative h-full w-full ${isInfoAnimating ? "transition-transform duration-300 [transform-style:preserve-3d]" : ""}`}
+          style={isInfoAnimating ? { transform: infoOpen ? "rotateY(180deg)" : "rotateY(0deg)" } : undefined}
+        >
+          <div
+            className={`absolute inset-0 flex h-full w-full flex-col overflow-hidden rounded-[18px] border border-slate-200 bg-white text-slate-900 ${isInfoAnimating ? "[backface-visibility:hidden]" : ""}`}
+            style={{
+              boxShadow: incidentNodeShadow,
+              visibility: !infoOpen || isInfoAnimating ? "visible" : "hidden",
+              pointerEvents: infoOpen ? "none" : "auto",
+            }}
+          >
+            <div
+              className="flex min-h-[28px] items-center justify-between gap-2 px-4 py-1.5 pr-11"
+              style={{ background: incidentBannerGradient(data.bannerBg || "#64748b"), color: data.bannerText || "#111827" }}
+            >
+              <div className="truncate text-[10px] font-semibold uppercase tracking-[0.08em]">
+                {data.typeName || fallbackType}
+              </div>
+            </div>
+            <div className="flex flex-1 flex-col px-4 pb-3 pt-2">
+              <div className="flex min-h-0 flex-1 items-start">
+                <div className="w-full max-h-[60px] overflow-y-auto pr-1 text-left text-[11px] font-medium leading-[1.35] text-slate-800">
+                  {data.description || data.title || fallbackTitle}
+                </div>
+              </div>
+              <div className="mt-2 flex min-h-[26px] items-center gap-2">
+                {tags.map((tag) => (
+                  <button
+                    key={tag.key}
+                    type="button"
+                    title={tag.label}
+                    aria-label={tag.label}
+                    className="nodrag nopan flex h-7 w-7 items-center justify-center bg-transparent p-0"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                    }}
+                  >
+                    <img src={tag.iconSrc} alt="" className="h-7 w-7 object-contain" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div
+            className={`absolute inset-0 flex h-full w-full flex-col overflow-hidden rounded-[18px] border border-slate-200 bg-white text-slate-900 ${isInfoAnimating ? "[backface-visibility:hidden]" : ""}`}
+            style={{
+              boxShadow: incidentNodeShadow,
+              transform: isInfoAnimating ? "rotateY(180deg)" : undefined,
+              visibility: infoOpen || isInfoAnimating ? "visible" : "hidden",
+              pointerEvents: infoOpen ? "auto" : "none",
+            }}
+          >
+            <div className="relative flex min-h-[28px] items-center px-4 py-1.5 pr-11 bg-[#111827] text-white">
+              <div className="truncate text-[10px] font-semibold uppercase tracking-[0.08em]">
+                Node Information
+              </div>
+              <button
+                type="button"
+                className="nodrag nopan absolute right-3 top-1/2 flex h-[20px] w-[20px] -translate-y-1/2 items-center justify-center bg-transparent p-0 transition"
+                aria-label="Close node information"
+                title="Close node information"
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  triggerInfoFlip(false);
+                }}
+              >
+                <span
+                  aria-hidden="true"
+                  className="block h-[20px] w-[20px] bg-white"
+                  style={{
+                    WebkitMaskImage: "url('/icons/infoicon.svg')",
+                    maskImage: "url('/icons/infoicon.svg')",
+                    WebkitMaskRepeat: "no-repeat",
+                    maskRepeat: "no-repeat",
+                    WebkitMaskPosition: "center",
+                    maskPosition: "center",
+                    WebkitMaskSize: "contain",
+                    maskSize: "contain",
+                  }}
+                />
+              </button>
+            </div>
+            <div className="flex flex-1 px-4 pb-3 pt-2">
+              <div className="w-full overflow-y-auto pr-1 text-left text-[11px] font-medium leading-[1.35] text-slate-800">
+                {getNodeInfoText(data)}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      {showDetailToggle ? (
+        <button
+          type="button"
+          className="nodrag nopan absolute right-3 top-full z-[130] mt-3 flex h-8 w-8 items-center justify-center rounded-full border border-slate-800 bg-white transition hover:bg-slate-50"
+          style={{ boxShadow: incidentFloatingShadow }}
+          aria-label={detailOpen ? "Collapse node details" : "Expand node details"}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const nextOpen = !detailOpen;
+            setDetailOpen(nextOpen);
+            data.onToggleIncidentDetail?.(nextOpen);
+          }}
+        >
+          <img src={detailOpen ? "/icons/collapse.svg" : "/icons/expand.svg"} alt="" className="h-[14px] w-[14px]" />
+        </button>
+      ) : null}
+      {detailOpen && isEvidenceNode && hasEvidencePreview ? (
+        <button
+          type="button"
+          className="nodrag nopan absolute left-0 top-full z-[120] mt-14 w-full cursor-pointer border-0 bg-transparent p-0 text-left"
           onClick={(event) => {
             event.preventDefault();
             event.stopPropagation();
             data.onOpenEvidenceMedia?.();
           }}
         >
-          {isPdf ? (
-            <div className="overflow-hidden rounded-md border border-slate-300 bg-white shadow-[0_4px_14px_rgba(15,23,42,0.14)]">
-              <div className="relative h-36 w-full overflow-hidden bg-white">
-                {data.evidenceMediaUrl ? (
-                  <iframe
-                    title={previewName}
-                    src={`${data.evidenceMediaUrl}#page=1&view=FitH&zoom=page-fit&toolbar=0&navpanes=0&scrollbar=0`}
-                    className="pointer-events-none absolute inset-0 h-full w-[calc(100%+18px)] border-0 bg-white"
-                  />
-                ) : null}
-              </div>
-              <div className="border-t border-slate-200 px-3 py-2">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">PDF</div>
-                <div className="mt-1 truncate text-[11px] font-semibold text-slate-900">{previewName}</div>
-              </div>
+          {isEvidencePdf ? (
+            <div className="relative h-56 w-full overflow-hidden bg-transparent">
+              {data.evidenceMediaUrl ? (
+                <iframe
+                  title={evidencePreviewName}
+                  src={`${data.evidenceMediaUrl}#page=1&view=FitH&zoom=page-fit&toolbar=0&navpanes=0&scrollbar=0`}
+                  className="pointer-events-none absolute inset-0 h-full w-[calc(100%+18px)] border-0 bg-white"
+                />
+              ) : null}
             </div>
           ) : (
-            <div className="overflow-hidden rounded-md shadow-[0_4px_14px_rgba(15,23,42,0.14)]">
+            <>
               {imagePreviewErrored ? (
-                <div className="flex h-48 w-full items-center justify-center px-3 text-center text-[11px] text-slate-700">
+                <div className="flex h-56 w-full items-center justify-center px-3 text-center text-[11px] text-slate-700">
                   Preview unavailable
                 </div>
               ) : (
-                <div className="relative w-full overflow-hidden rounded-md" style={{ aspectRatio: `${imageAspectRatio}` }}>
+                <div className="relative w-full overflow-hidden bg-transparent" style={{ aspectRatio: `${imageAspectRatio}` }}>
                   <img
-                    src={renderImageUrl || data.evidenceMediaUrl}
-                    alt={previewName}
+                    src={renderImageUrl || data.evidenceMediaUrl || ""}
+                    alt={evidencePreviewName}
                     className="absolute inset-0 h-full w-full object-contain"
                     onLoad={(event) => {
                       const img = event.currentTarget;
@@ -2139,34 +2133,70 @@ function IncidentEvidenceNode({ data, selected }: NodeProps<Node<FlowData>>) {
                   />
                 </div>
               )}
-            </div>
+            </>
           )}
         </button>
+      ) : null}
+      {detailOpen && (!isEvidenceNode || !hasEvidencePreview) && hasTags ? (
+        <div
+          className="nodrag nopan absolute left-0 right-0 top-full z-[120] mt-14 rounded-[18px] border border-white/70 bg-white/55 px-4 py-4 backdrop-blur-[3px]"
+          style={{ boxShadow: incidentFloatingShadow }}
+          onPointerDown={(event) => {
+            event.stopPropagation();
+          }}
+        >
+          <div className="flex flex-wrap gap-2">
+            {tags.map((tag) => (
+              <div
+                key={`${tag.key}-pill`}
+                className="flex items-center gap-2 rounded-full border border-white/70 px-3 py-1.5 text-[11px] font-medium text-slate-900"
+                style={{ backgroundColor: tag.pillBg, color: tag.pillText }}
+              >
+                <img src={tag.iconSrc} alt="" className="h-4 w-4" />
+                <span>{tag.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       ) : null}
     </div>
   );
 }
 
-function IncidentFindingNode({ data }: NodeProps<Node<FlowData>>) {
-  return (
-    <div className="relative flex h-full w-full flex-col items-center overflow-visible">
-      <NodeInfoBadge text={getNodeInfoText(data)} />
-      <HiddenEdgeHandles />
-      <div
-        className="flex w-full items-center justify-center border border-blue-900 bg-[#1d4ed8] px-3 text-center text-[11px] font-semibold text-white shadow-[0_6px_20px_rgba(15,23,42,0.18)]"
-        style={{ minHeight: `${minorGridSize * 2}px` }}
-      >
-        {data.title || "Finding"}
-      </div>
-      <div className="mt-2 flex w-full flex-1 items-start justify-center border border-slate-300 bg-white px-2 py-2 text-center text-[10px] leading-snug text-slate-900 whitespace-pre-wrap break-words">
-        {data.description || "Add description"}
-      </div>
-    </div>
-  );
+function IncidentSequenceStepNode({ data, selected }: NodeProps<Node<FlowData>>) {
+  return <ModernIncidentNode data={data} selected={selected} fallbackTitle="Sequence Step" fallbackType="Sequence Step" />;
+}
+
+function IncidentOutcomeNode({ data, selected }: NodeProps<Node<FlowData>>) {
+  return <ModernIncidentNode data={data} selected={selected} fallbackTitle="Outcome" fallbackType="Outcome" />;
+}
+
+function IncidentTaskConditionNode({ data, selected }: NodeProps<Node<FlowData>>) {
+  return <ModernIncidentNode data={data} selected={selected} fallbackTitle="Task / Condition" fallbackType="Task / Condition" />;
+}
+
+function IncidentFactorNode({ data, selected }: NodeProps<Node<FlowData>>) {
+  return <ModernIncidentNode data={data} selected={selected} fallbackTitle="Factor" fallbackType="Factor" />;
+}
+
+function IncidentSystemFactorNode({ data, selected }: NodeProps<Node<FlowData>>) {
+  return <ModernIncidentNode data={data} selected={selected} fallbackTitle="System Factor" fallbackType="System Factor" />;
+}
+
+function IncidentControlBarrierNode({ data, selected }: NodeProps<Node<FlowData>>) {
+  return <ModernIncidentNode data={data} selected={selected} fallbackTitle="Control / Barrier" fallbackType="Control / Barrier" />;
+}
+
+function IncidentEvidenceNode({ data, selected }: NodeProps<Node<FlowData>>) {
+  return <ModernIncidentNode data={data} selected={selected} fallbackTitle="Evidence" fallbackType="Evidence" />;
+}
+
+function IncidentFindingNode({ data, selected }: NodeProps<Node<FlowData>>) {
+  return <ModernIncidentNode data={data} selected={selected} fallbackTitle="Finding" fallbackType="Finding" />;
 }
 
 function IncidentRecommendationNode({ data, selected }: NodeProps<Node<FlowData>>) {
-  return <IncidentCard data={data} selected={selected} fallbackTitle="Recommendation" fallbackType="Recommendation" />;
+  return <ModernIncidentNode data={data} selected={selected} fallbackTitle="Recommendation" fallbackType="Recommendation" />;
 }
 
 export const flowNodeTypes = {

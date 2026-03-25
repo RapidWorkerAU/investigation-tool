@@ -179,6 +179,15 @@ export type FlowData = {
   disciplineKeys: string[];
   bannerBg: string;
   bannerText: string;
+  incidentTags?: Array<{
+    key: string;
+    label: string;
+    iconSrc: string;
+    pillBg: string;
+    pillText: string;
+  }>;
+  incidentDetailOpen?: boolean;
+  onToggleIncidentDetail?: (nextOpen: boolean) => void;
   isLandscape: boolean;
   isUnconfigured: boolean;
   isCritical?: boolean;
@@ -195,6 +204,8 @@ export type FlowData = {
     underline?: boolean;
     align?: "left" | "center" | "right";
     fontSize?: number;
+    backgroundColor?: string;
+    outline?: boolean;
   };
   shapeStyle?: {
     direction?: "left" | "right";
@@ -343,6 +354,8 @@ export const bowtieSquareHeight = minorGridSize * 4;
 export const bowtieControlHeight = minorGridSize * 4;
 export const bowtieRiskRatingHeight = minorGridSize * 3;
 export const incidentDefaultWidth = minorGridSize * 6;
+export const incidentCardWidth = minorGridSize * 9;
+export const incidentCardHeight = minorGridSize * 6;
 export const incidentThreeTwoHeight = Math.round((incidentDefaultWidth * 2) / 3);
 export const incidentSquareSize = incidentDefaultWidth;
 export const incidentFourThreeHeight = Math.round((incidentDefaultWidth * 3) / 4);

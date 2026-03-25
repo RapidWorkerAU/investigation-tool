@@ -435,17 +435,24 @@ export default function AccountPage() {
 
         <div className={styles.reportLayout}>
           <div className={styles.reportToggleBar}>
-            <div className={styles.reportToggleGroup} role="tablist" aria-label="Account sections">
+            <div className={`${styles.reportToggleGroup} ${styles.accountToggleGroup}`} role="tablist" aria-label="Account sections">
               {accountTabs.map((tab) => (
                 <button
                   key={tab.id}
                   type="button"
                   role="tab"
                   aria-selected={activeSection === tab.id}
-                  className={`${styles.reportToggleButton} ${activeSection === tab.id ? styles.reportToggleButtonActive : ""}`}
+                  className={`${styles.reportToggleButton} ${styles.accountToggleButton} ${activeSection === tab.id ? styles.reportToggleButtonActive : ""}`}
                   onClick={() => setActiveSection(tab.id)}
                 >
-                  {tab.label}
+                  {tab.id === "delete-account" ? (
+                    <>
+                      <span className={styles.accountToggleDesktopLabel}>Delete Account</span>
+                      <span className={styles.accountToggleMobileLabel}>Delete Acc.</span>
+                    </>
+                  ) : (
+                    tab.label
+                  )}
                 </button>
               ))}
             </div>

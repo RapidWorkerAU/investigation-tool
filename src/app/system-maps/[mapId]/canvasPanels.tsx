@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { RefObject } from "react";
+import { useState, type RefObject } from "react";
 import type { MapMemberProfileRow, SystemMap } from "./canvasShared";
 import type { NodePaletteKind } from "./mapCategories";
 
@@ -176,85 +176,116 @@ export function CanvasActionButtons({
   isPreparingPrint,
 }: CanvasActionButtonsProps) {
   const allowed = new Set<NodePaletteKind>(allowedNodeKinds);
-  const addItems: Array<{ key: string; label: string; onClick: () => void }> = [];
+  type AddItemGroup = "core" | "investigation" | "bowtie" | "content" | "shapes";
+  type AddItem = { key: string; label: string; group: AddItemGroup; onClick: () => void };
+  const [activeAddFilter, setActiveAddFilter] = useState<"all" | AddItemGroup>("all");
+  const addItems: AddItem[] = [];
   if (canWriteMap) {
-    if (allowed.has("document")) addItems.push({ key: "document", label: "Document", onClick: handleAddBlankDocument });
-    if (allowed.has("system")) addItems.push({ key: "system", label: "System", onClick: handleAddSystemCircle });
-    if (allowed.has("process")) addItems.push({ key: "process", label: "Process", onClick: handleAddProcessComponent });
-    if (allowed.has("person")) addItems.push({ key: "person", label: "Person", onClick: handleAddPerson });
-    if (allowed.has("category")) addItems.push({ key: "category", label: "Category", onClick: handleAddProcessHeading });
+    if (allowed.has("document")) addItems.push({ key: "document", label: "Document", group: "core", onClick: handleAddBlankDocument });
+    if (allowed.has("system")) addItems.push({ key: "system", label: "System", group: "core", onClick: handleAddSystemCircle });
+    if (allowed.has("process")) addItems.push({ key: "process", label: "Process", group: "core", onClick: handleAddProcessComponent });
+    if (allowed.has("person")) addItems.push({ key: "person", label: "Person", group: "investigation", onClick: handleAddPerson });
+    if (allowed.has("category")) addItems.push({ key: "category", label: "Category", group: "investigation", onClick: handleAddProcessHeading });
     if (allowed.has("grouping_container")) {
-      addItems.push({ key: "grouping_container", label: "Grouping Container", onClick: handleAddGroupingContainer });
+      addItems.push({ key: "grouping_container", label: "Group", group: "investigation", onClick: handleAddGroupingContainer });
     }
-    if (allowed.has("bowtie_hazard")) addItems.push({ key: "bowtie_hazard", label: "Hazard", onClick: handleAddBowtieHazard });
-    if (allowed.has("bowtie_top_event")) addItems.push({ key: "bowtie_top_event", label: "Top Event", onClick: handleAddBowtieTopEvent });
-    if (allowed.has("bowtie_threat")) addItems.push({ key: "bowtie_threat", label: "Threat", onClick: handleAddBowtieThreat });
+    if (allowed.has("bowtie_hazard")) addItems.push({ key: "bowtie_hazard", label: "Hazard", group: "bowtie", onClick: handleAddBowtieHazard });
+    if (allowed.has("bowtie_top_event")) addItems.push({ key: "bowtie_top_event", label: "Top Event", group: "bowtie", onClick: handleAddBowtieTopEvent });
+    if (allowed.has("bowtie_threat")) addItems.push({ key: "bowtie_threat", label: "Threat", group: "bowtie", onClick: handleAddBowtieThreat });
     if (allowed.has("bowtie_consequence")) {
-      addItems.push({ key: "bowtie_consequence", label: "Consequence", onClick: handleAddBowtieConsequence });
+      addItems.push({ key: "bowtie_consequence", label: "Consequence", group: "bowtie", onClick: handleAddBowtieConsequence });
     }
-    if (allowed.has("bowtie_control")) addItems.push({ key: "bowtie_control", label: "Control", onClick: handleAddBowtieControl });
+    if (allowed.has("bowtie_control")) addItems.push({ key: "bowtie_control", label: "Control", group: "bowtie", onClick: handleAddBowtieControl });
     if (allowed.has("bowtie_escalation_factor")) {
-      addItems.push({ key: "bowtie_escalation_factor", label: "Escalation Factor", onClick: handleAddBowtieEscalationFactor });
+      addItems.push({ key: "bowtie_escalation_factor", label: "Escalation Factor", group: "bowtie", onClick: handleAddBowtieEscalationFactor });
     }
     if (allowed.has("bowtie_recovery_measure")) {
-      addItems.push({ key: "bowtie_recovery_measure", label: "Recovery Measure", onClick: handleAddBowtieRecoveryMeasure });
+      addItems.push({ key: "bowtie_recovery_measure", label: "Recovery Measure", group: "bowtie", onClick: handleAddBowtieRecoveryMeasure });
     }
     if (allowed.has("bowtie_degradation_indicator")) {
       addItems.push({
         key: "bowtie_degradation_indicator",
         label: "Degradation Indicator",
+        group: "bowtie",
         onClick: handleAddBowtieDegradationIndicator,
       });
     }
     if (allowed.has("bowtie_risk_rating")) {
-      addItems.push({ key: "bowtie_risk_rating", label: "Risk Rating", onClick: handleAddBowtieRiskRating });
+      addItems.push({ key: "bowtie_risk_rating", label: "Risk Rating", group: "bowtie", onClick: handleAddBowtieRiskRating });
     }
     if (allowed.has("incident_sequence_step")) {
-      addItems.push({ key: "incident_sequence_step", label: "Sequence Step", onClick: handleAddIncidentSequenceStep });
+      addItems.push({ key: "incident_sequence_step", label: "Sequence Step", group: "investigation", onClick: handleAddIncidentSequenceStep });
     }
     if (allowed.has("incident_outcome")) {
-      addItems.push({ key: "incident_outcome", label: "Outcome", onClick: handleAddIncidentOutcome });
+      addItems.push({ key: "incident_outcome", label: "Outcome", group: "investigation", onClick: handleAddIncidentOutcome });
     }
     if (allowed.has("incident_task_condition")) {
-      addItems.push({ key: "incident_task_condition", label: "Task / Condition", onClick: handleAddIncidentTaskCondition });
+      addItems.push({ key: "incident_task_condition", label: "Task / Condition", group: "investigation", onClick: handleAddIncidentTaskCondition });
     }
     if (allowed.has("incident_factor")) {
-      addItems.push({ key: "incident_factor", label: "Factor", onClick: handleAddIncidentFactor });
+      addItems.push({ key: "incident_factor", label: "Factor", group: "investigation", onClick: handleAddIncidentFactor });
     }
     if (allowed.has("incident_system_factor")) {
-      addItems.push({ key: "incident_system_factor", label: "System Factor", onClick: handleAddIncidentSystemFactor });
+      addItems.push({ key: "incident_system_factor", label: "System Factor", group: "investigation", onClick: handleAddIncidentSystemFactor });
     }
     if (allowed.has("incident_control_barrier")) {
-      addItems.push({ key: "incident_control_barrier", label: "Control / Barrier", onClick: handleAddIncidentControlBarrier });
+      addItems.push({ key: "incident_control_barrier", label: "Control / Barrier", group: "investigation", onClick: handleAddIncidentControlBarrier });
     }
     if (allowed.has("incident_evidence")) {
-      addItems.push({ key: "incident_evidence", label: "Evidence", onClick: handleAddIncidentEvidence });
+      addItems.push({ key: "incident_evidence", label: "Evidence", group: "investigation", onClick: handleAddIncidentEvidence });
     }
     if (allowed.has("incident_finding")) {
-      addItems.push({ key: "incident_finding", label: "Finding", onClick: handleAddIncidentFinding });
+      addItems.push({ key: "incident_finding", label: "Finding", group: "investigation", onClick: handleAddIncidentFinding });
     }
     if (allowed.has("incident_recommendation")) {
-      addItems.push({ key: "incident_recommendation", label: "Recommendation", onClick: handleAddIncidentRecommendation });
+      addItems.push({ key: "incident_recommendation", label: "Recommendation", group: "investigation", onClick: handleAddIncidentRecommendation });
     }
-    if (allowed.has("image_asset")) addItems.push({ key: "image_asset", label: "Image", onClick: handleStartAddImageAsset });
-    if (allowed.has("text_box")) addItems.push({ key: "text_box", label: "Text Box", onClick: handleAddTextBox });
-    if (allowed.has("table")) addItems.push({ key: "table", label: "Table", onClick: handleAddTable });
+    if (allowed.has("image_asset")) addItems.push({ key: "image_asset", label: "Image", group: "content", onClick: handleStartAddImageAsset });
+    if (allowed.has("text_box")) addItems.push({ key: "text_box", label: "Text Box", group: "content", onClick: handleAddTextBox });
+    if (allowed.has("table")) addItems.push({ key: "table", label: "Table", group: "content", onClick: handleAddTable });
     if (allowed.has("shape_rectangle")) {
-      addItems.push({ key: "shape_rectangle", label: "Rectangle", onClick: handleAddShapeRectangle });
+      addItems.push({ key: "shape_rectangle", label: "Rectangle", group: "shapes", onClick: handleAddShapeRectangle });
     }
-    if (allowed.has("shape_circle")) addItems.push({ key: "shape_circle", label: "Circle", onClick: handleAddShapeCircle });
-    if (allowed.has("shape_pill")) addItems.push({ key: "shape_pill", label: "Pill", onClick: handleAddShapePill });
+    if (allowed.has("shape_circle")) addItems.push({ key: "shape_circle", label: "Circle", group: "shapes", onClick: handleAddShapeCircle });
+    if (allowed.has("shape_pill")) addItems.push({ key: "shape_pill", label: "Pill", group: "shapes", onClick: handleAddShapePill });
     if (allowed.has("shape_pentagon")) {
-      addItems.push({ key: "shape_pentagon", label: "Pentagon", onClick: handleAddShapePentagon });
+      addItems.push({ key: "shape_pentagon", label: "Pentagon", group: "shapes", onClick: handleAddShapePentagon });
     }
     if (allowed.has("shape_chevron_left")) {
-      addItems.push({ key: "shape_chevron_left", label: "Chevron", onClick: handleAddShapeChevronLeft });
+      addItems.push({ key: "shape_chevron_left", label: "Chevron", group: "shapes", onClick: handleAddShapeChevronLeft });
     }
-    if (allowed.has("shape_arrow")) addItems.push({ key: "shape_arrow", label: "Arrow", onClick: handleAddShapeArrow });
+    if (allowed.has("shape_arrow")) addItems.push({ key: "shape_arrow", label: "Arrow", group: "shapes", onClick: handleAddShapeArrow });
   }
   if (canCreateSticky && allowed.has("sticky_note")) {
-    addItems.push({ key: "sticky_note", label: "Sticky Note", onClick: handleAddStickyNote });
+    addItems.push({ key: "sticky_note", label: "Sticky Note", group: "content", onClick: handleAddStickyNote });
   }
+
+  const addItemGroupOrder: AddItemGroup[] = ["core", "investigation", "bowtie", "content", "shapes"];
+  const addItemGroupLabels: Record<AddItemGroup, string> = {
+    core: "Core",
+    investigation: "Investigation",
+    bowtie: "Bowtie",
+    content: "Content",
+    shapes: "Shapes",
+  };
+  const addItemGroups = addItemGroupOrder
+    .map((group) => ({ group, label: addItemGroupLabels[group], items: addItems.filter((item) => item.group === group) }))
+    .filter((section) => section.items.length > 0);
+  const visibleAddItemGroups = (activeAddFilter === "all"
+    ? addItemGroups
+    : addItemGroups.filter((section) => section.group === activeAddFilter)
+  ).filter((section) => section.items.length > 0);
+  const addFilterPillsBase: Array<{ key: "all" | AddItemGroup; label: string }> = [
+    { key: "all", label: "All" },
+    { key: "core", label: "Core" },
+    { key: "investigation", label: "Investigation" },
+    { key: "content", label: "Content" },
+    { key: "bowtie", label: "Bowtie" },
+    { key: "shapes", label: "Shapes" },
+  ];
+  const addFilterPills = addFilterPillsBase.filter(
+    (pill) => pill.key === "all" || addItemGroups.some((section) => section.group === pill.key)
+  );
 
   const renderMiniDocumentTile = (bannerBg: string, bannerText: string, typeLabel: string) => (
     <div className="flex h-12 w-16 flex-col overflow-hidden rounded-[10px] border border-slate-300 bg-white shadow-[0_6px_16px_rgba(15,23,42,0.14)]">
@@ -454,7 +485,7 @@ export function CanvasActionButtons({
           </div>
         ) : null}
 
-        <div className="fixed inset-x-0 bottom-0 z-[95] px-3 pb-[calc(env(safe-area-inset-bottom,0px)+72px)] md:hidden">
+        <div className="fixed inset-x-0 bottom-0 z-[95] px-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] md:hidden">
           <div className="mx-auto flex max-w-max items-center gap-2 rounded-[24px] border border-slate-300/80 bg-white/94 px-2.5 py-2.5 shadow-[0_18px_40px_rgba(15,23,42,0.22)] backdrop-blur">
             <Link href={backHref} aria-label={backTitle} title={backTitle} className={floatingButtonClass}>
               <span
@@ -744,29 +775,6 @@ export function CanvasActionButtons({
             />
           </button>
         </span>
-        {showAddMenu && (canWriteMap || canCreateSticky) && (
-          <div ref={addMenuRef} className="absolute right-0 top-full z-[70] mt-2 min-w-[180px] rounded-none border border-slate-300 bg-white p-1 text-sm shadow-xl">
-            {canWriteMap ? (
-              <>
-                {allowed.has("document") ? <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleAddBlankDocument}>Document</button> : null}
-                {addItems
-                  .filter((item) => item.key !== "sticky_note")
-                  .map((item) => (
-                    <button
-                      key={item.key}
-                      className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100"
-                      onClick={item.onClick}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-              </>
-            ) : null}
-            {addItems.some((item) => item.key === "sticky_note") ? (
-              <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100" onClick={handleAddStickyNote}>Sticky Note</button>
-            ) : null}
-          </div>
-        )}
         {showSearchMenu && (
           <div
             ref={searchMenuRef}
@@ -805,6 +813,102 @@ export function CanvasActionButtons({
         )}
         </div>
       </div>
+      {showAddMenu && (canWriteMap || canCreateSticky) && (
+        <div className="fixed inset-0 z-[160] flex items-center justify-center bg-[rgba(15,23,42,0.52)] px-4 py-6">
+          <div
+            ref={addMenuRef}
+            className="flex h-[550px] max-h-[90vh] w-full max-w-[1240px] flex-col overflow-hidden rounded-[30px] border border-white/45 bg-[linear-gradient(180deg,rgba(248,250,252,0.98),rgba(241,245,249,0.96))] shadow-[0_34px_80px_rgba(15,23,42,0.28)]"
+          >
+            <div className="border-b border-slate-200/80 px-6 py-4 sm:px-8">
+              <div className="flex items-start justify-between gap-6">
+                <div>
+                  <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-slate-500">Add Component</p>
+                  <h2 className="mt-1.5 text-3xl font-semibold text-slate-950">Choose what to place on the map</h2>
+                  <p className="mt-1.5 max-w-none text-sm leading-5 text-slate-600">
+                    Switch categories instead of scrolling through every available node.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  aria-label="Close add component modal"
+                  className="inline-flex h-[45px] w-[45px] shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-black shadow-[0_10px_24px_rgba(15,23,42,0.14)] transition-all duration-150 hover:-translate-y-0.5 hover:bg-[#102a43] hover:text-white hover:shadow-[0_14px_28px_rgba(15,23,42,0.22)]"
+                  onClick={() => setShowAddMenu(() => false)}
+                >
+                  <span
+                    aria-hidden="true"
+                    className="h-4 w-4 bg-current"
+                    style={{ WebkitMaskImage: "url('/icons/close.svg')", maskImage: "url('/icons/close.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
+                  />
+                </button>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {addFilterPills.map((pill) => {
+                  const isActive = activeAddFilter === pill.key;
+                  return (
+                    <button
+                      key={pill.key}
+                      type="button"
+                      className={`rounded-full px-3.5 py-1.5 text-sm font-semibold transition ${
+                        isActive
+                          ? "bg-[#102a43] text-white shadow-[0_10px_24px_rgba(15,23,42,0.18)]"
+                          : "border border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                      }`}
+                      onClick={() => setActiveAddFilter(pill.key)}
+                    >
+                      {pill.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto px-6 pt-[31px] pb-[15px] sm:px-8">
+              <div className="mx-auto flex min-h-full w-full flex-col justify-start">
+              {activeAddFilter === "all" ? (
+                <div className="grid grid-cols-6 gap-x-3 gap-y-4">
+                  {addItems.map((item) => (
+                    <button
+                      key={item.key}
+                      type="button"
+                      className="flex min-h-[96px] flex-col items-center justify-start rounded-2xl px-1.5 py-1 text-center text-sm font-semibold text-slate-900 transition duration-150 hover:-translate-y-0.5 hover:bg-white/60"
+                      onClick={() => {
+                        setShowAddMenu(() => false);
+                        item.onClick();
+                      }}
+                    >
+                      <span className="mb-2 flex items-center justify-center">{renderAddItemPreview(item.key)}</span>
+                      <span className="text-sm font-semibold leading-tight text-slate-900">{item.label}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {visibleAddItemGroups.map((section) => (
+                    <div key={section.group}>
+                      <div className="grid grid-cols-6 gap-x-3 gap-y-4">
+                        {section.items.map((item) => (
+                          <button
+                            key={item.key}
+                            type="button"
+                            className="flex min-h-[96px] flex-col items-center justify-start rounded-2xl px-1.5 py-1 text-center text-sm font-semibold text-slate-900 transition duration-150 hover:-translate-y-0.5 hover:bg-white/60"
+                            onClick={() => {
+                              setShowAddMenu(() => false);
+                              item.onClick();
+                            }}
+                          >
+                            <span className="mb-2 flex items-center justify-center">{renderAddItemPreview(item.key)}</span>
+                            <span className="text-sm font-semibold leading-tight text-slate-900">{item.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

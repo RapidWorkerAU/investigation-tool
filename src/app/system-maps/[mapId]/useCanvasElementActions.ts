@@ -73,6 +73,8 @@ type UseCanvasElementActionsParams = {
   bowtieSquareHeight: number;
   bowtieControlHeight: number;
   bowtieRiskRatingHeight: number;
+  incidentCardWidth: number;
+  incidentCardHeight: number;
   incidentDefaultWidth: number;
   incidentThreeTwoHeight: number;
   incidentSquareSize: number;
@@ -80,6 +82,7 @@ type UseCanvasElementActionsParams = {
   incidentThreeOneHeight: number;
   selectedProcessId: string | null;
   processHeadingDraft: string;
+  processFontSizeDraft: string;
   processWidthDraft: string;
   processHeightDraft: string;
   processMinWidthSquares: number;
@@ -127,6 +130,8 @@ type UseCanvasElementActionsParams = {
   textBoxUnderlineDraft: boolean;
   textBoxAlignDraft: "left" | "center" | "right";
   textBoxFontSizeDraft: string;
+  textBoxBackgroundColorDraft: string;
+  textBoxOutlineDraft: boolean;
   selectedTableId: string | null;
   tableRowsDraft: string;
   tableColumnsDraft: string;
@@ -224,10 +229,13 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
     bowtieSquareHeight,
     bowtieControlHeight,
     bowtieRiskRatingHeight,
+    incidentCardWidth,
+    incidentCardHeight,
     incidentDefaultWidth,
     incidentThreeOneHeight,
     selectedProcessId,
     processHeadingDraft,
+    processFontSizeDraft,
     processWidthDraft,
     processHeightDraft,
     processMinWidthSquares,
@@ -275,6 +283,8 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
     textBoxUnderlineDraft,
     textBoxAlignDraft,
     textBoxFontSizeDraft,
+    textBoxBackgroundColorDraft,
+    textBoxOutlineDraft,
     selectedTableId,
     tableRowsDraft,
     tableColumnsDraft,
@@ -455,6 +465,45 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
     [elements, getShapeDimensions, minorGridSize, nodes, shapeMinHeight, shapeMinWidth, shapeRectangleDefaultHeight, shapeRectangleDefaultWidth, snapToMinorGrid]
   );
 
+  const findNearestAvailableCanvasPosition = useCallback(
+    (x: number, y: number, width: number, height: number) => {
+      const blocked = [
+        ...nodes
+          .map((n) => {
+            const nodeWidth = Number(n.width ?? 0);
+            const nodeHeight = Number(n.height ?? 0);
+            if (!Number.isFinite(nodeWidth) || !Number.isFinite(nodeHeight) || nodeWidth <= 0 || nodeHeight <= 0) return null;
+            return { x: n.pos_x, y: n.pos_y, width: nodeWidth, height: nodeHeight };
+          })
+          .filter((rect): rect is { x: number; y: number; width: number; height: number } => Boolean(rect)),
+        ...elements.map((el) => ({
+          x: el.pos_x,
+          y: el.pos_y,
+          width: Math.max(1, Number(el.width ?? 1)),
+          height: Math.max(1, Number(el.height ?? 1)),
+        })),
+      ];
+      const overlapsAt = (candidateX: number, candidateY: number) =>
+        blocked.some((box) => boxesOverlap({ x: candidateX, y: candidateY, width, height }, box, 0));
+      const startX = snapToMinorGrid(x);
+      const startY = snapToMinorGrid(y);
+      if (!overlapsAt(startX, startY)) return { x: startX, y: startY };
+      const maxRing = 120;
+      for (let ring = 1; ring <= maxRing; ring += 1) {
+        for (let dx = -ring; dx <= ring; dx += 1) {
+          for (let dy = -ring; dy <= ring; dy += 1) {
+            if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
+            const candidateX = snapToMinorGrid(startX + dx * minorGridSize);
+            const candidateY = snapToMinorGrid(startY + dy * minorGridSize);
+            if (!overlapsAt(candidateX, candidateY)) return { x: candidateX, y: candidateY };
+          }
+        }
+      }
+      return null;
+    },
+    [elements, minorGridSize, nodes, snapToMinorGrid]
+  );
+
   const handleAddBlankDocument = useCallback(async () => {
     if (!canWriteMap) {
       setError("You have view access only for this map.");
@@ -463,6 +512,10 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
     const t = addDocumentTypes[0];
     const center = getCenter();
     if (!t || !center) return;
+    const width = isLandscapeTypeName(t.name) ? landscapeDefaultWidth : defaultWidth;
+    const height = isLandscapeTypeName(t.name) ? landscapeDefaultHeight : defaultHeight;
+    const position = findNearestAvailableCanvasPosition(center.x, center.y, width, height);
+    if (!position) return setError("No free space available for a new node.");
     const { data, error: e } = await supabaseBrowser
       .schema("ms")
       .from("document_nodes")
@@ -471,10 +524,10 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
         type_id: t.id,
         title: unconfiguredDocumentTitle,
         document_number: null,
-        pos_x: center.x,
-        pos_y: center.y,
-        width: isLandscapeTypeName(t.name) ? landscapeDefaultWidth : defaultWidth,
-        height: isLandscapeTypeName(t.name) ? landscapeDefaultHeight : defaultHeight,
+        pos_x: position.x,
+        pos_y: position.y,
+        width,
+        height,
       })
       .select("id,map_id,type_id,title,document_number,discipline,owner_user_id,owner_name,user_group,pos_x,pos_y,width,height,is_archived")
       .single();
@@ -486,14 +539,32 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
     setNodes((prev) => [...prev, inserted]);
     savedPos.current[inserted.id] = { x: inserted.pos_x, y: inserted.pos_y };
     setShowAddMenu(false);
-  }, [canWriteMap, addDocumentTypes, getCenter, mapId, unconfiguredDocumentTitle, isLandscapeTypeName, landscapeDefaultWidth, defaultWidth, landscapeDefaultHeight, defaultHeight, setError, setNodes, savedPos, setShowAddMenu]);
+  }, [canWriteMap, addDocumentTypes, getCenter, mapId, unconfiguredDocumentTitle, isLandscapeTypeName, landscapeDefaultWidth, defaultWidth, landscapeDefaultHeight, defaultHeight, findNearestAvailableCanvasPosition, setError, setNodes, savedPos, setShowAddMenu]);
 
   const addElement = useCallback(async (payload: Partial<CanvasElementRow>, errorMessage: string) => {
     const normalizedColor =
       payload.element_type === "sticky_note" ? null : normalizeColorHex(payload.color_hex ?? null);
+    const rawX = Number(payload.pos_x);
+    const rawY = Number(payload.pos_y);
+    const rawWidth = Number(payload.width);
+    const rawHeight = Number(payload.height);
+    const shouldPlace =
+      Number.isFinite(rawX) &&
+      Number.isFinite(rawY) &&
+      Number.isFinite(rawWidth) &&
+      rawWidth > 0 &&
+      Number.isFinite(rawHeight) &&
+      rawHeight > 0;
+    const position = shouldPlace ? findNearestAvailableCanvasPosition(rawX, rawY, rawWidth, rawHeight) : null;
+    if (shouldPlace && !position) {
+      setError("No free space available for a new node.");
+      return null;
+    }
     const normalizedPayload: Partial<CanvasElementRow> = {
       ...payload,
       color_hex: normalizedColor,
+      pos_x: position?.x ?? payload.pos_x,
+      pos_y: position?.y ?? payload.pos_y,
     };
     const { data, error: e } = await supabaseBrowser
       .schema("ms")
@@ -509,7 +580,7 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
     setElements((prev) => [...prev, inserted]);
     setShowAddMenu(false);
     return inserted;
-  }, [canvasElementSelectColumns, normalizeColorHex, setElements, setError, setShowAddMenu]);
+  }, [canvasElementSelectColumns, normalizeColorHex, findNearestAvailableCanvasPosition, setElements, setError, setShowAddMenu]);
 
   const handleAddProcessHeading = useCallback(async () => {
     if (!canWriteMap) return setError("You have view access only for this map.");
@@ -645,6 +716,8 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
         underline: false,
         align: "left",
         font_size: 16,
+        background_color: "#FFFFFF",
+        outline: false,
       },
       pos_x: center.x,
       pos_y: center.y,
@@ -980,12 +1053,12 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
         },
         pos_x: center.x,
         pos_y: center.y,
-        width: bowtieDefaultWidth,
-        height: bowtieControlHeight,
+        width: incidentCardWidth,
+        height: incidentCardHeight,
       },
       "Unable to create control."
     );
-  }, [canWriteMap, setError, getCenter, addElement, mapId, userId, bowtieDefaultWidth, bowtieControlHeight]);
+  }, [canWriteMap, setError, getCenter, addElement, mapId, userId, incidentCardWidth, incidentCardHeight]);
 
   const handleAddBowtieEscalationFactor = useCallback(async () => {
     if (!canWriteMap) return setError("You have view access only for this map.");
@@ -1105,12 +1178,12 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
         },
         pos_x: center.x,
         pos_y: center.y,
-        width: bowtieDefaultWidth,
-        height: bowtieControlHeight,
+        width: incidentCardWidth,
+        height: incidentCardHeight,
       },
       "Unable to create sequence step."
     );
-  }, [canWriteMap, setError, getCenter, addElement, mapId, userId, bowtieDefaultWidth, bowtieControlHeight]);
+  }, [canWriteMap, setError, getCenter, addElement, mapId, userId, incidentCardWidth, incidentCardHeight]);
 
   const handleAddIncidentOutcome = useCallback(async () => {
     if (!canWriteMap) return setError("You have view access only for this map.");
@@ -1129,12 +1202,12 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
         },
         pos_x: center.x,
         pos_y: center.y,
-        width: bowtieDefaultWidth,
-        height: bowtieControlHeight,
+        width: incidentCardWidth,
+        height: incidentCardHeight,
       },
       "Unable to create outcome."
     );
-  }, [canWriteMap, setError, getCenter, addElement, mapId, userId, bowtieDefaultWidth, bowtieControlHeight]);
+  }, [canWriteMap, setError, getCenter, addElement, mapId, userId, incidentCardWidth, incidentCardHeight]);
 
   const handleAddIncidentTaskCondition = useCallback(async () => {
     if (!canWriteMap) return setError("You have view access only for this map.");
@@ -1154,12 +1227,12 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
         },
         pos_x: center.x,
         pos_y: center.y,
-        width: bowtieDefaultWidth,
-        height: bowtieControlHeight,
+        width: incidentCardWidth,
+        height: incidentCardHeight,
       },
       "Unable to create task/condition."
     );
-  }, [canWriteMap, setError, getCenter, addElement, mapId, userId, bowtieDefaultWidth, bowtieControlHeight]);
+  }, [canWriteMap, setError, getCenter, addElement, mapId, userId, incidentCardWidth, incidentCardHeight]);
 
   const handleAddIncidentFactor = useCallback(async () => {
     if (!canWriteMap) return setError("You have view access only for this map.");
@@ -1180,12 +1253,12 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
         },
         pos_x: center.x,
         pos_y: center.y,
-        width: bowtieDefaultWidth,
-        height: bowtieControlHeight,
+        width: incidentCardWidth,
+        height: incidentCardHeight,
       },
       "Unable to create factor."
     );
-  }, [canWriteMap, setError, getCenter, addElement, mapId, userId, bowtieDefaultWidth, bowtieControlHeight]);
+  }, [canWriteMap, setError, getCenter, addElement, mapId, userId, incidentCardWidth, incidentCardHeight]);
 
   const handleAddIncidentSystemFactor = useCallback(async () => {
     if (!canWriteMap) return setError("You have view access only for this map.");
@@ -1205,12 +1278,12 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
         },
         pos_x: center.x,
         pos_y: center.y,
-        width: bowtieDefaultWidth,
-        height: bowtieControlHeight,
+        width: incidentCardWidth,
+        height: incidentCardHeight,
       },
       "Unable to create system factor."
     );
-  }, [canWriteMap, setError, getCenter, addElement, mapId, userId, bowtieDefaultWidth, bowtieControlHeight]);
+  }, [canWriteMap, setError, getCenter, addElement, mapId, userId, incidentCardWidth, incidentCardHeight]);
 
   const handleAddIncidentControlBarrier = useCallback(async () => {
     if (!canWriteMap) return setError("You have view access only for this map.");
@@ -1234,12 +1307,12 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
         },
         pos_x: center.x,
         pos_y: center.y,
-        width: bowtieDefaultWidth,
-        height: bowtieControlHeight,
+        width: incidentCardWidth,
+        height: incidentCardHeight,
       },
       "Unable to create control/barrier."
     );
-  }, [canWriteMap, setError, getCenter, addElement, mapId, userId, bowtieDefaultWidth, bowtieControlHeight]);
+  }, [canWriteMap, setError, getCenter, addElement, mapId, userId, incidentCardWidth, incidentCardHeight]);
 
   const handleAddIncidentEvidence = useCallback(async () => {
     if (!canWriteMap) return setError("You have view access only for this map.");
@@ -1264,12 +1337,12 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
         },
         pos_x: center.x,
         pos_y: center.y,
-        width: bowtieDefaultWidth,
-        height: bowtieControlHeight,
+        width: incidentCardWidth,
+        height: incidentCardHeight,
       },
       "Unable to create evidence."
     );
-  }, [canWriteMap, setError, getCenter, addElement, mapId, userId, bowtieDefaultWidth, bowtieControlHeight]);
+  }, [canWriteMap, setError, getCenter, addElement, mapId, userId, incidentCardWidth, incidentCardHeight]);
 
   const handleAddIncidentFinding = useCallback(async () => {
     if (!canWriteMap) return setError("You have view access only for this map.");
@@ -1314,12 +1387,12 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
         },
         pos_x: center.x,
         pos_y: center.y,
-        width: bowtieDefaultWidth,
-        height: bowtieControlHeight,
+        width: incidentCardWidth,
+        height: incidentCardHeight,
       },
       "Unable to create recommendation."
     );
-  }, [canWriteMap, setError, getCenter, addElement, mapId, userId, bowtieDefaultWidth, bowtieControlHeight]);
+  }, [canWriteMap, setError, getCenter, addElement, mapId, userId, incidentCardWidth, incidentCardHeight]);
 
   const handleSaveProcessHeading = useCallback(async () => {
     if (!canWriteMap) return setError("You have view access only for this map.");
@@ -1337,12 +1410,20 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
     }
     const width = Math.max(processMinWidth, snapToMinorGrid(widthSquares * minorGridSize));
     const height = Math.max(processMinHeight, snapToMinorGrid(heightSquares * minorGridSize));
-    const { data, error: e } = await supabaseBrowser.schema("ms").from("canvas_elements").update({ heading, width, height, color_hex: normalizeColorHex(processColorDraft ?? null) }).eq("id", selectedProcessId).eq("map_id", mapId).select(canvasElementSelectColumns).single();
+    const parsedFontSize = Number(processFontSizeDraft.trim());
+    const fontSize = Number.isFinite(parsedFontSize) ? Math.max(10, Math.min(72, Math.round(parsedFontSize))) : 12;
+    const current = elements.find((el) => el.id === selectedProcessId && el.element_type === "category");
+    const currentConfig = ((current?.element_config as Record<string, unknown> | null) ?? {});
+    const nextConfig = {
+      ...currentConfig,
+      font_size: fontSize,
+    };
+    const { data, error: e } = await supabaseBrowser.schema("ms").from("canvas_elements").update({ heading, width, height, color_hex: normalizeColorHex(processColorDraft ?? null), element_config: nextConfig }).eq("id", selectedProcessId).eq("map_id", mapId).select(canvasElementSelectColumns).single();
     if (e || !data) return setError(e?.message || "Unable to save process heading.");
     const updated = data as unknown as CanvasElementRow;
     setElements((prev) => prev.map((el) => (el.id === updated.id ? updated : el)));
     setSelectedProcessId(null);
-  }, [canWriteMap, setError, selectedProcessId, processHeadingDraft, processWidthDraft, processHeightDraft, processMinWidthSquares, processMinHeightSquares, processMinWidth, snapToMinorGrid, minorGridSize, processMinHeight, processColorDraft, mapId, canvasElementSelectColumns, normalizeColorHex, setElements, setSelectedProcessId]);
+  }, [canWriteMap, setError, selectedProcessId, processHeadingDraft, processFontSizeDraft, processWidthDraft, processHeightDraft, processMinWidthSquares, processMinHeightSquares, processMinWidth, snapToMinorGrid, minorGridSize, processMinHeight, processColorDraft, mapId, canvasElementSelectColumns, normalizeColorHex, elements, setElements, setSelectedProcessId]);
 
   const handleSaveSystemName = useCallback(async () => {
     if (!canWriteMap) return setError("You have view access only for this map.");
@@ -1507,6 +1588,8 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
           underline: textBoxUnderlineDraft,
           align: textBoxAlignDraft,
           font_size: fontSize,
+          background_color: /^#[0-9a-fA-F]{6}$/.test(textBoxBackgroundColorDraft) ? textBoxBackgroundColorDraft.toUpperCase() : "#FFFFFF",
+          outline: textBoxOutlineDraft,
         },
       })
       .eq("id", selectedTextBoxId)
@@ -1517,7 +1600,7 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
     const updated = data as unknown as CanvasElementRow;
     setElements((prev) => prev.map((el) => (el.id === updated.id ? updated : el)));
     setSelectedTextBoxId(null);
-  }, [canWriteMap, setError, selectedTextBoxId, textBoxContentDraft, textBoxBoldDraft, textBoxItalicDraft, textBoxUnderlineDraft, textBoxAlignDraft, textBoxFontSizeDraft, mapId, canvasElementSelectColumns, setElements, setSelectedTextBoxId]);
+  }, [canWriteMap, setError, selectedTextBoxId, textBoxContentDraft, textBoxBoldDraft, textBoxItalicDraft, textBoxUnderlineDraft, textBoxAlignDraft, textBoxFontSizeDraft, textBoxBackgroundColorDraft, textBoxOutlineDraft, mapId, canvasElementSelectColumns, setElements, setSelectedTextBoxId]);
 
   const handleSaveTable = useCallback(async () => {
     if (!canWriteMap) return setError("You have view access only for this map.");

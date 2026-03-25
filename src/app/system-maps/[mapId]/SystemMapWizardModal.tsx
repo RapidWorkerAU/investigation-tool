@@ -287,19 +287,24 @@ export function SystemMapWizardModal({
           </div>
           <div className="mt-5 space-y-2">
             {stepLabels.map((label, index) => (
-              <div
+              <button
                 key={label}
-                className={`rounded-2xl px-4 py-3 text-sm ${
+                type="button"
+                onClick={() => {
+                  setError(null);
+                  setCurrentStep(index);
+                }}
+                className={`block w-full rounded-2xl px-4 py-3 text-left text-sm transition ${
                   index === currentStep
                     ? "border border-slate-200 bg-white text-slate-950 shadow-[0_12px_26px_rgba(15,23,42,0.12)]"
                     : index < currentStep
-                      ? "bg-white text-slate-700"
-                      : "bg-transparent text-slate-500"
+                      ? "bg-white text-slate-700 hover:bg-slate-50"
+                      : "bg-transparent text-slate-500 hover:bg-white/70 hover:text-slate-700"
                 }`}
               >
                 <span className="mr-2 font-semibold">{index + 1}.</span>
                 {label}
-              </div>
+              </button>
             ))}
           </div>
         </aside>

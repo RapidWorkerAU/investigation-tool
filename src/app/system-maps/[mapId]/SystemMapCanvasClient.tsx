@@ -30,6 +30,8 @@ import {
   bowtieRiskRatingHeight,
   bowtieSquareHeight,
   incidentDefaultWidth,
+  incidentCardHeight,
+  incidentCardWidth,
   incidentFourThreeHeight,
   incidentSquareSize,
   incidentThreeOneHeight,
@@ -909,6 +911,7 @@ function SystemMapCanvasInner({
   const [groupingLabelDraft, setGroupingLabelDraft] = useState("");
   const [groupingWidthDraft, setGroupingWidthDraft] = useState<string>(String(Math.round(groupingDefaultWidth / minorGridSize)));
   const [groupingHeightDraft, setGroupingHeightDraft] = useState<string>(String(Math.round(groupingDefaultHeight / minorGridSize)));
+  const [processFontSizeDraft, setProcessFontSizeDraft] = useState("12");
   const [stickyTextDraft, setStickyTextDraft] = useState("");
   const [imageDescriptionDraft, setImageDescriptionDraft] = useState("");
   const [textBoxContentDraft, setTextBoxContentDraft] = useState("");
@@ -917,6 +920,8 @@ function SystemMapCanvasInner({
   const [textBoxUnderlineDraft, setTextBoxUnderlineDraft] = useState(false);
   const [textBoxAlignDraft, setTextBoxAlignDraft] = useState<"left" | "center" | "right">("left");
   const [textBoxFontSizeDraft, setTextBoxFontSizeDraft] = useState("24");
+  const [textBoxBackgroundColorDraft, setTextBoxBackgroundColorDraft] = useState("#FFFFFF");
+  const [textBoxOutlineDraft, setTextBoxOutlineDraft] = useState(false);
   const [tableRowsDraft, setTableRowsDraft] = useState("2");
   const [tableColumnsDraft, setTableColumnsDraft] = useState("2");
   const [tableHeaderBgDraft, setTableHeaderBgDraft] = useState("");
@@ -1132,10 +1137,16 @@ function SystemMapCanvasInner({
     const next = elements.map((el) => {
       if (selectedProcessId && el.id === selectedProcessId && el.element_type === "category") {
         changed = true;
+        const parsedProcessSize = Number(processFontSizeDraft.trim());
+        const previewProcessSize = Number.isFinite(parsedProcessSize) ? Math.max(10, Math.min(72, Math.round(parsedProcessSize))) : 12;
         return {
           ...el,
           heading: processHeadingDraft,
           color_hex: processColorDraft ? normalizePreviewHex(processColorDraft) : el.color_hex,
+          element_config: {
+            ...((el.element_config as Record<string, unknown> | null) ?? {}),
+            font_size: previewProcessSize,
+          },
         };
       }
       if (selectedTextBoxId && el.id === selectedTextBoxId && el.element_type === "text_box") {
@@ -1152,6 +1163,8 @@ function SystemMapCanvasInner({
             underline: textBoxUnderlineDraft,
             align: textBoxAlignDraft,
             font_size: previewTextSize,
+            background_color: textBoxBackgroundColorDraft,
+            outline: textBoxOutlineDraft,
           },
         };
       }
@@ -1248,12 +1261,15 @@ function SystemMapCanvasInner({
     selectedFlowShapeId,
     processHeadingDraft,
     processColorDraft,
+    processFontSizeDraft,
     textBoxContentDraft,
     textBoxBoldDraft,
     textBoxItalicDraft,
     textBoxUnderlineDraft,
     textBoxAlignDraft,
     textBoxFontSizeDraft,
+    textBoxBackgroundColorDraft,
+    textBoxOutlineDraft,
     tableRowsDraft,
     tableColumnsDraft,
     tableHeaderBgDraft,
@@ -1766,6 +1782,9 @@ function SystemMapCanvasInner({
         } else if (current.element_type === "incident_finding") {
           minWidth = incidentDefaultWidth;
           minHeight = incidentThreeOneHeight;
+        } else if (current.element_type.startsWith("incident_")) {
+          minWidth = incidentCardWidth;
+          minHeight = incidentCardHeight;
         }
         const width = Math.max(minWidth, snapToMinorGrid(change.dimensions.width));
         const height = Math.max(minHeight, snapToMinorGrid(change.dimensions.height));
@@ -1935,6 +1954,32 @@ function SystemMapCanvasInner({
     [elements, imageUrlsByElementId]
   );
 
+  const handleToggleIncidentDetail = useCallback(
+    async (elementId: string, nextOpen: boolean) => {
+      let nextConfig: Record<string, unknown> | null = null;
+      let canPersist = false;
+      setElements((prev) => {
+        const current = prev.find((el) => el.id === elementId && el.element_type.startsWith("incident_"));
+        if (!current || !canEditElement(current)) return prev;
+        canPersist = canWriteMap;
+        nextConfig = {
+          ...((current.element_config as Record<string, unknown> | null) ?? {}),
+          incident_detail_open: nextOpen,
+        };
+        return prev.map((el) => (el.id === elementId ? { ...el, element_config: nextConfig } : el));
+      });
+      if (!nextConfig || !canPersist) return;
+      const { error: e } = await supabaseBrowser
+        .schema("ms")
+        .from("canvas_elements")
+        .update({ element_config: nextConfig })
+        .eq("id", elementId)
+        .eq("map_id", mapId);
+      if (e) setError(e.message || "Unable to save node detail state.");
+    },
+    [canEditElement, canWriteMap, mapId, setElements, setError]
+  );
+
   useEffect(() => {
     if (isNodeDragActiveRef.current) return;
     const directReportCountByPersonNormalizedId = buildOrgDirectReportCountByPersonNormalizedId({
@@ -1983,6 +2028,7 @@ function SystemMapCanvasInner({
             orgDirectReportCountByPersonId,
             onTableCellCommit: handleTableCellCommit,
             onTableCellStyleCommit: handleTableCellStyleCommit,
+            onToggleIncidentDetail: handleToggleIncidentDetail,
           });
           if (primaryElementNode !== undefined) return primaryElementNode;
           return buildSecondaryElementFlowNode({
@@ -1992,11 +2038,12 @@ function SystemMapCanvasInner({
             canWriteMap,
             imageUrlsByElementId,
             onOpenEvidenceMedia: handleOpenEvidenceMediaOverlay,
+            onToggleIncidentDetail: handleToggleIncidentDetail,
           });
         }).filter(Boolean) as Node<FlowData>[],
       ];
     setFlowNodes(nextNodes);
-  }, [nodes, canvasPreviewElements, relations, typesById, setFlowNodes, getNodeSize, selectedFlowIds, selectedTableId, canWriteMap, canEditElement, selectedFlowShapeId, hasUnsavedFlowShapeDraftChanges, mapCategoryId, memberDisplayNameByUserId, userEmail, userId, formatStickyDate, imageUrlsByElementId, isNodeDragActive, handleTableCellCommit, handleTableCellStyleCommit, handleOpenEvidenceMediaOverlay]);
+  }, [nodes, canvasPreviewElements, relations, typesById, setFlowNodes, getNodeSize, selectedFlowIds, selectedTableId, canWriteMap, canEditElement, selectedFlowShapeId, hasUnsavedFlowShapeDraftChanges, mapCategoryId, memberDisplayNameByUserId, userEmail, userId, formatStickyDate, imageUrlsByElementId, isNodeDragActive, handleTableCellCommit, handleTableCellStyleCommit, handleOpenEvidenceMediaOverlay, handleToggleIncidentDetail]);
 
   useEffect(() => {
     if (isNodeDragActiveRef.current) return;
@@ -2688,6 +2735,12 @@ function SystemMapCanvasInner({
     setPersonProposedRoleDraft(false);
   }, [selectedPerson, mapCategoryId]);
   useEffect(() => {
+    if (!selectedProcess) return;
+    const cfg = (selectedProcess.element_config as Record<string, unknown> | null) ?? {};
+    const processSizeRaw = Number(cfg.font_size ?? 12);
+    setProcessFontSizeDraft(String(Number.isFinite(processSizeRaw) ? Math.max(10, Math.min(72, Math.round(processSizeRaw))) : 12));
+  }, [selectedProcess]);
+  useEffect(() => {
     if (!selectedGrouping) return;
     setGroupingLabelDraft(selectedGrouping.heading ?? "");
     setGroupingWidthDraft(String(Math.max(groupingMinWidthSquares, Math.round((selectedGrouping.width || groupingDefaultWidth) / minorGridSize))));
@@ -2713,6 +2766,9 @@ function SystemMapCanvasInner({
     setTextBoxAlignDraft(align === "center" || align === "right" ? align : "left");
     const size = Number(cfg.font_size ?? 16);
     setTextBoxFontSizeDraft(String(Number.isFinite(size) ? Math.max(16, Math.min(168, Math.round(size))) : 16));
+    const backgroundColor = typeof cfg.background_color === "string" && /^#[0-9a-fA-F]{6}$/.test(cfg.background_color) ? cfg.background_color.toUpperCase() : "#FFFFFF";
+    setTextBoxBackgroundColorDraft(backgroundColor);
+    setTextBoxOutlineDraft(Boolean(cfg.outline));
   }, [selectedTextBox]);
   useEffect(() => {
     if (!selectedTable) return;
@@ -3430,6 +3486,8 @@ function SystemMapCanvasInner({
     bowtieSquareHeight,
     bowtieControlHeight,
     bowtieRiskRatingHeight,
+    incidentCardWidth,
+    incidentCardHeight,
     incidentDefaultWidth,
     incidentThreeTwoHeight,
     incidentSquareSize,
@@ -3437,6 +3495,7 @@ function SystemMapCanvasInner({
     incidentThreeOneHeight,
     selectedProcessId,
     processHeadingDraft,
+    processFontSizeDraft,
     processWidthDraft,
     processHeightDraft,
     processMinWidthSquares,
@@ -3484,6 +3543,8 @@ function SystemMapCanvasInner({
     textBoxUnderlineDraft,
     textBoxAlignDraft,
     textBoxFontSizeDraft,
+    textBoxBackgroundColorDraft,
+    textBoxOutlineDraft,
     selectedTableId,
     tableRowsDraft,
     tableColumnsDraft,
@@ -3743,7 +3804,7 @@ function SystemMapCanvasInner({
 
       if (payload.step === "sequence") {
         const items = payload.items.filter((item) => isFilled(item.heading) || isFilled(item.description) || isFilled(item.timestamp) || isFilled(item.location));
-        await createGroupAndInsert("sequence", stepGroupHeadingByWizardStep.sequence, bowtieDefaultWidth, bowtieControlHeight, (origin, index) => {
+        await createGroupAndInsert("sequence", stepGroupHeadingByWizardStep.sequence, incidentCardWidth, incidentCardHeight, (origin, index) => {
           const item = items[index];
           return {
             map_id: mapId,
@@ -3758,8 +3819,8 @@ function SystemMapCanvasInner({
             },
             pos_x: origin.x,
             pos_y: origin.y,
-            width: bowtieDefaultWidth,
-            height: bowtieControlHeight,
+            width: incidentCardWidth,
+            height: incidentCardHeight,
           };
         }, items.length);
         return;
@@ -3799,7 +3860,7 @@ function SystemMapCanvasInner({
 
       if (payload.step === "task-condition") {
         const items = payload.items.filter((item) => isFilled(item.heading) || isFilled(item.description) || isFilled(item.environmentalContext));
-        await createGroupAndInsert("task-condition", stepGroupHeadingByWizardStep["task-condition"], bowtieDefaultWidth, bowtieControlHeight, (origin, index) => {
+        await createGroupAndInsert("task-condition", stepGroupHeadingByWizardStep["task-condition"], incidentCardWidth, incidentCardHeight, (origin, index) => {
           const item = items[index];
           return {
             map_id: mapId,
@@ -3814,8 +3875,8 @@ function SystemMapCanvasInner({
             },
             pos_x: origin.x,
             pos_y: origin.y,
-            width: bowtieDefaultWidth,
-            height: bowtieControlHeight,
+            width: incidentCardWidth,
+            height: incidentCardHeight,
           };
         }, items.length);
         return;
@@ -3823,7 +3884,7 @@ function SystemMapCanvasInner({
 
       if (payload.step === "factors") {
         const items = payload.items.filter((item) => isFilled(item.heading) || isFilled(item.description) || isFilled(item.category));
-        await createGroupAndInsert("factors", stepGroupHeadingByWizardStep.factors, bowtieDefaultWidth, bowtieControlHeight, (origin, index) => {
+        await createGroupAndInsert("factors", stepGroupHeadingByWizardStep.factors, incidentCardWidth, incidentCardHeight, (origin, index) => {
           const item = items[index];
           if (item.kind === "incident_system_factor") {
             return {
@@ -3839,8 +3900,8 @@ function SystemMapCanvasInner({
               },
               pos_x: origin.x,
               pos_y: origin.y,
-              width: bowtieDefaultWidth,
-              height: bowtieControlHeight,
+              width: incidentCardWidth,
+              height: incidentCardHeight,
             };
           }
           return {
@@ -3857,8 +3918,8 @@ function SystemMapCanvasInner({
             },
             pos_x: origin.x,
             pos_y: origin.y,
-            width: bowtieDefaultWidth,
-            height: bowtieControlHeight,
+            width: incidentCardWidth,
+            height: incidentCardHeight,
           };
         }, items.length);
         return;
@@ -3866,7 +3927,7 @@ function SystemMapCanvasInner({
 
       if (payload.step === "control-barrier") {
         const items = payload.items.filter((item) => isFilled(item.heading) || isFilled(item.description) || isFilled(item.controlType) || isFilled(item.ownerText));
-        await createGroupAndInsert("control-barrier", stepGroupHeadingByWizardStep["control-barrier"], bowtieDefaultWidth, bowtieControlHeight, (origin, index) => {
+        await createGroupAndInsert("control-barrier", stepGroupHeadingByWizardStep["control-barrier"], incidentCardWidth, incidentCardHeight, (origin, index) => {
           const item = items[index];
           return {
             map_id: mapId,
@@ -3885,8 +3946,8 @@ function SystemMapCanvasInner({
             },
             pos_x: origin.x,
             pos_y: origin.y,
-            width: bowtieDefaultWidth,
-            height: bowtieControlHeight,
+            width: incidentCardWidth,
+            height: incidentCardHeight,
           };
         }, items.length);
         return;
@@ -3894,7 +3955,7 @@ function SystemMapCanvasInner({
 
       if (payload.step === "evidence") {
         const items = payload.items.filter((item) => isFilled(item.heading) || isFilled(item.description) || isFilled(item.evidenceType) || isFilled(item.source));
-        await createGroupAndInsert("evidence", stepGroupHeadingByWizardStep.evidence, bowtieDefaultWidth, bowtieControlHeight, (origin, index) => {
+        await createGroupAndInsert("evidence", stepGroupHeadingByWizardStep.evidence, incidentCardWidth, incidentCardHeight, (origin, index) => {
           const item = items[index];
           return {
             map_id: mapId,
@@ -3914,8 +3975,8 @@ function SystemMapCanvasInner({
             },
             pos_x: origin.x,
             pos_y: origin.y,
-            width: bowtieDefaultWidth,
-            height: bowtieControlHeight,
+            width: incidentCardWidth,
+            height: incidentCardHeight,
           };
         }, items.length);
         return;
@@ -3945,7 +4006,7 @@ function SystemMapCanvasInner({
       }
 
       const items = payload.items.filter((item) => isFilled(item.heading) || isFilled(item.description) || isFilled(item.ownerText) || isFilled(item.dueDate));
-      await createGroupAndInsert("recommendation", stepGroupHeadingByWizardStep.recommendation, bowtieDefaultWidth, bowtieControlHeight, (origin, index) => {
+      await createGroupAndInsert("recommendation", stepGroupHeadingByWizardStep.recommendation, incidentCardWidth, incidentCardHeight, (origin, index) => {
         const item = items[index];
         return {
           map_id: mapId,
@@ -3961,8 +4022,8 @@ function SystemMapCanvasInner({
           },
           pos_x: origin.x,
           pos_y: origin.y,
-          width: bowtieDefaultWidth,
-          height: bowtieControlHeight,
+          width: incidentCardWidth,
+          height: incidentCardHeight,
         };
       }, items.length);
     },
@@ -4821,7 +4882,7 @@ function SystemMapCanvasInner({
         mapRoleLabel={mapRoleLabel}
       />
 
-      <main className="relative min-h-0 flex-1 overflow-hidden pb-[calc(env(safe-area-inset-bottom,0px)+156px)] md:pb-0">
+      <main className="relative min-h-0 flex-1 overflow-hidden pb-0">
         <div
           ref={canvasRef}
           className="h-full w-full bg-stone-50"
@@ -4957,7 +5018,7 @@ function SystemMapCanvasInner({
             zoomOnScroll
             snapToGrid
             snapGrid={[minorGridSize, minorGridSize]}
-            minZoom={isMobile ? 0.48 : 0.2}
+            minZoom={isMobile ? 0.2 : 0.2}
             maxZoom={2}
             fitView={!isMobile}
             fitViewOptions={{ padding: 0.2 }}
@@ -5153,6 +5214,8 @@ function SystemMapCanvasInner({
             processMinHeightSquares,
             processHeadingDraft,
             setProcessHeadingDraft,
+            processFontSizeDraft,
+            setProcessFontSizeDraft,
             processWidthDraft,
             setProcessWidthDraft,
             processHeightDraft,
@@ -5396,6 +5459,10 @@ function SystemMapCanvasInner({
             setTextBoxAlignDraft,
             textBoxFontSizeDraft,
             setTextBoxFontSizeDraft,
+            textBoxBackgroundColorDraft,
+            setTextBoxBackgroundColorDraft,
+            textBoxOutlineDraft,
+            setTextBoxOutlineDraft,
             onDelete: async () => {
               if (!selectedTextBox) return;
               await handleDeleteProcessElement(selectedTextBox.id);
@@ -5736,6 +5803,31 @@ export default function SystemMapCanvasClient({
   templateEditorIsGlobal?: boolean;
   entrySource?: "dashboard" | "templates";
 }) {
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const proto = Element.prototype as Element & {
+      __systemMapReleasePointerCapturePatched?: boolean;
+      __systemMapOriginalReleasePointerCapture?: typeof Element.prototype.releasePointerCapture;
+    };
+    if (proto.__systemMapReleasePointerCapturePatched) return;
+    const original = Element.prototype.releasePointerCapture;
+    proto.__systemMapOriginalReleasePointerCapture = original;
+    Element.prototype.releasePointerCapture = function patchedReleasePointerCapture(pointerId: number) {
+      try {
+        if (typeof this.hasPointerCapture === "function" && !this.hasPointerCapture(pointerId)) {
+          return;
+        }
+        original.call(this, pointerId);
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "NotFoundError") {
+          return;
+        }
+        throw error;
+      }
+    };
+    proto.__systemMapReleasePointerCapturePatched = true;
+  }, []);
+
   useEffect(() => {
     const body = document.body;
     const main = document.querySelector("body > main");

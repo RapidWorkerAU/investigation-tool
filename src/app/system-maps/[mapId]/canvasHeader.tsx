@@ -82,15 +82,18 @@ export function MapCanvasHeader({
 
   return (
     <header className="site-header fixed inset-x-0 top-0 z-[90] md:sticky" style={{ backgroundColor: "#000000", borderBottomColor: "#0f172a" }}>
-      <div className="header-inner flex flex-col items-start gap-1.5 md:flex-row md:items-center md:justify-between" style={{ paddingLeft: "12px", paddingRight: "16px", backgroundColor: "#000000", paddingTop: "8px", paddingBottom: "8px", height: "auto", minHeight: "0" }}>
-        <div className="header-left flex items-center gap-3 md:gap-8">
+      <div
+        className="header-inner flex flex-col items-center gap-2 md:flex-row md:items-center md:justify-between"
+        style={{ paddingLeft: "12px", paddingRight: "16px", backgroundColor: "#000000", paddingTop: "8px", paddingBottom: "8px", height: "auto", minHeight: "0" }}
+      >
+        <div className="header-left flex flex-col items-center justify-center gap-1.5 text-center md:flex-row md:items-center md:gap-8 md:text-left">
           <a href="/"><img src="/images/logo-white.png" alt="Investigation Tool" className="block h-[34px] w-auto md:h-[48px]" /></a>
-          <span className="text-[10px] font-semibold uppercase tracking-[0.18em] sm:text-xs md:text-xl md:tracking-[0.14em]" style={{ color: "#05c3dd" }}>
+          <span className="text-center text-[20px] font-semibold uppercase tracking-[0.14em] md:text-left md:text-xl md:tracking-[0.14em]" style={{ color: "#05c3dd" }}>
             {mapCategoryHeaderLabel}
           </span>
         </div>
-        <div className="header-actions flex w-full items-center md:w-auto">
-          <div className="flex w-full items-center gap-2 overflow-hidden md:w-auto">
+        <div className="header-actions flex w-full items-center justify-center md:w-auto md:justify-end">
+          <div className="flex w-full flex-wrap items-center justify-center gap-2 overflow-hidden md:w-auto md:flex-nowrap md:justify-end">
             <span
               className="shrink-0 rounded px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.08em]"
               title={accessBadge.title}
@@ -104,7 +107,7 @@ export function MapCanvasHeader({
             {isEditingMapTitle ? (
               <input
                 autoFocus
-                className="min-w-0 flex-1 rounded-md border border-[#a78bfa] bg-transparent px-3 py-1.5 text-[0.95rem] font-semibold text-white outline-none ring-1 ring-[#a78bfa]/70 md:min-w-[240px] md:flex-none md:text-sm"
+                className="min-w-0 flex-1 rounded-md border border-[#a78bfa] bg-transparent px-3 py-1.5 text-center text-[0.95rem] font-semibold text-white outline-none ring-1 ring-[#a78bfa]/70 md:min-w-[240px] md:flex-none md:text-left md:text-sm"
                 value={mapTitleDraft}
                 onChange={(e) => setMapTitleDraft(e.target.value)}
                 onBlur={() => {
@@ -129,7 +132,7 @@ export function MapCanvasHeader({
             ) : (
               <button
                 type="button"
-                className="min-w-0 flex-1 truncate rounded-md border border-transparent px-2 py-1 text-left text-[0.95rem] font-semibold text-white hover:border-slate-600/60 hover:bg-slate-900/40 md:flex-none md:text-sm"
+                className="min-w-0 flex-1 truncate rounded-md border border-transparent px-2 py-1 text-center text-[0.95rem] font-semibold text-white hover:border-slate-600/60 hover:bg-slate-900/40 md:flex-none md:text-left md:text-sm"
                 onClick={() => {
                   if (!canManageMapMetadata) {
                     setError("Only the map owner can rename this map.");

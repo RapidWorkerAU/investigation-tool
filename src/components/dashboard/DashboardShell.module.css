@@ -2229,6 +2229,22 @@
     0 8px 18px rgba(24, 29, 39, 0.08);
 }
 
+.accountToggleGroup {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.accountToggleButton {
+  white-space: nowrap;
+}
+
+.accountToggleDesktopLabel {
+  display: inline;
+}
+
+.accountToggleMobileLabel {
+  display: none;
+}
+
 .reportHero {
   display: flex;
   justify-content: space-between;
@@ -3830,7 +3846,7 @@
     width: min(100%, 640px);
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 6px;
+    gap: 4px;
     border-radius: 24px;
     margin: 0 auto;
   }
@@ -3838,10 +3854,26 @@
   .reportToggleButton {
     width: 100%;
     min-width: 0;
-    min-height: 40px;
-    padding: 0 12px;
-    font-size: 0.86rem;
+    min-height: 38px;
+    padding: 0 5px;
+    font-size: 0.64rem;
+    letter-spacing: -0.015em;
     text-align: center;
+  }
+
+  .accountToggleButton {
+    min-height: 36px;
+    padding: 0 4px;
+    font-size: 0.46rem;
+    letter-spacing: -0.03em;
+  }
+
+  .accountToggleDesktopLabel {
+    display: none;
+  }
+
+  .accountToggleMobileLabel {
+    display: inline;
   }
 
   .reportMobileSelectWrap {
@@ -4187,14 +4219,31 @@
 
   .reportToggleGroup {
     width: 100%;
-    padding: 5px;
+    padding: 4px;
+    gap: 4px;
     border-radius: 20px;
   }
 
   .reportToggleButton {
-    min-height: 38px;
-    padding: 0 10px;
-    font-size: 0.78rem;
+    min-height: 36px;
+    padding: 0 7px;
+    font-size: 0.69rem;
+    letter-spacing: -0.01em;
+  }
+
+  .accountToggleButton {
+    min-height: 34px;
+    padding: 0 3px;
+    font-size: 0.44rem;
+    letter-spacing: -0.03em;
+  }
+
+  .accountToggleDesktopLabel {
+    display: none;
+  }
+
+  .accountToggleMobileLabel {
+    display: inline;
   }
 
   .reportMobileSelect {

@@ -20,6 +20,8 @@ import {
   groupingMinHeight,
   groupingMinWidth,
   incidentDefaultWidth,
+  incidentCardHeight,
+  incidentCardWidth,
   incidentFourThreeHeight,
   imageDefaultWidth,
   imageMinHeight,
@@ -87,6 +89,132 @@ const formatBowtieConfigLabel = (value: string) =>
     .split("_")
     .map((part) => (part ? `${part[0].toUpperCase()}${part.slice(1)}` : part))
     .join(" ");
+
+const formatIncidentOptionLabel = (value: string) => formatBowtieConfigLabel(value.trim());
+
+const buildIncidentTag = (
+  key: string,
+  rawValue: string | null | undefined,
+  options?: {
+    iconSrc?: string;
+    pillBg?: string;
+    pillText?: string;
+    label?: string;
+  }
+) => {
+  const normalized = String(rawValue ?? "").trim().toLowerCase();
+  if (!normalized) return null;
+  return {
+    key,
+    label: options?.label || formatIncidentOptionLabel(normalized),
+    iconSrc: options?.iconSrc || "/icons/other.svg",
+    pillBg: options?.pillBg || "#e2e8f0",
+    pillText: options?.pillText || "#111827",
+  };
+};
+
+const compactIncidentTags = (
+  tags: Array<ReturnType<typeof buildIncidentTag>>
+): NonNullable<ReturnType<typeof buildIncidentTag>>[] => tags.filter((tag): tag is NonNullable<ReturnType<typeof buildIncidentTag>> => tag !== null);
+const incidentExpandedHeight = incidentCardHeight;
+
+const incidentIconByValue = (value: string) => {
+  const normalized = value.trim().toLowerCase();
+  const directMap: Record<string, string> = {
+    present: "/icons/present.svg",
+    absent: "/icons/absent.svg",
+    normal: "/icons/present.svg",
+    abnormal: "/icons/absent.svg",
+    essential: "/icons/essential.svg",
+    contributing: "/icons/contributing.svg",
+    predisposing: "/icons/predisposing.svg",
+    neutral: "/icons/neutral.svg",
+    human: "/icons/human.svg",
+    equipment: "/icons/equipment.svg",
+    process: "/icons/process.svg",
+    environment: "/icons/environment.svg",
+    organisation: "/icons/business.svg",
+    organization: "/icons/business.svg",
+    business: "/icons/business.svg",
+    training: "/icons/training.svg",
+    supervision: "/icons/supervision.svg",
+    planning: "/icons/planning.svg",
+    design: "/icons/design.svg",
+    culture: "/icons/culture.svg",
+    other: "/icons/other.svg",
+    injury: "/icons/injury.svg",
+    damage: "/icons/damage.svg",
+    loss: "/icons/loss.svg",
+    environmental_impact: "/icons/environmentloss.svg",
+    environmental_loss: "/icons/environmentloss.svg",
+    photo: "/icons/evidencephoto.svg",
+    statement: "/icons/evidencestatement.svg",
+    record: "/icons/evidencerecord.svg",
+    failed: "/icons/failed.svg",
+    missing: "/icons/absent.svg",
+    effective: "/icons/present.svg",
+    preventive: "/icons/control.svg",
+    mitigative: "/icons/control.svg",
+    recovery: "/icons/control.svg",
+    engineering: "/icons/control.svg",
+    substitution: "/icons/control.svg",
+    elimination: "/icons/control.svg",
+    administrative: "/icons/control.svg",
+    ppe: "/icons/control.svg",
+    location: "/icons/locationicon.svg",
+    timestamp: "/icons/datestamp.svg",
+  };
+  return directMap[normalized] || "/icons/other.svg";
+};
+
+const incidentPillBgByValue = (value: string) => {
+  const normalized = value.trim().toLowerCase();
+  const directMap: Record<string, string> = {
+    present: "#a7f3a1",
+    effective: "#a7f3a1",
+    normal: "#a7f3a1",
+    absent: "#fecaca",
+    abnormal: "#fecaca",
+    missing: "#e5e7eb",
+    failed: "#fecaca",
+    essential: "#fde68a",
+    contributing: "#fed7aa",
+    predisposing: "#d8b4fe",
+    neutral: "#dbeafe",
+    human: "#c4b5fd",
+    equipment: "#c7d2fe",
+    process: "#fdba74",
+    environment: "#bae6fd",
+    organisation: "#bfdbfe",
+    organization: "#bfdbfe",
+    business: "#bfdbfe",
+    training: "#bfdbfe",
+    supervision: "#ddd6fe",
+    planning: "#bfdbfe",
+    design: "#fecdd3",
+    culture: "#fde68a",
+    other: "#e5e7eb",
+    injury: "#fecaca",
+    damage: "#fdba74",
+    loss: "#fcd34d",
+    environmental_impact: "#a7f3d0",
+    environmental_loss: "#a7f3d0",
+    photo: "#bfdbfe",
+    statement: "#ddd6fe",
+    record: "#cbd5e1",
+    preventive: "#bbf7d0",
+    mitigative: "#bfdbfe",
+    recovery: "#ddd6fe",
+    engineering: "#bbf7d0",
+    substitution: "#fde68a",
+    elimination: "#fecaca",
+    administrative: "#bfdbfe",
+    ppe: "#fed7aa",
+    location: "#dbeafe",
+    timestamp: "#cbd5e1",
+  };
+  return directMap[normalized] || "#e2e8f0";
+};
 
 const normalizeFlowRef = (value: string | null | undefined) => {
   if (!value) return "";
@@ -348,6 +476,7 @@ export const buildPrimaryElementFlowNode = (params: {
       fontSize?: number;
     }
   ) => void;
+  onToggleIncidentDetail?: (elementId: string, nextOpen: boolean) => void;
 }): Node<FlowData> | null | undefined => {
   const {
     element: el,
@@ -367,6 +496,7 @@ export const buildPrimaryElementFlowNode = (params: {
     orgDirectReportCountByPersonId,
     onTableCellCommit,
     onTableCellStyleCommit,
+    onToggleIncidentDetail,
   } = params;
 
   if (el.element_type === "grouping_container") return null;
@@ -485,6 +615,8 @@ export const buildPrimaryElementFlowNode = (params: {
           underline: Boolean(cfg.underline),
           align: alignRaw === "center" || alignRaw === "right" ? alignRaw : "left",
           fontSize: Math.max(16, Math.min(168, Number(cfg.font_size ?? 16))),
+          backgroundColor: typeof cfg.background_color === "string" ? cfg.background_color : "#FFFFFF",
+          outline: Boolean(cfg.outline),
         },
         userGroup: "",
         disciplineKeys: [],
@@ -859,8 +991,9 @@ export const buildSecondaryElementFlowNode = (params: {
   canWriteMap: boolean;
   imageUrlsByElementId: Record<string, string | undefined>;
   onOpenEvidenceMedia?: (elementId: string) => void;
+  onToggleIncidentDetail?: (elementId: string, nextOpen: boolean) => void;
 }): Node<FlowData> => {
-  const { element: el, selectedFlowIds, canEditElement, canWriteMap, imageUrlsByElementId, onOpenEvidenceMedia } = params;
+  const { element: el, selectedFlowIds, canEditElement, canWriteMap, imageUrlsByElementId, onOpenEvidenceMedia, onToggleIncidentDetail } = params;
   const flowId = processFlowId(el.id);
   const isMarked = selectedFlowIds.has(flowId);
   const canEditThis = canEditElement(el);
@@ -1221,6 +1354,23 @@ export const buildSecondaryElementFlowNode = (params: {
       }
     }
     const locationLabel = String(cfg.location ?? "").trim();
+    const incidentTags = compactIncidentTags([
+      locationLabel
+        ? buildIncidentTag("location", "location", {
+            iconSrc: incidentIconByValue("location"),
+            label: locationLabel,
+            pillBg: incidentPillBgByValue("location"),
+          })
+        : null,
+      timestampLabel
+        ? buildIncidentTag("timestamp", "timestamp", {
+            iconSrc: incidentIconByValue("timestamp"),
+            label: timestampSecondary ? `${timestampLabel} | ${timestampSecondary}` : timestampLabel,
+            pillBg: incidentPillBgByValue("timestamp"),
+          })
+        : null,
+    ]);
+    const detailOpen = Boolean(cfg.incident_detail_open);
     return {
       id: flowId,
       type: "incidentSequenceStep",
@@ -1230,11 +1380,11 @@ export const buildSecondaryElementFlowNode = (params: {
       draggable: canEditThis,
       selectable: canWriteMap,
       style: {
-        width: Math.max(bowtieDefaultWidth, el.width || bowtieDefaultWidth),
+        width: Math.max(incidentCardWidth, el.width || incidentCardWidth),
         height:
           el.height === incidentDefaultWidth
-            ? bowtieControlHeight
-            : Math.max(bowtieControlHeight, el.height || bowtieControlHeight),
+            ? incidentExpandedHeight
+            : Math.max(incidentExpandedHeight, el.height || incidentExpandedHeight),
         borderRadius: 0,
         border: "none",
         background: "transparent",
@@ -1254,6 +1404,9 @@ export const buildSecondaryElementFlowNode = (params: {
         disciplineKeys: [],
         bannerBg: "#bfdbfe",
         bannerText: "#111827",
+        incidentTags,
+        incidentDetailOpen: detailOpen,
+        onToggleIncidentDetail: onToggleIncidentDetail ? (nextOpen) => onToggleIncidentDetail(el.id, nextOpen) : undefined,
         isLandscape: true,
         isUnconfigured: false,
       },
@@ -1268,6 +1421,16 @@ export const buildSecondaryElementFlowNode = (params: {
           .map((part) => (part ? part.charAt(0).toUpperCase() + part.slice(1) : ""))
           .join(" ")} Impact`
       : "";
+    const incidentTags = impactType
+      ? compactIncidentTags([
+          buildIncidentTag("impact", impactType, {
+            iconSrc: incidentIconByValue(impactType),
+            label: impactLabel,
+            pillBg: incidentPillBgByValue(impactType),
+          }),
+        ])
+      : [];
+    const detailOpen = Boolean(cfg.incident_detail_open);
     return {
       id: flowId,
       type: "incidentOutcome",
@@ -1277,11 +1440,11 @@ export const buildSecondaryElementFlowNode = (params: {
       draggable: canEditThis,
       selectable: canWriteMap,
       style: {
-        width: Math.max(bowtieDefaultWidth, el.width || bowtieDefaultWidth),
+        width: Math.max(incidentCardWidth, el.width || incidentCardWidth),
         height:
           el.height === incidentDefaultWidth
-            ? bowtieControlHeight
-            : Math.max(bowtieControlHeight, el.height || bowtieControlHeight),
+            ? incidentExpandedHeight
+            : Math.max(incidentExpandedHeight, el.height || incidentExpandedHeight),
         borderRadius: 0,
         border: "none",
         background: "transparent",
@@ -1299,6 +1462,9 @@ export const buildSecondaryElementFlowNode = (params: {
         disciplineKeys: [],
         bannerBg: "#ef4444",
         bannerText: "#ffffff",
+        incidentTags,
+        incidentDetailOpen: detailOpen,
+        onToggleIncidentDetail: onToggleIncidentDetail ? (nextOpen) => onToggleIncidentDetail(el.id, nextOpen) : undefined,
         isLandscape: true,
         isUnconfigured: false,
       },
@@ -1308,6 +1474,22 @@ export const buildSecondaryElementFlowNode = (params: {
     const cfg = (el.element_config as Record<string, unknown> | null) ?? {};
     const state = String(cfg.state ?? "normal").trim().toLowerCase();
     const stateLabel = state ? `${state.charAt(0).toUpperCase()}${state.slice(1)}` : "";
+    const environmentalContext = String(cfg.environmental_context ?? "").trim();
+    const incidentTags = compactIncidentTags([
+      buildIncidentTag("state", state, {
+        iconSrc: incidentIconByValue(state),
+        label: stateLabel,
+        pillBg: incidentPillBgByValue(state),
+      }),
+      environmentalContext
+        ? buildIncidentTag("environmental_context", "other", {
+            iconSrc: incidentIconByValue("other"),
+            label: environmentalContext,
+            pillBg: incidentPillBgByValue("other"),
+          })
+        : null,
+    ]);
+    const detailOpen = Boolean(cfg.incident_detail_open);
     return {
       id: flowId,
       type: "incidentTaskCondition",
@@ -1317,11 +1499,11 @@ export const buildSecondaryElementFlowNode = (params: {
       draggable: canEditThis,
       selectable: canWriteMap,
       style: {
-        width: Math.max(bowtieDefaultWidth, el.width || bowtieDefaultWidth),
+        width: Math.max(incidentCardWidth, el.width || incidentCardWidth),
         height:
           el.height === incidentFourThreeHeight
-            ? bowtieControlHeight
-            : Math.max(bowtieControlHeight, el.height || bowtieControlHeight),
+            ? incidentExpandedHeight
+            : Math.max(incidentExpandedHeight, el.height || incidentExpandedHeight),
         borderRadius: 0,
         border: "none",
         background: "transparent",
@@ -1342,6 +1524,9 @@ export const buildSecondaryElementFlowNode = (params: {
         disciplineKeys: [],
         bannerBg: "#fb923c",
         bannerText: "#111827",
+        incidentTags,
+        incidentDetailOpen: detailOpen,
+        onToggleIncidentDetail: onToggleIncidentDetail ? (nextOpen) => onToggleIncidentDetail(el.id, nextOpen) : undefined,
         isLandscape: true,
         isUnconfigured: false,
       },
@@ -1361,6 +1546,24 @@ export const buildSecondaryElementFlowNode = (params: {
           .map((part) => (part ? part.charAt(0).toUpperCase() + part.slice(1) : ""))
           .join(" ")})`
       : "";
+    const incidentTags = compactIncidentTags([
+      buildIncidentTag("influence_type", influenceTypeRaw, {
+        iconSrc: incidentIconByValue(influenceTypeRaw),
+        label: formatIncidentOptionLabel(influenceTypeRaw),
+        pillBg: incidentPillBgByValue(influenceTypeRaw),
+      }),
+      buildIncidentTag("factor_classification", factorClassification, {
+        iconSrc: incidentIconByValue(factorClassification),
+        label: factorClassificationLabel,
+        pillBg: incidentPillBgByValue(factorClassification),
+      }),
+      buildIncidentTag("factor_presence", factorPresence, {
+        iconSrc: incidentIconByValue(factorPresence),
+        label: factorPresenceLabel,
+        pillBg: incidentPillBgByValue(factorPresence),
+      }),
+    ]);
+    const detailOpen = Boolean(cfg.incident_detail_open);
     return {
       id: flowId,
       type: "incidentFactor",
@@ -1370,8 +1573,8 @@ export const buildSecondaryElementFlowNode = (params: {
       draggable: canEditThis,
       selectable: canWriteMap,
       style: {
-        width: Math.max(bowtieDefaultWidth, el.width || bowtieDefaultWidth),
-        height: Math.max(bowtieControlHeight, el.height || bowtieControlHeight),
+        width: Math.max(incidentCardWidth, el.width || incidentCardWidth),
+        height: Math.max(incidentExpandedHeight, el.height || incidentExpandedHeight),
         borderRadius: 0,
         border: "none",
         background: "transparent",
@@ -1394,6 +1597,9 @@ export const buildSecondaryElementFlowNode = (params: {
         disciplineKeys: [],
         bannerBg: "#fde047",
         bannerText: "#111827",
+        incidentTags,
+        incidentDetailOpen: detailOpen,
+        onToggleIncidentDetail: onToggleIncidentDetail ? (nextOpen) => onToggleIncidentDetail(el.id, nextOpen) : undefined,
         isLandscape: true,
         isUnconfigured: false,
       },
@@ -1413,6 +1619,26 @@ export const buildSecondaryElementFlowNode = (params: {
           .map((part) => (part ? part.charAt(0).toUpperCase() + part.slice(1) : ""))
           .join(" ")})`
       : "";
+    const incidentTags = compactIncidentTags([
+      categoryRaw
+        ? buildIncidentTag("category", categoryRaw, {
+            iconSrc: incidentIconByValue(categoryRaw),
+            label: formatIncidentOptionLabel(categoryRaw),
+            pillBg: incidentPillBgByValue(categoryRaw),
+          })
+        : null,
+      buildIncidentTag("factor_classification", factorClassification, {
+        iconSrc: incidentIconByValue(factorClassification),
+        label: factorClassificationLabel,
+        pillBg: incidentPillBgByValue(factorClassification),
+      }),
+      buildIncidentTag("factor_presence", factorPresence, {
+        iconSrc: incidentIconByValue(factorPresence),
+        label: factorPresenceLabel,
+        pillBg: incidentPillBgByValue(factorPresence),
+      }),
+    ]);
+    const detailOpen = Boolean(cfg.incident_detail_open);
     return {
       id: flowId,
       type: "incidentSystemFactor",
@@ -1422,8 +1648,8 @@ export const buildSecondaryElementFlowNode = (params: {
       draggable: canEditThis,
       selectable: canWriteMap,
       style: {
-        width: Math.max(bowtieDefaultWidth, el.width || bowtieDefaultWidth),
-        height: Math.max(bowtieControlHeight, el.height || bowtieControlHeight),
+        width: Math.max(incidentCardWidth, el.width || incidentCardWidth),
+        height: Math.max(incidentExpandedHeight, el.height || incidentExpandedHeight),
         borderRadius: 0,
         border: "none",
         background: "transparent",
@@ -1446,6 +1672,9 @@ export const buildSecondaryElementFlowNode = (params: {
         disciplineKeys: [],
         bannerBg: "#a78bfa",
         bannerText: "#111827",
+        incidentTags,
+        incidentDetailOpen: detailOpen,
+        onToggleIncidentDetail: onToggleIncidentDetail ? (nextOpen) => onToggleIncidentDetail(el.id, nextOpen) : undefined,
         isLandscape: true,
         isUnconfigured: false,
       },
@@ -1464,6 +1693,26 @@ export const buildSecondaryElementFlowNode = (params: {
           .map((part) => (part ? part.charAt(0).toUpperCase() + part.slice(1) : ""))
           .join(" ")})`
       : "";
+    const incidentTags = compactIncidentTags([
+      buildIncidentTag("barrier_role", barrierRole, {
+        iconSrc: incidentIconByValue(barrierRole),
+        label: barrierRoleLabel,
+        pillBg: incidentPillBgByValue(barrierRole),
+      }),
+      buildIncidentTag("barrier_state", barrierState, {
+        iconSrc: incidentIconByValue(barrierState),
+        label: barrierStateLabel,
+        pillBg: incidentPillBgByValue(barrierState),
+      }),
+      controlTypeRaw
+        ? buildIncidentTag("control_type", controlTypeRaw, {
+            iconSrc: incidentIconByValue(controlTypeRaw),
+            label: formatIncidentOptionLabel(controlTypeRaw),
+            pillBg: incidentPillBgByValue(controlTypeRaw),
+          })
+        : null,
+    ]);
+    const detailOpen = Boolean(cfg.incident_detail_open);
     return {
       id: flowId,
       type: "incidentControlBarrier",
@@ -1473,8 +1722,8 @@ export const buildSecondaryElementFlowNode = (params: {
       draggable: canEditThis,
       selectable: canWriteMap,
       style: {
-        width: Math.max(bowtieDefaultWidth, el.width || bowtieDefaultWidth),
-        height: Math.max(bowtieControlHeight, el.height || bowtieControlHeight),
+        width: Math.max(incidentCardWidth, el.width || incidentCardWidth),
+        height: Math.max(incidentExpandedHeight, el.height || incidentExpandedHeight),
         borderRadius: 0,
         border: "none",
         background: "transparent",
@@ -1496,6 +1745,9 @@ export const buildSecondaryElementFlowNode = (params: {
         disciplineKeys: [],
         bannerBg: "#4ade80",
         bannerText: "#111827",
+        incidentTags,
+        incidentDetailOpen: detailOpen,
+        onToggleIncidentDetail: onToggleIncidentDetail ? (nextOpen) => onToggleIncidentDetail(el.id, nextOpen) : undefined,
         isLandscape: true,
         isUnconfigured: false,
       },
@@ -1516,6 +1768,24 @@ export const buildSecondaryElementFlowNode = (params: {
     const mediaRotationRaw = Number(cfg.media_rotation_deg ?? 0);
     const mediaRotationDeg: 0 | 90 | 180 | 270 =
       mediaRotationRaw === 90 || mediaRotationRaw === 180 || mediaRotationRaw === 270 ? mediaRotationRaw : 0;
+    const sourceText = String(cfg.source ?? "").trim();
+    const incidentTags = compactIncidentTags([
+      evidenceTypeRaw
+        ? buildIncidentTag("evidence_type", evidenceTypeRaw, {
+            iconSrc: incidentIconByValue(evidenceTypeRaw),
+            label: formatIncidentOptionLabel(evidenceTypeRaw),
+            pillBg: incidentPillBgByValue(evidenceTypeRaw),
+          })
+        : null,
+      sourceText
+        ? buildIncidentTag("source", "other", {
+            iconSrc: incidentIconByValue("other"),
+            label: sourceText,
+            pillBg: incidentPillBgByValue("other"),
+          })
+        : null,
+    ]);
+    const detailOpen = Boolean(cfg.incident_detail_open);
     return {
       id: flowId,
       type: "incidentEvidence",
@@ -1525,8 +1795,8 @@ export const buildSecondaryElementFlowNode = (params: {
       draggable: canEditThis,
       selectable: canWriteMap,
       style: {
-        width: Math.max(bowtieDefaultWidth, el.width || bowtieDefaultWidth),
-        height: Math.max(bowtieControlHeight, el.height || bowtieControlHeight),
+        width: Math.max(incidentCardWidth, el.width || incidentCardWidth),
+        height: Math.max(incidentExpandedHeight, el.height || incidentExpandedHeight),
         borderRadius: 0,
         border: "none",
         background: "transparent",
@@ -1550,6 +1820,9 @@ export const buildSecondaryElementFlowNode = (params: {
         disciplineKeys: [],
         bannerBg: "#cbd5e1",
         bannerText: "#111827",
+        incidentTags,
+        incidentDetailOpen: detailOpen,
+        onToggleIncidentDetail: onToggleIncidentDetail ? (nextOpen) => onToggleIncidentDetail(el.id, nextOpen) : undefined,
         isLandscape: true,
         isUnconfigured: false,
       },
@@ -1572,7 +1845,7 @@ export const buildSecondaryElementFlowNode = (params: {
       draggable: canEditThis,
       selectable: canWriteMap,
       style: {
-        width: Math.max(bowtieDefaultWidth, el.width || bowtieDefaultWidth),
+        width: Math.max(incidentCardWidth, el.width || incidentCardWidth),
         height: Math.max(autoHeight, el.height || autoHeight),
         borderRadius: 0,
         border: "none",
@@ -1597,6 +1870,17 @@ export const buildSecondaryElementFlowNode = (params: {
   }
   if (el.element_type === "incident_recommendation") {
     const cfg = (el.element_config as Record<string, unknown> | null) ?? {};
+    const ownerText = String(cfg.owner_text ?? "").trim();
+    const incidentTags = ownerText
+      ? compactIncidentTags([
+          buildIncidentTag("owner_text", "other", {
+            iconSrc: incidentIconByValue("other"),
+            label: ownerText,
+            pillBg: incidentPillBgByValue("other"),
+          }),
+        ])
+      : [];
+    const detailOpen = Boolean(cfg.incident_detail_open);
     return {
       id: flowId,
       type: "incidentRecommendation",
@@ -1606,8 +1890,8 @@ export const buildSecondaryElementFlowNode = (params: {
       draggable: canEditThis,
       selectable: canWriteMap,
       style: {
-        width: Math.max(bowtieDefaultWidth, el.width || bowtieDefaultWidth),
-        height: Math.max(bowtieControlHeight, el.height || bowtieControlHeight),
+        width: Math.max(incidentCardWidth, el.width || incidentCardWidth),
+        height: Math.max(incidentExpandedHeight, el.height || incidentExpandedHeight),
         borderRadius: 0,
         border: "none",
         background: "transparent",
@@ -1624,6 +1908,9 @@ export const buildSecondaryElementFlowNode = (params: {
         disciplineKeys: [],
         bannerBg: "#14b8a6",
         bannerText: "#111827",
+        incidentTags,
+        incidentDetailOpen: detailOpen,
+        onToggleIncidentDetail: onToggleIncidentDetail ? (nextOpen) => onToggleIncidentDetail(el.id, nextOpen) : undefined,
         isLandscape: true,
         isUnconfigured: false,
       },
@@ -1653,6 +1940,9 @@ export const buildSecondaryElementFlowNode = (params: {
       typeName: "Category",
       title: el.heading ?? "New Category",
       categoryColor: el.color_hex ?? defaultCategoryColor,
+      textStyle: {
+        fontSize: Math.max(10, Math.min(72, Number(((el.element_config as Record<string, unknown> | null) ?? {}).font_size ?? 12) || 12)),
+      },
       userGroup: "",
       disciplineKeys: [],
       bannerBg: "#000000",

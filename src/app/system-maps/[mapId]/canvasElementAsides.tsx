@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode, RefObject } from "react";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { CanvasElementRow, DisciplineKey, NodeRelationRow, RelationshipCategory, RelationshipCategoryOption } from "./canvasShared";
 import type { MapCategoryId } from "./mapCategories";
 import { getDisplayRelationType } from "./canvasShared";
@@ -60,6 +60,73 @@ type AsideShellProps = {
   children: ReactNode;
 };
 
+type FontSizePickerProps = {
+  value: string;
+  onChange: (value: string) => void;
+  options: readonly number[];
+};
+
+function FontSizePicker({ value, onChange, options }: FontSizePickerProps) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const selectedValue = options.find((option) => String(option) === value) ?? options[0];
+
+  useEffect(() => {
+    if (!open) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (rootRef.current && target && rootRef.current.contains(target)) return;
+      setOpen(false);
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="relative mt-1">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between rounded border border-slate-300 bg-white px-3 py-2 text-left text-black shadow-[0_1px_2px_rgba(15,23,42,0.06)]"
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span className="text-sm font-medium">{selectedValue}px</span>
+        <svg viewBox="0 0 24 24" className={`h-4 w-4 text-slate-500 transition ${open ? "rotate-180" : ""}`} aria-hidden="true">
+          <path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open ? (
+        <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-20 overflow-hidden rounded border border-slate-200 bg-white py-1 shadow-[0_12px_28px_rgba(15,23,42,0.18)]">
+          {options.map((size) => {
+            const active = String(size) === value;
+            return (
+              <button
+                key={size}
+                type="button"
+                className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm ${
+                  active ? "bg-sky-50 text-black" : "text-black hover:bg-slate-50"
+                }`}
+                onClick={() => {
+                  onChange(String(size));
+                  setOpen(false);
+                }}
+              >
+                <span className="inline-flex h-4 w-4 items-center justify-center text-sky-600">
+                  {active ? (
+                    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+                      <path d="M5 12l4 4L19 6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  ) : null}
+                </span>
+                <span>{size}px</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function AsideShell({ isMobile, leftAsideSlideIn, title, onClose, children }: AsideShellProps) {
   return (
     <aside
@@ -94,6 +161,8 @@ type CategoryPropertiesAsideProps = {
   processMinHeightSquares: number;
   processHeadingDraft: string;
   setProcessHeadingDraft: (value: string) => void;
+  processFontSizeDraft: string;
+  setProcessFontSizeDraft: (value: string) => void;
   processWidthDraft: string;
   setProcessWidthDraft: (value: string) => void;
   processHeightDraft: string;
@@ -115,6 +184,8 @@ export function CategoryPropertiesAside({
   processMinHeightSquares,
   processHeadingDraft,
   setProcessHeadingDraft,
+  processFontSizeDraft,
+  setProcessFontSizeDraft,
   processWidthDraft,
   setProcessWidthDraft,
   processHeightDraft,
@@ -130,6 +201,21 @@ export function CategoryPropertiesAside({
   if (!open) return null;
   const safeColor = /^#[0-9a-fA-F]{6}$/.test(processColorDraft ?? "") ? String(processColorDraft).toUpperCase() : "#249BC7";
   const hasColor = /^#[0-9a-fA-F]{6}$/.test(processColorDraft ?? "");
+  const parsePositiveInt = (value: string, fallback: number) => {
+    const parsed = Number(value.trim());
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.max(1, Math.floor(parsed));
+  };
+  const widthValue = parsePositiveInt(processWidthDraft, processMinWidthSquares);
+  const heightValue = parsePositiveInt(processHeightDraft, processMinHeightSquares);
+  const bumpWidth = (delta: number) => {
+    const next = Math.max(processMinWidthSquares, widthValue + delta);
+    setProcessWidthDraft(String(next));
+  };
+  const bumpHeight = (delta: number) => {
+    const next = Math.max(processMinHeightSquares, heightValue + delta);
+    setProcessHeightDraft(String(next));
+  };
   return (
     <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title="Category Properties" onClose={onClose}>
       <div className="mt-4 space-y-3">
@@ -141,24 +227,81 @@ export function CategoryPropertiesAside({
             placeholder="Enter category label"
           />
         </label>
-        <label className="text-sm text-white">Width (small squares, min {processMinWidthSquares})
-          <input
-            type="text"
-            inputMode="numeric"
-            className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 text-black"
-            value={processWidthDraft}
-            onChange={(e) => setProcessWidthDraft(e.target.value)}
+        <label className="text-sm text-white">Text Size
+          <FontSizePicker
+            value={processFontSizeDraft}
+            onChange={setProcessFontSizeDraft}
+            options={[10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 56, 72]}
           />
         </label>
-        <label className="text-sm text-white">Height (small squares, min {processMinHeightSquares})
-          <input
-            type="text"
-            inputMode="numeric"
-            className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 text-black"
-            value={processHeightDraft}
-            onChange={(e) => setProcessHeightDraft(e.target.value)}
-          />
-        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="text-sm text-white">Width (min {processMinWidthSquares})
+            <div className="mt-1 flex items-stretch">
+              <input
+                type="text"
+                inputMode="numeric"
+                className="w-full rounded-l border border-slate-300 bg-white px-3 py-2 text-black"
+                value={processWidthDraft}
+                onChange={(e) => setProcessWidthDraft(e.target.value)}
+              />
+              <div className="flex w-9 flex-col">
+                <button
+                  type="button"
+                  aria-label="Increase width"
+                  className="flex h-1/2 items-center justify-center rounded-tr border border-l-0 border-slate-300 bg-white text-black hover:bg-slate-100"
+                  onClick={() => bumpWidth(1)}
+                >
+                  <svg viewBox="0 0 24 24" className="h-3 w-3" aria-hidden="true">
+                    <path d="M6 14l6-6 6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  aria-label="Decrease width"
+                  className="flex h-1/2 items-center justify-center rounded-br border border-l-0 border-t-0 border-slate-300 bg-white text-black hover:bg-slate-100"
+                  onClick={() => bumpWidth(-1)}
+                >
+                  <svg viewBox="0 0 24 24" className="h-3 w-3" aria-hidden="true">
+                    <path d="M6 10l6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </label>
+          <label className="text-sm text-white">Height (min {processMinHeightSquares})
+            <div className="mt-1 flex items-stretch">
+              <input
+                type="text"
+                inputMode="numeric"
+                className="w-full rounded-l border border-slate-300 bg-white px-3 py-2 text-black"
+                value={processHeightDraft}
+                onChange={(e) => setProcessHeightDraft(e.target.value)}
+              />
+              <div className="flex w-9 flex-col">
+                <button
+                  type="button"
+                  aria-label="Increase height"
+                  className="flex h-1/2 items-center justify-center rounded-tr border border-l-0 border-slate-300 bg-white text-black hover:bg-slate-100"
+                  onClick={() => bumpHeight(1)}
+                >
+                  <svg viewBox="0 0 24 24" className="h-3 w-3" aria-hidden="true">
+                    <path d="M6 14l6-6 6 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  aria-label="Decrease height"
+                  className="flex h-1/2 items-center justify-center rounded-br border border-l-0 border-t-0 border-slate-300 bg-white text-black hover:bg-slate-100"
+                  onClick={() => bumpHeight(-1)}
+                >
+                  <svg viewBox="0 0 24 24" className="h-3 w-3" aria-hidden="true">
+                    <path d="M6 10l6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </label>
+        </div>
         <div className="text-sm text-white">
           <div>Background Colour</div>
           <div className="mt-2 w-full border border-slate-300 bg-white p-[2px]">
@@ -564,6 +707,10 @@ type TextBoxAsideProps = {
   setTextBoxAlignDraft: (value: "left" | "center" | "right") => void;
   textBoxFontSizeDraft: string;
   setTextBoxFontSizeDraft: (value: string) => void;
+  textBoxBackgroundColorDraft: string;
+  setTextBoxBackgroundColorDraft: (value: string) => void;
+  textBoxOutlineDraft: boolean;
+  setTextBoxOutlineDraft: (value: boolean) => void;
   onDelete: () => Promise<void>;
   onSave: () => Promise<void>;
   onClose: () => void;
@@ -586,6 +733,10 @@ export function TextBoxAside({
   setTextBoxAlignDraft,
   textBoxFontSizeDraft,
   setTextBoxFontSizeDraft,
+  textBoxBackgroundColorDraft,
+  setTextBoxBackgroundColorDraft,
+  textBoxOutlineDraft,
+  setTextBoxOutlineDraft,
   onDelete,
   onSave,
   onClose,
@@ -593,6 +744,7 @@ export function TextBoxAside({
 }: TextBoxAsideProps) {
   if (!open) return null;
   const textSizeOptions = [16, 20, 24, 28, 32, 36, 42, 48, 56, 64, 72, 84, 96, 112, 128, 144, 168];
+  const safeColor = /^#[0-9a-fA-F]{6}$/.test(textBoxBackgroundColorDraft) ? textBoxBackgroundColorDraft.toUpperCase() : "#FFFFFF";
   return (
     <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title="Text Box" onClose={onClose}>
       <div className="mt-4 space-y-3">
@@ -645,19 +797,65 @@ export function TextBoxAside({
             </button>
           </div>
         </div>
-        <label className="text-sm text-white">Text Size (16px to 168px)
-          <select
-            className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 text-black"
-            value={textBoxFontSizeDraft}
-            onChange={(e) => setTextBoxFontSizeDraft(e.target.value)}
-          >
-            {textSizeOptions.map((size) => (
-              <option key={size} value={String(size)} style={{ fontSize: `${size}px` }}>
-                {size}px
-              </option>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 items-end">
+          <label className="text-sm text-white">Text Size (16px to 168px)
+            <FontSizePicker value={textBoxFontSizeDraft} onChange={setTextBoxFontSizeDraft} options={textSizeOptions} />
+          </label>
+          <div className="text-sm text-white">
+            <div>Border</div>
+            <div className="mt-1 flex items-center gap-2">
+              <button
+                type="button"
+                className={`rounded-none border px-3 py-2 text-sm whitespace-nowrap ${textBoxOutlineDraft ? "border-white bg-white text-black" : "border-white bg-transparent text-white"}`}
+                onClick={() => setTextBoxOutlineDraft(!textBoxOutlineDraft)}
+              >
+                {textBoxOutlineDraft ? "Outline On" : "Outline Off"}
+              </button>
+            </div>
+          </div>
+        </div>
+        <div className="text-sm text-white">
+          <div>Background Colour</div>
+          <div className="mt-2 w-full border border-slate-300 bg-white p-[2px]">
+            {squarePaletteRows.map((row, rowIndex) => (
+              <div
+                key={`textbox-swatch-row-${rowIndex}`}
+                className="grid"
+                style={{ gridTemplateColumns: "repeat(13, minmax(0, 1fr))" }}
+              >
+                {row.map((hex, colIndex) => {
+                  const selected = safeColor.toLowerCase() === hex.toLowerCase();
+                  return (
+                    <button
+                      key={`textbox-swatch-${rowIndex}-${colIndex}`}
+                      type="button"
+                      className={`aspect-square w-full border border-white ${selected ? "ring-2 ring-black ring-inset" : ""}`}
+                      style={{ backgroundColor: hex }}
+                      onClick={() => setTextBoxBackgroundColorDraft(hex)}
+                      title={hex}
+                      aria-label={hex}
+                    />
+                  );
+                })}
+              </div>
             ))}
-          </select>
-        </label>
+          </div>
+          <div className="mt-2 flex items-center gap-2">
+            <input
+              type="color"
+              className="h-10 w-14 rounded-none border border-slate-300 bg-white p-1"
+              value={safeColor}
+              onChange={(e) => setTextBoxBackgroundColorDraft(e.target.value.toUpperCase())}
+            />
+            <input
+              type="text"
+              className="h-10 w-full rounded border border-slate-300 bg-white px-3 py-2 font-mono text-black"
+              value={textBoxBackgroundColorDraft}
+              onChange={(e) => setTextBoxBackgroundColorDraft(e.target.value.toUpperCase())}
+              placeholder="#FFFFFF"
+            />
+          </div>
+        </div>
       </div>
       <div className="mt-4 flex items-stretch gap-2">
         <button
@@ -1002,13 +1200,7 @@ export function FlowShapeAside({
               </div>
             </div>
             <label className="text-sm text-white">Text Size (16px to 168px)
-              <select className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 text-black" value={shapeFontSizeDraft} onChange={(e) => setShapeFontSizeDraft(e.target.value)}>
-                {textSizeOptions.map((size) => (
-                  <option key={size} value={String(size)} style={{ fontSize: `${size}px` }}>
-                    {size}px
-                  </option>
-                ))}
-              </select>
+              <FontSizePicker value={shapeFontSizeDraft} onChange={setShapeFontSizeDraft} options={textSizeOptions} />
             </label>
           </>
         ) : null}
