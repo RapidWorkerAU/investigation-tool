@@ -1,0 +1,6056 @@
+﻿"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Background,
+  BackgroundVariant,
+  type Edge,
+  type NodeChange,
+  type Node,
+  ReactFlow,
+  ReactFlowProvider,
+  useNodesState,
+  type Viewport,
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
+import { accessBlocksInvestigationEntry, accessRequiresSelection, fetchAccessState, type BillingAccessState } from "@/lib/access";
+import {
+  hasActiveTemplateAccess,
+  listInvestigationTemplates,
+  templateAccessDisabledReason,
+  type InvestigationTemplateSnapshot,
+} from "@/lib/investigationTemplates";
+import { supabaseBrowser } from "@/lib/supabase/client";
+import { ensurePortalSupabaseUser } from "@/lib/supabase/portalSession";
+import {
+  A4_RATIO,
+  bowtieControlHeight,
+  bowtieDefaultWidth,
+  bowtieHazardHeight,
+  bowtieRiskRatingHeight,
+  bowtieSquareHeight,
+  incidentDefaultWidth,
+  incidentCardHeight,
+  incidentCardWidth,
+  incidentFourThreeHeight,
+  incidentSquareSize,
+  incidentThreeOneHeight,
+  incidentThreeTwoHeight,
+  type CanvasElementRow,
+  categoryColorOptions,
+  ccw,
+  clamp,
+  defaultCategoryColor,
+  defaultHeight,
+  defaultWidth,
+  type DisciplineKey,
+  disciplineKeySet,
+  disciplineLabelByKey,
+  disciplineLetterByKey,
+  disciplineOptions,
+  getElementDisplayName,
+  getElementRelationshipTypeLabel,
+  getElementRelationshipDisplayLabel,
+  type DocumentNodeRow,
+  type DocumentTypeRow,
+  fallbackHierarchy,
+  getCanonicalTypeName,
+  getDisplayRelationType,
+  getDisplayTypeName,
+  getNormalizedDocumentSize,
+  getRelationshipCategoryLabel,
+  getRelationshipCategoryOptions,
+  getDefaultRelationshipCategoryForMap,
+  normalizeRelationshipCategoryForMap,
+  getRelationshipDisciplineLetters,
+  getTypeBannerStyle,
+  groupingDefaultHeight,
+  groupingDefaultWidth,
+  groupingMinHeight,
+  groupingMinHeightSquares,
+  groupingMinWidth,
+  groupingMinWidthSquares,
+  hashString,
+  isAbortLikeError,
+  isLandscapeTypeName,
+  laneHeight,
+  landscapeDefaultHeight,
+  landscapeDefaultWidth,
+  lineIntersectsRect,
+  majorGridSize,
+  minorGridSize,
+  type FlowData,
+  normalizeTypeRanks,
+  type NodeRelationRow,
+  type OutlineItemRow,
+  parseDisciplines,
+  buildPersonHeading,
+  parsePersonLabels,
+  parseOrgChartPersonConfig,
+  orgChartDepartmentOptions,
+  parseProcessFlowId,
+  processComponentBodyHeight,
+  processComponentElementHeight,
+  processComponentLabelHeight,
+  processComponentWidth,
+  processFlowId,
+  processHeadingHeight,
+  processHeadingWidth,
+  processMinHeight,
+  processMinHeightSquares,
+  processMinWidth,
+  processMinWidthSquares,
+  type Rect,
+  type RelationshipCategory,
+  type SelectionMarquee,
+  segmentsIntersect,
+  serializeDisciplines,
+  stickyDefaultSize,
+  stickyMinSize,
+  imageDefaultWidth,
+  imageMinWidth,
+  imageMinHeight,
+  textBoxDefaultWidth,
+  textBoxDefaultHeight,
+  textBoxMinWidth,
+  textBoxMinHeight,
+  tableDefaultHeight,
+  tableDefaultWidth,
+  tableMinHeight,
+  tableMinColumns,
+  tableMinWidth,
+  tableMinRows,
+  shapeRectangleDefaultWidth,
+  shapeRectangleDefaultHeight,
+  shapeCircleDefaultSize,
+  shapePillDefaultWidth,
+  shapePillDefaultHeight,
+  shapePentagonDefaultWidth,
+  shapePentagonDefaultHeight,
+  shapeArrowDefaultWidth,
+  shapeArrowDefaultHeight,
+  shapeArrowMinWidth,
+  shapeArrowMinHeight,
+  shapeMinWidth,
+  shapeMinHeight,
+  shapeDefaultFillColor,
+  systemCircleDiameter,
+  systemCircleElementHeight,
+  systemCircleLabelHeight,
+  tileGridSpan,
+  type SystemMap,
+  type MapMemberProfileRow,
+  unconfiguredDocumentTitle,
+  userGroupOptions,
+  boxesOverlap,
+  pointInRect,
+  personIconSize,
+  personRoleLabelHeight,
+  personDepartmentLabelHeight,
+  personElementWidth,
+  personElementHeight,
+  orgChartPersonWidth,
+  orgChartPersonHeight,
+} from "./canvasShared";
+import { flowNodeTypes } from "./canvasNodes";
+import { CanvasActionButtons, MapInfoAside } from "./canvasPanels";
+import { MapCanvasHeader } from "./canvasHeader";
+import { flowEdgeTypes } from "./canvasEdges";
+import { buildFlowEdgesBase } from "./canvasEdgeBuilder";
+import { CanvasPrintOverlay } from "./canvasPrintOverlay";
+import { CanvasFloatingOverlays } from "./canvasFloatingOverlays";
+import { MobileAddRelationshipModal, MobileNodeActionSheet } from "./canvasMobileOverlays";
+import { CanvasDrilldownOverlays } from "./canvasDrilldownAsides";
+import { CanvasConfirmDialogs } from "./canvasDialogs";
+import { CanvasElementPropertyOverlays } from "./canvasPropertyOverlays";
+import { SystemMapWelcomeModal } from "./SystemMapWelcomeModal";
+import { defaultMapCategoryId, getAllowedNodeKindsForCategory, type MapCategoryId } from "./mapCategories";
+import { useCanvasRelationNodeActions } from "./useCanvasRelationNodeActions";
+import { useCanvasElementActions } from "./useCanvasElementActions";
+import { useCanvasDeleteSelectionActions } from "./useCanvasDeleteSelectionActions";
+import { useCanvasMapInfoActions } from "./useCanvasMapInfoActions";
+import { useCanvasOutlineActions } from "./useCanvasOutlineActions";
+import { useCanvasPaneSelectionActions } from "./useCanvasPaneSelectionActions";
+import { useCanvasNodeDragStop } from "./useCanvasNodeDragStop";
+import { useCanvasRelationshipDerived } from "./useCanvasRelationshipDerived";
+import { useCanvasImageUpload } from "./useCanvasImageUpload";
+import { handleCanvasNodeClick } from "./canvasNodeClickHandler";
+import {
+  SystemMapWizardModal,
+  type SystemMapWizardCommitPayload,
+} from "./SystemMapWizardModal";
+import {
+  buildDocumentFlowNodes,
+  buildGroupingFlowNodes,
+  buildPrimaryElementFlowNode,
+  buildSecondaryElementFlowNode,
+  buildOrgDirectReportCountByPersonNormalizedId,
+  normalizeElementRef,
+  sortGroupingElementsForRender,
+} from "./canvasFlowNodeBuilder";
+import {
+  PRINT_HEADER_HEIGHT_PX,
+  buildPrintPreviewHtml,
+  cropDataUrl,
+  loadHtml2Canvas,
+  loadHtmlToImage,
+} from "./canvasPrintUtils";
+import { SystemMapLoadingView } from "./SystemMapLoadingView";
+
+const canvasElementSelectColumns =
+  "id,map_id,element_type,heading,color_hex,created_by_user_id,element_config,pos_x,pos_y,width,height,created_at,updated_at";
+const platformAdminUserId = "420266a0-2087-4f36-8c28-340443dd1a82";
+const isMethodologyElementType = (elementType: string) =>
+  elementType.startsWith("bowtie_") || elementType.startsWith("incident_");
+const methodologyDefaultLabelByType: Record<string, string> = {
+  bowtie_hazard: "Hazard",
+  bowtie_top_event: "Top Event",
+  bowtie_threat: "Threat",
+  bowtie_consequence: "Consequence",
+  bowtie_control: "Control",
+  bowtie_escalation_factor: "Escalation Factor",
+  bowtie_recovery_measure: "Recovery Measure",
+  bowtie_degradation_indicator: "Degradation Indicator",
+  bowtie_risk_rating: "Risk Level: Medium",
+  incident_sequence_step: "Sequence Step",
+  incident_outcome: "Outcome",
+  incident_task_condition: "Task / Condition",
+  incident_factor: "Factor",
+  incident_system_factor: "System Factor",
+  incident_control_barrier: "Control / Barrier",
+  incident_evidence: "Evidence",
+  incident_finding: "Finding",
+  incident_recommendation: "Recommendation",
+};
+
+const getMethodologyDisplayText = (elementType: string, headingRaw: string | null | undefined, descriptionRaw: string | null | undefined) => {
+  const defaultLabel = methodologyDefaultLabelByType[elementType] ?? "Node";
+  const heading = String(headingRaw ?? "").trim();
+  const description = String(descriptionRaw ?? "").trim();
+  if (heading && heading !== defaultLabel) return heading;
+  return description || heading || defaultLabel;
+};
+
+type CanvasElementInsertPayload = {
+  map_id: string;
+  element_type: string;
+  heading: string;
+  color_hex: string | null;
+  created_by_user_id: string | null;
+  element_config?: Record<string, unknown> | null;
+  pos_x: number;
+  pos_y: number;
+  width: number;
+  height: number;
+};
+
+type CanvasElementUpdatePayload = {
+  id: string;
+  fields: Partial<Pick<CanvasElementRow, "heading" | "element_config" | "pos_x" | "pos_y" | "width" | "height">>;
+};
+
+const stepGroupHeadingByWizardStep: Record<SystemMapWizardCommitPayload["step"], string> = {
+  sequence: "Sequence",
+  people: "People",
+  "task-condition": "Task / Condition",
+  factors: "Factors",
+  "control-barrier": "Controls / Barriers",
+  evidence: "Evidence",
+  finding: "Findings",
+  recommendation: "Recommendations",
+};
+
+const stepElementTypesByWizardStep: Record<SystemMapWizardCommitPayload["step"], string[]> = {
+  sequence: ["incident_sequence_step"],
+  people: ["person"],
+  "task-condition": ["incident_task_condition"],
+  factors: ["incident_factor", "incident_system_factor"],
+  "control-barrier": ["incident_control_barrier"],
+  evidence: ["incident_evidence"],
+  finding: ["incident_finding"],
+  recommendation: ["incident_recommendation"],
+};
+
+function SystemMapCanvasInner({
+  mapId,
+  showWelcomeOnLoad,
+  templateEditorTemplateId,
+  templateEditorTemplateName,
+  templateEditorIsGlobal,
+  entrySource,
+}: {
+  mapId: string;
+  showWelcomeOnLoad: boolean;
+  templateEditorTemplateId: string | null;
+  templateEditorTemplateName: string | null;
+  templateEditorIsGlobal: boolean;
+  entrySource: "dashboard" | "templates";
+}) {
+  const canvasRef = useRef<HTMLDivElement | null>(null);
+  const relationshipPopupRef = useRef<HTMLDivElement | null>(null);
+  const addMenuRef = useRef<HTMLDivElement | null>(null);
+  const templateMenuRef = useRef<HTMLDivElement | null>(null);
+  const searchMenuRef = useRef<HTMLDivElement | null>(null);
+  const printMenuRef = useRef<HTMLDivElement | null>(null);
+  const printPreviewFrameRef = useRef<HTMLIFrameElement | null>(null);
+  const mapInfoAsideRef = useRef<HTMLDivElement | null>(null);
+  const mapInfoButtonRef = useRef<HTMLButtonElement | null>(null);
+  const disciplineMenuRef = useRef<HTMLDivElement | null>(null);
+  const saveViewportTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const resizePersistTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const resizePersistValuesRef = useRef<Map<string, { width: number; height: number }>>(new Map());
+  const savedPos = useRef<Record<string, { x: number; y: number }>>({});
+  const convertedMediaObjectUrlsRef = useRef<Set<string>>(new Set());
+  const lastMobileTapRef = useRef<{ id: string; ts: number } | null>(null);
+  const clipboardPasteCountRef = useRef(1);
+  const isNodeDragActiveRef = useRef(false);
+  const imagePathPairsRef = useRef<Array<{ id: string; path: string }>>([]);
+
+  const [userId, setUserId] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string>("");
+  const [mapRole, setMapRole] = useState<"read" | "partial_write" | "full_write" | null>(null);
+  const [accessState, setAccessState] = useState<BillingAccessState | null>(null);
+  const [map, setMap] = useState<SystemMap | null>(null);
+  const [mapCategoryId, setMapCategoryId] = useState<MapCategoryId>(defaultMapCategoryId);
+  const [types, setTypes] = useState<DocumentTypeRow[]>([]);
+  const [nodes, setNodes] = useState<DocumentNodeRow[]>([]);
+  const [elements, setElements] = useState<CanvasElementRow[]>([]);
+  const [relations, setRelations] = useState<NodeRelationRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadingProgress, setLoadingProgress] = useState(25);
+  const [loadingMessage, setLoadingMessage] = useState("Checking workspace access...");
+  const [error, setError] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia("(max-width: 768px), (pointer: coarse)").matches || window.innerWidth <= 768;
+  });
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const [isEditingMapTitle, setIsEditingMapTitle] = useState(false);
+  const [mapTitleDraft, setMapTitleDraft] = useState("");
+  const [savingMapTitle, setSavingMapTitle] = useState(false);
+  const [mapTitleSavedFlash, setMapTitleSavedFlash] = useState(false);
+  const [showMapInfoAside, setShowMapInfoAside] = useState(false);
+  const [isEditingMapInfo, setIsEditingMapInfo] = useState(false);
+  const [mapInfoNameDraft, setMapInfoNameDraft] = useState("");
+  const [mapInfoDescriptionDraft, setMapInfoDescriptionDraft] = useState("");
+  const [mapCodeDraft, setMapCodeDraft] = useState("");
+  const [savingMapInfo, setSavingMapInfo] = useState(false);
+  const [mapMembers, setMapMembers] = useState<MapMemberProfileRow[]>([]);
+  const [savingMemberRoleUserId, setSavingMemberRoleUserId] = useState<string | null>(null);
+
+  const [rf, setRf] = useState<{
+    fitView: (opts?: { duration?: number; padding?: number }) => void;
+    screenToFlowPosition: (pt: { x: number; y: number }) => { x: number; y: number };
+    setViewport: (v: Viewport, opts?: { duration?: number }) => void;
+  } | null>(null);
+  const [pendingViewport, setPendingViewport] = useState<Viewport | null>(null);
+  const [hasStoredViewport, setHasStoredViewport] = useState(false);
+  const mobileViewportInitializedRef = useRef<string | null>(null);
+
+  const [showAddMenu, setShowAddMenu] = useState(false);
+  const [showWizardModal, setShowWizardModal] = useState(false);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  const [wizardSaving, setWizardSaving] = useState(false);
+  const [isNodeDragActive, setIsNodeDragActive] = useState(false);
+  const [showTemplateMenu, setShowTemplateMenu] = useState(false);
+  const [templateQuery, setTemplateQuery] = useState("");
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [templateResults, setTemplateResults] = useState<Array<{ id: string; name: string; updatedAt: string; isGlobal: boolean }>>([]);
+  const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+  const [templateSaveMessage, setTemplateSaveMessage] = useState<string | null>(null);
+  const [saveAsGlobalTemplate, setSaveAsGlobalTemplate] = useState(false);
+  const [templateEditorStatus, setTemplateEditorStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [showSearchMenu, setShowSearchMenu] = useState(false);
+  const [showPrintMenu, setShowPrintMenu] = useState(false);
+  const [isPreparingPrint, setIsPreparingPrint] = useState(false);
+  const [showPrintPreview, setShowPrintPreview] = useState(false);
+  const [printPreviewImageDataUrl, setPrintPreviewImageDataUrl] = useState<string | null>(null);
+  const [printOrientation, setPrintOrientation] = useState<"portrait" | "landscape">("portrait");
+  const [printSelectionMode, setPrintSelectionMode] = useState(false);
+  const [isCopyingPrintImage, setIsCopyingPrintImage] = useState(false);
+  const [printSelectionCopyMessage, setPrintSelectionCopyMessage] = useState<string | null>(null);
+  const [printSelectionDraft, setPrintSelectionDraft] = useState<{
+    active: boolean;
+    startX: number;
+    startY: number;
+    currentX: number;
+    currentY: number;
+  } | null>(null);
+  const [printSelectionRect, setPrintSelectionRect] = useState<{
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  const [showPrintSelectionConfirm, setShowPrintSelectionConfirm] = useState(false);
+  const [hasCurrentPassAssignment, setHasCurrentPassAssignment] = useState(true);
+  const printPreviewHtml = useMemo(
+    () =>
+      printPreviewImageDataUrl
+        ? buildPrintPreviewHtml({
+            mapTitle: map?.title || "System Map",
+            imageDataUrl: printPreviewImageDataUrl,
+            orientation: printOrientation,
+          })
+        : null,
+    [map?.title, printOrientation, printPreviewImageDataUrl]
+  );
+  const [searchQuery, setSearchQuery] = useState("");
+  const snapToMinorGrid = useCallback((v: number) => Math.round(v / minorGridSize) * minorGridSize, []);
+  const getCanvasFlowCenter = useCallback(() => {
+    if (!rf || !canvasRef.current) return null;
+    const bounds = canvasRef.current.getBoundingClientRect();
+    const flowPoint = rf.screenToFlowPosition({
+      x: bounds.left + bounds.width / 2,
+      y: bounds.top + bounds.height / 2,
+    });
+    return {
+      x: snapToMinorGrid(flowPoint.x),
+      y: snapToMinorGrid(flowPoint.y),
+    };
+  }, [rf, snapToMinorGrid]);
+  const passScopedWriteBlocked =
+    accessState?.currentAccessStatus === "active" &&
+    accessState.currentAccessType === "pass_30d" &&
+    !hasCurrentPassAssignment;
+  const accessAllowsEditing = (accessState?.canEditMaps ?? true) && !passScopedWriteBlocked;
+  const canSaveTemplate = hasActiveTemplateAccess(accessState);
+  const isTemplateEditor = Boolean(templateEditorTemplateId);
+  const isPlatformAdmin = userId === platformAdminUserId || accessState?.userId === platformAdminUserId;
+  const canWriteMap = accessAllowsEditing && (mapRole === "partial_write" || mapRole === "full_write");
+  const canManageMapMetadata = accessAllowsEditing && mapRole === "full_write" && !!map && !!userId && map.owner_id === userId;
+  const canUseContextMenu = accessAllowsEditing && mapRole !== "read";
+  const canCreateSticky = accessAllowsEditing && !!userId;
+  const allowedNodeKinds = useMemo(() => getAllowedNodeKindsForCategory(mapCategoryId), [mapCategoryId]);
+  const canUseWizard = canWriteMap && allowedNodeKinds.some((kind) => kind.startsWith("incident_"));
+  const readOnlyActionReason = !accessAllowsEditing
+    ? passScopedWriteBlocked
+      ? "This map belongs to an older 30 Day Access period. Start monthly access to restore full editing across older pass maps."
+      : accessState?.readOnlyReason || "This map is read only for your current access."
+    : undefined;
+  const backHref = entrySource === "templates" ? "/templates" : "/dashboard";
+  const backTitle = entrySource === "templates" ? "Back to templates" : "Back to dashboard";
+  const canPrintMap = accessAllowsEditing;
+  const addDisabledReason = !accessAllowsEditing
+    ? accessState?.readOnlyReason || "This map is read only for your current access."
+    : "Adding components is unavailable for this map.";
+  const wizardDisabledReason = !accessAllowsEditing
+    ? accessState?.readOnlyReason || "The wizard is unavailable while this map is read only."
+    : "The wizard is unavailable for this map.";
+  const templateDisabledReason = canSaveTemplate ? undefined : templateAccessDisabledReason;
+  useEffect(() => {
+    if (!showWelcomeOnLoad) return;
+    setShowWelcomeModal(true);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get("welcome") === "1") {
+        url.searchParams.delete("welcome");
+        window.history.replaceState({}, "", url.pathname + url.search + url.hash);
+      }
+    }
+  }, [showWelcomeOnLoad]);
+  const relationshipCategoryOptions = useMemo(() => getRelationshipCategoryOptions(mapCategoryId), [mapCategoryId]);
+  const canEditElement = useCallback(
+    (element: CanvasElementRow) =>
+      canWriteMap || (mapRole === "read" && element.element_type === "sticky_note" && !!userId && element.created_by_user_id === userId),
+    [canWriteMap, mapRole, userId]
+  );
+  const mapRoleLabel = useCallback((role: string | null | undefined) => {
+    const normalized = (role || "").toLowerCase();
+    if (normalized === "full_write") return "Full write";
+    if (normalized === "partial_write") return "Partial write";
+    return "Read";
+  }, []);
+  const formatStickyDate = useCallback((value: string | null | undefined) => {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toLocaleDateString("en-AU", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  }, []);
+  const memberDisplayNameByUserId = useMemo(() => {
+    const m = new Map<string, string>();
+    mapMembers.forEach((member) => {
+      const label = member.full_name?.trim() || member.email?.trim() || member.user_id;
+      if (label) m.set(member.user_id, label);
+    });
+    return m;
+  }, [mapMembers]);
+  const activePrintSelectionRect = useMemo(() => {
+    if (printSelectionDraft) {
+      const left = Math.min(printSelectionDraft.startX, printSelectionDraft.currentX);
+      const top = Math.min(printSelectionDraft.startY, printSelectionDraft.currentY);
+      const width = Math.abs(printSelectionDraft.currentX - printSelectionDraft.startX);
+      const height = Math.abs(printSelectionDraft.currentY - printSelectionDraft.startY);
+      return { left, top, width, height };
+    }
+    return printSelectionRect;
+  }, [printSelectionDraft, printSelectionRect]);
+  const exitPrintSelectionMode = useCallback(() => {
+    setPrintSelectionMode(false);
+    setPrintSelectionDraft(null);
+    setPrintSelectionRect(null);
+    setShowPrintSelectionConfirm(false);
+    setPrintSelectionCopyMessage(null);
+  }, []);
+  const loadTemplateResults = useCallback(
+    async (query: string) => {
+      if (!canSaveTemplate) return;
+
+      try {
+        setIsLoadingTemplates(true);
+        const results = await listInvestigationTemplates(supabaseBrowser, query, 24);
+        setTemplateResults(
+          results
+            .filter((item) => item.can_edit)
+            .map((item) => ({
+            id: item.id,
+            name: item.name,
+            updatedAt: formatStickyDate(item.updated_at) || "Recently saved",
+            isGlobal: item.is_global,
+          }))
+        );
+      } catch (templateError) {
+        setError(templateError instanceof Error ? templateError.message : "Unable to load templates.");
+      } finally {
+        setIsLoadingTemplates(false);
+      }
+    },
+    [canSaveTemplate, formatStickyDate]
+  );
+
+  const handleTemplateQueryChange = useCallback(
+    (value: string) => {
+      setTemplateQuery(value);
+      setSelectedTemplateId(null);
+      setTemplateSaveMessage(null);
+      if (!canSaveTemplate) return;
+      if (value.trim().length >= 4) {
+        setShowTemplateMenu(true);
+        void loadTemplateResults(value);
+      }
+    },
+    [canSaveTemplate, loadTemplateResults]
+  );
+
+  const handleSelectTemplateResult = useCallback((id: string, name: string, isGlobal: boolean) => {
+    setSelectedTemplateId(id);
+    setTemplateQuery(name);
+    setTemplateSaveMessage(null);
+    if (isPlatformAdmin) {
+      setSaveAsGlobalTemplate(isGlobal);
+    }
+  }, [isPlatformAdmin]);
+
+  const handleToggleGlobalTemplateSave = useCallback((updater: (prev: boolean) => boolean) => {
+    setSelectedTemplateId(null);
+    setTemplateSaveMessage(null);
+    setSaveAsGlobalTemplate((prev) => updater(prev));
+  }, []);
+
+  const buildTemplateSnapshot = useCallback(async () => {
+    const { data: outlineData, error: outlineError } = await supabaseBrowser
+      .schema("ms")
+      .from("document_outline_items")
+      .select("id,map_id,node_id,kind,heading_level,parent_heading_id,heading_id,title,content_text,sort_order")
+      .eq("map_id", mapId)
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true });
+
+    if (outlineError) throw outlineError;
+
+    const snapshot: InvestigationTemplateSnapshot = {
+      types: types.map((item) => ({
+        id: item.id,
+        name: item.name,
+        level_rank: item.level_rank,
+        band_y_min: item.band_y_min,
+        band_y_max: item.band_y_max,
+        is_active: item.is_active,
+      })),
+      nodes: nodes.map((item) => ({
+        id: item.id,
+        type_id: item.type_id,
+        title: item.title,
+        document_number: item.document_number,
+        discipline: item.discipline,
+        owner_user_id: item.owner_user_id,
+        owner_name: item.owner_name,
+        user_group: item.user_group,
+        pos_x: item.pos_x,
+        pos_y: item.pos_y,
+        width: item.width,
+        height: item.height,
+        is_archived: item.is_archived,
+      })),
+      elements: elements.map((item) => ({
+        id: item.id,
+        element_type: item.element_type,
+        heading: item.heading,
+        color_hex: item.color_hex,
+        element_config: item.element_config,
+        pos_x: item.pos_x,
+        pos_y: item.pos_y,
+        width: item.width,
+        height: item.height,
+      })),
+      relations: relations.map((item) => ({
+        id: item.id,
+        from_node_id: item.from_node_id,
+        to_node_id: item.to_node_id,
+        source_grouping_element_id: item.source_grouping_element_id,
+        target_grouping_element_id: item.target_grouping_element_id,
+        source_system_element_id: item.source_system_element_id,
+        target_system_element_id: item.target_system_element_id,
+        relation_type: item.relation_type,
+        relationship_description: item.relationship_description,
+        relationship_disciplines: item.relationship_disciplines,
+        relationship_category: item.relationship_category,
+        relationship_custom_type: item.relationship_custom_type,
+      })),
+      outlineItems: (outlineData ?? []).map((item) => ({
+        id: item.id,
+        node_id: item.node_id,
+        kind: item.kind,
+        heading_level: item.heading_level,
+        parent_heading_id: item.parent_heading_id,
+        heading_id: item.heading_id,
+        title: item.title,
+        content_text: item.content_text,
+        sort_order: item.sort_order,
+      })),
+    };
+
+    return snapshot;
+  }, [elements, mapId, nodes, relations, types]);
+
+  const handleSaveTemplate = useCallback(async () => {
+    if (!canSaveTemplate) return;
+
+    const normalizedName = templateQuery.trim();
+    if (!normalizedName) {
+      setError("Enter a template name before saving.");
+      return;
+    }
+
+    try {
+      setIsSavingTemplate(true);
+      setTemplateSaveMessage(null);
+      setError(null);
+      const snapshot = await buildTemplateSnapshot();
+
+      const { data, error: saveError } = await supabaseBrowser.rpc("save_investigation_template", {
+        p_name: normalizedName,
+        p_snapshot: snapshot,
+        p_template_id: selectedTemplateId,
+        p_is_global: saveAsGlobalTemplate,
+      });
+
+      if (saveError) throw saveError;
+
+      const savedRow = Array.isArray(data) ? data[0] : data;
+      if (savedRow?.id) {
+        setSelectedTemplateId(savedRow.id as string);
+      }
+      if (savedRow?.name) {
+        setTemplateQuery(savedRow.name as string);
+      }
+      const savedIsGlobal = Boolean(savedRow?.is_global);
+      setTemplateSaveMessage(
+        savedRow?.was_overwritten
+          ? savedIsGlobal
+            ? "Global template updated."
+            : "Template updated."
+          : savedIsGlobal
+            ? "Global template saved."
+            : "Template saved."
+      );
+      await loadTemplateResults(normalizedName.length >= 4 ? normalizedName : "");
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Unable to save template.");
+    } finally {
+      setIsSavingTemplate(false);
+    }
+  }, [buildTemplateSnapshot, canSaveTemplate, templateQuery, selectedTemplateId, saveAsGlobalTemplate, loadTemplateResults]);
+  const openPrintPreviewFromDataUrl = useCallback(
+    (imageDataUrl: string) => {
+      setPrintPreviewImageDataUrl(imageDataUrl);
+      setShowPrintPreview(true);
+    },
+    []
+  );
+  const capturePrintImage = useCallback(
+    async (mode: "current" | "area", options?: { openPreview?: boolean }) => {
+      const root = canvasRef.current as HTMLElement | null;
+      if (!root) {
+        setError("Unable to capture canvas for print.");
+        return null;
+      }
+      const target = (root.querySelector(".react-flow") as HTMLElement | null) ?? root;
+      const targetBounds = target.getBoundingClientRect();
+      const captureWidth = Math.max(1, Math.floor(target.clientWidth || targetBounds.width));
+      const captureHeight = Math.max(1, Math.floor(target.clientHeight || targetBounds.height));
+      let crop: { x: number; y: number; width: number; height: number } | null = null;
+      if (mode === "area") {
+        if (!printSelectionRect || printSelectionRect.width < 12 || printSelectionRect.height < 12) {
+          setError("Please select a larger area to print.");
+          return null;
+        }
+        const x = clamp(printSelectionRect.left - targetBounds.left, 0, targetBounds.width);
+        const y = clamp(printSelectionRect.top - targetBounds.top, 0, targetBounds.height);
+        const width = clamp(printSelectionRect.width, 1, targetBounds.width - x);
+        const height = clamp(printSelectionRect.height, 1, targetBounds.height - y);
+        crop = { x, y, width, height };
+      } else {
+        crop = { x: 0, y: 0, width: captureWidth, height: captureHeight };
+      }
+      setIsPreparingPrint(true);
+      const previousTargetBackgroundColor = target.style.backgroundColor;
+      target.style.backgroundColor = "#ffffff";
+      try {
+        let dataUrl = "";
+        try {
+          const htmlToImage = await loadHtmlToImage();
+          const fullDataUrl = await htmlToImage.toPng(target, {
+            cacheBust: true,
+            pixelRatio: 2,
+            backgroundColor: "#ffffff",
+            width: captureWidth,
+            height: captureHeight,
+            filter: (node: Node) => {
+              const el = node as unknown as HTMLElement;
+              if (!el?.classList) return true;
+              return !(
+                el.classList.contains("react-flow__background") ||
+                el.classList.contains("print-hidden") ||
+                el.dataset?.printIgnore === "true"
+              );
+            },
+          });
+          dataUrl = crop
+            ? await cropDataUrl({
+                dataUrl: fullDataUrl,
+                crop,
+                sourceWidth: captureWidth,
+                sourceHeight: captureHeight,
+              })
+            : fullDataUrl;
+        } catch {
+          const html2canvas = await loadHtml2Canvas();
+          const canvas = await html2canvas(target, {
+            backgroundColor: "#ffffff",
+            useCORS: true,
+            logging: false,
+            scale: 2,
+            x: crop?.x ?? 0,
+            y: crop?.y ?? 0,
+            width: crop?.width ?? captureWidth,
+            height: crop?.height ?? captureHeight,
+            ignoreElements: (element: Element) => {
+              const el = element as HTMLElement;
+              return (
+                el.classList.contains("react-flow__background") ||
+                el.classList.contains("print-hidden") ||
+                el.dataset.printIgnore === "true"
+              );
+            },
+          });
+          dataUrl = canvas.toDataURL("image/png");
+        }
+        if (options?.openPreview !== false) {
+          openPrintPreviewFromDataUrl(dataUrl);
+        }
+        return dataUrl;
+      } catch (e) {
+        setError((e as Error)?.message || "Unable to prepare print preview.");
+        return null;
+      } finally {
+        target.style.backgroundColor = previousTargetBackgroundColor;
+        setIsPreparingPrint(false);
+      }
+    },
+    [openPrintPreviewFromDataUrl, printSelectionRect, setError]
+  );
+  const handlePrintCurrentView = useCallback(async () => {
+    setShowPrintMenu(false);
+    setShowPrintSelectionConfirm(false);
+    setPrintSelectionMode(false);
+    setPrintSelectionDraft(null);
+    setPrintSelectionRect(null);
+    await capturePrintImage("current");
+  }, [capturePrintImage]);
+  const handlePrintSelectArea = useCallback(() => {
+    setShowPrintMenu(false);
+    setShowPrintSelectionConfirm(false);
+    setPrintSelectionDraft(null);
+    setPrintSelectionRect(null);
+    setPrintSelectionCopyMessage(null);
+    setPrintSelectionMode(true);
+  }, []);
+  const handleConfirmPrintArea = useCallback(async () => {
+    setPrintSelectionCopyMessage(null);
+    setShowPrintSelectionConfirm(false);
+    await capturePrintImage("area");
+    setPrintSelectionMode(false);
+  }, [capturePrintImage]);
+  const handleCopyPrintAreaImageToClipboard = useCallback(async () => {
+    setPrintSelectionCopyMessage(null);
+    const dataUrl = await capturePrintImage("area", { openPreview: false });
+    if (!dataUrl) return;
+    if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
+      setPrintSelectionCopyMessage("Clipboard image copy is not supported in this browser.");
+      return;
+    }
+    setIsCopyingPrintImage(true);
+    try {
+      const response = await fetch(dataUrl);
+      const blob = await response.blob();
+      await navigator.clipboard.write([new ClipboardItem({ [blob.type || "image/png"]: blob })]);
+      setPrintSelectionCopyMessage("Image copied to clipboard. You can paste it elsewhere.");
+    } catch (e) {
+      const message = (e as Error)?.message?.trim();
+      setPrintSelectionCopyMessage(message ? `Unable to copy image: ${message}` : "Unable to copy image to clipboard.");
+    } finally {
+      setIsCopyingPrintImage(false);
+    }
+  }, [capturePrintImage]);
+  const handlePrintOverlayPointerDown = useCallback((event: { clientX: number; clientY: number }) => {
+    if (showPrintSelectionConfirm) return;
+    setPrintSelectionCopyMessage(null);
+    setPrintSelectionDraft({
+      active: true,
+      startX: event.clientX,
+      startY: event.clientY,
+      currentX: event.clientX,
+      currentY: event.clientY,
+    });
+  }, [showPrintSelectionConfirm]);
+  const handlePrintOverlayPointerMove = useCallback((event: { clientX: number; clientY: number }) => {
+    setPrintSelectionDraft((prev) =>
+      prev
+        ? {
+            ...prev,
+            currentX: event.clientX,
+            currentY: event.clientY,
+          }
+        : prev
+    );
+  }, []);
+  const handlePrintOverlayPointerUp = useCallback(() => {
+    setPrintSelectionDraft((prev) => {
+      if (!prev) return prev;
+      const left = Math.min(prev.startX, prev.currentX);
+      const top = Math.min(prev.startY, prev.currentY);
+      const width = Math.abs(prev.currentX - prev.startX);
+      const height = Math.abs(prev.currentY - prev.startY);
+      if (width < 12 || height < 12) {
+        setPrintSelectionRect(null);
+        return null;
+      }
+      setPrintSelectionRect({ left, top, width, height });
+      setShowPrintSelectionConfirm(true);
+      return null;
+    });
+  }, []);
+
+  const loadMapMembers = useCallback(
+    async (ownerId?: string | null) => {
+      const { data, error: profileError } = await supabaseBrowser
+        .schema("ms")
+        .from("map_member_profiles")
+        .select("map_id,user_id,role,email,full_name,is_owner")
+        .eq("map_id", mapId)
+        .order("is_owner", { ascending: false });
+
+      if (!profileError) {
+        setMapMembers((data ?? []) as MapMemberProfileRow[]);
+        return;
+      }
+
+      const { data: fallbackData, error: fallbackError } = await supabaseBrowser
+        .schema("ms")
+        .from("map_members")
+        .select("map_id,user_id,role")
+        .eq("map_id", mapId);
+
+      if (fallbackError) {
+        setError(fallbackError.message || "Unable to load map members.");
+        return;
+      }
+
+      const resolvedOwnerId = ownerId ?? map?.owner_id ?? null;
+      const fallbackMembers: MapMemberProfileRow[] = ((fallbackData ?? []) as Array<{ map_id: string; user_id: string; role: string }>).map(
+        (member) => ({
+          map_id: member.map_id,
+          user_id: member.user_id,
+          role: member.role,
+          email: null,
+          full_name: null,
+          is_owner: !!resolvedOwnerId && member.user_id === resolvedOwnerId,
+        })
+      );
+      fallbackMembers.sort((a, b) => Number(b.is_owner) - Number(a.is_owner));
+      setMapMembers(fallbackMembers);
+    },
+    [mapId, map?.owner_id]
+  );
+
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedProcessId, setSelectedProcessId] = useState<string | null>(null);
+  const [selectedSystemId, setSelectedSystemId] = useState<string | null>(null);
+  const [selectedProcessComponentId, setSelectedProcessComponentId] = useState<string | null>(null);
+  const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
+  const [selectedGroupingId, setSelectedGroupingId] = useState<string | null>(null);
+  const [selectedStickyId, setSelectedStickyId] = useState<string | null>(null);
+  const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
+  const [selectedTextBoxId, setSelectedTextBoxId] = useState<string | null>(null);
+  const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
+  const [selectedFlowShapeId, setSelectedFlowShapeId] = useState<string | null>(null);
+  const [selectedBowtieElementId, setSelectedBowtieElementId] = useState<string | null>(null);
+  const [title, setTitle] = useState("");
+  const [selectedTypeId, setSelectedTypeId] = useState("");
+  const [disciplineSelection, setDisciplineSelection] = useState<DisciplineKey[]>([]);
+  const [showDisciplineMenu, setShowDisciplineMenu] = useState(false);
+  const [showTypeSelectArrowUp, setShowTypeSelectArrowUp] = useState(false);
+  const [showUserGroupSelectArrowUp, setShowUserGroupSelectArrowUp] = useState(false);
+  const [userGroup, setUserGroup] = useState("");
+  const [ownerName, setOwnerName] = useState("");
+  const [documentNumber, setDocumentNumber] = useState("");
+  const [processHeadingDraft, setProcessHeadingDraft] = useState("");
+  const [processWidthDraft, setProcessWidthDraft] = useState<string>(String(Math.round(processHeadingWidth / minorGridSize)));
+  const [processHeightDraft, setProcessHeightDraft] = useState<string>(String(Math.round(processHeadingHeight / minorGridSize)));
+  const [processColorDraft, setProcessColorDraft] = useState<string | null>(null);
+  const [processFillModeDraft, setProcessFillModeDraft] = useState<"fill" | "outline">("fill");
+  const [processOutlineColorDraft, setProcessOutlineColorDraft] = useState<string | null>(null);
+  const [processOutlineWidthDraft, setProcessOutlineWidthDraft] = useState("1");
+  const [processComponentLabelDraft, setProcessComponentLabelDraft] = useState("");
+  const [systemNameDraft, setSystemNameDraft] = useState("");
+  const [personRoleDraft, setPersonRoleDraft] = useState("");
+  const [personRoleIdDraft, setPersonRoleIdDraft] = useState("");
+  const [personDepartmentDraft, setPersonDepartmentDraft] = useState("");
+  const [personOccupantNameDraft, setPersonOccupantNameDraft] = useState("");
+  const [personStartDateDraft, setPersonStartDateDraft] = useState("");
+  const [personEmploymentTypeDraft, setPersonEmploymentTypeDraft] = useState<"fte" | "contractor">("fte");
+  const [personActingNameDraft, setPersonActingNameDraft] = useState("");
+  const [personActingStartDateDraft, setPersonActingStartDateDraft] = useState("");
+  const [personRecruitingDraft, setPersonRecruitingDraft] = useState(false);
+  const [personProposedRoleDraft, setPersonProposedRoleDraft] = useState(false);
+  const [groupingLabelDraft, setGroupingLabelDraft] = useState("");
+  const [groupingHeaderColorDraft, setGroupingHeaderColorDraft] = useState("#FFFFFF");
+  const [groupingWidthDraft, setGroupingWidthDraft] = useState<string>(String(Math.round(groupingDefaultWidth / minorGridSize)));
+  const [groupingHeightDraft, setGroupingHeightDraft] = useState<string>(String(Math.round(groupingDefaultHeight / minorGridSize)));
+  const [processFontSizeDraft, setProcessFontSizeDraft] = useState("12");
+  const [stickyTextDraft, setStickyTextDraft] = useState("");
+  const [stickyBackgroundColorDraft, setStickyBackgroundColorDraft] = useState("#FEF08A");
+  const [stickyOutlineColorDraft, setStickyOutlineColorDraft] = useState("#F59E0B");
+  const [stickyFillModeDraft, setStickyFillModeDraft] = useState<"fill" | "outline">("fill");
+  const [stickyOutlineWidthDraft, setStickyOutlineWidthDraft] = useState("1");
+  const [imageDescriptionDraft, setImageDescriptionDraft] = useState("");
+  const [textBoxContentDraft, setTextBoxContentDraft] = useState("");
+  const [textBoxBoldDraft, setTextBoxBoldDraft] = useState(false);
+  const [textBoxItalicDraft, setTextBoxItalicDraft] = useState(false);
+  const [textBoxUnderlineDraft, setTextBoxUnderlineDraft] = useState(false);
+  const [textBoxAlignDraft, setTextBoxAlignDraft] = useState<"left" | "center" | "right">("left");
+  const [textBoxFontSizeDraft, setTextBoxFontSizeDraft] = useState("24");
+  const [textBoxBackgroundColorDraft, setTextBoxBackgroundColorDraft] = useState("#FFFFFF");
+  const [textBoxOutlineDraft, setTextBoxOutlineDraft] = useState(false);
+  const [textBoxOutlineColorDraft, setTextBoxOutlineColorDraft] = useState("#111827");
+  const [textBoxOutlineWidthDraft, setTextBoxOutlineWidthDraft] = useState("2");
+  const [tableRowsDraft, setTableRowsDraft] = useState("2");
+  const [tableColumnsDraft, setTableColumnsDraft] = useState("2");
+  const [tableHeaderBgDraft, setTableHeaderBgDraft] = useState("");
+  const [tableGridLineColorDraft, setTableGridLineColorDraft] = useState("");
+  const [tableGridLineWeightDraft, setTableGridLineWeightDraft] = useState("0.5");
+  const [tableBoldDraft, setTableBoldDraft] = useState(false);
+  const [tableItalicDraft, setTableItalicDraft] = useState(false);
+  const [tableUnderlineDraft, setTableUnderlineDraft] = useState(false);
+  const [tableAlignDraft, setTableAlignDraft] = useState<"left" | "center" | "right">("center");
+  const [tableFontSizeDraft, setTableFontSizeDraft] = useState("10");
+  const [flowShapeTextDraft, setFlowShapeTextDraft] = useState("");
+  const [flowShapeAlignDraft, setFlowShapeAlignDraft] = useState<"left" | "center" | "right">("center");
+  const [flowShapeBoldDraft, setFlowShapeBoldDraft] = useState(false);
+  const [flowShapeItalicDraft, setFlowShapeItalicDraft] = useState(false);
+  const [flowShapeUnderlineDraft, setFlowShapeUnderlineDraft] = useState(false);
+  const [flowShapeFontSizeDraft, setFlowShapeFontSizeDraft] = useState("24");
+  const [flowShapeColorDraft, setFlowShapeColorDraft] = useState(shapeDefaultFillColor);
+  const [flowShapeFillModeDraft, setFlowShapeFillModeDraft] = useState<"fill" | "outline">("fill");
+  const [flowShapeOutlineColorDraft, setFlowShapeOutlineColorDraft] = useState(shapeDefaultFillColor);
+  const [flowShapeOutlineWidthDraft, setFlowShapeOutlineWidthDraft] = useState("3");
+  const [flowShapeDirectionDraft, setFlowShapeDirectionDraft] = useState<"left" | "right">("right");
+  const [flowShapeRotationDraft, setFlowShapeRotationDraft] = useState<0 | 90 | 180 | 270>(0);
+  const hydratedFlowShapeDraftIdRef = useRef<string | null>(null);
+  const [bowtieDraft, setBowtieDraft] = useState<Record<string, string | boolean>>({});
+  const [imageUrlsByElementId, setImageUrlsByElementId] = useState<Record<string, string>>({});
+  const [evidenceUploadFile, setEvidenceUploadFile] = useState<File | null>(null);
+  const [evidenceUploadPreviewUrl, setEvidenceUploadPreviewUrl] = useState<string | null>(null);
+
+  const [desktopNodeAction, setDesktopNodeAction] = useState<"relationship" | "structure" | "delete" | null>(null);
+  const [mobileNodeMenuId, setMobileNodeMenuId] = useState<string | null>(null);
+  const [showAddRelationship, setShowAddRelationship] = useState(false);
+  const [relationshipSourceNodeId, setRelationshipSourceNodeId] = useState<string | null>(null);
+  const [relationshipSourceSystemId, setRelationshipSourceSystemId] = useState<string | null>(null);
+  const [relationshipSourceGroupingId, setRelationshipSourceGroupingId] = useState<string | null>(null);
+  const [relationshipDocumentQuery, setRelationshipDocumentQuery] = useState("");
+  const [relationshipSystemQuery, setRelationshipSystemQuery] = useState("");
+  const [relationshipGroupingQuery, setRelationshipGroupingQuery] = useState("");
+  const [relationshipTargetDocumentId, setRelationshipTargetDocumentId] = useState("");
+  const [relationshipTargetSystemId, setRelationshipTargetSystemId] = useState("");
+  const [relationshipTargetGroupingId, setRelationshipTargetGroupingId] = useState("");
+  const [showRelationshipDocumentOptions, setShowRelationshipDocumentOptions] = useState(false);
+  const [showRelationshipSystemOptions, setShowRelationshipSystemOptions] = useState(false);
+  const [showRelationshipGroupingOptions, setShowRelationshipGroupingOptions] = useState(false);
+  const [relationshipDescription, setRelationshipDescription] = useState("");
+  const [relationshipDisciplineSelection, setRelationshipDisciplineSelection] = useState<DisciplineKey[]>([]);
+  const [showRelationshipDisciplineMenu, setShowRelationshipDisciplineMenu] = useState(false);
+  const [relationshipCategory, setRelationshipCategory] = useState<RelationshipCategory>(getDefaultRelationshipCategoryForMap(defaultMapCategoryId));
+  const [relationshipCustomType, setRelationshipCustomType] = useState("");
+  const [editingRelationId, setEditingRelationId] = useState<string | null>(null);
+  const [editingRelationDescription, setEditingRelationDescription] = useState("");
+  const [editingRelationCategory, setEditingRelationCategory] = useState<RelationshipCategory>(getDefaultRelationshipCategoryForMap(defaultMapCategoryId));
+  const [editingRelationCustomType, setEditingRelationCustomType] = useState("");
+  const [editingRelationDisciplines, setEditingRelationDisciplines] = useState<DisciplineKey[]>([]);
+  const [showEditingRelationDisciplineMenu, setShowEditingRelationDisciplineMenu] = useState(false);
+  useEffect(() => {
+    setRelationshipCategory((prev) => normalizeRelationshipCategoryForMap(prev, mapCategoryId));
+    setEditingRelationCategory((prev) => normalizeRelationshipCategoryForMap(prev, mapCategoryId));
+  }, [mapCategoryId]);
+  const [confirmDeleteNodeId, setConfirmDeleteNodeId] = useState<string | null>(null);
+  const [outlineNodeId, setOutlineNodeId] = useState<string | null>(null);
+  const [outlineItems, setOutlineItems] = useState<OutlineItemRow[]>([]);
+  const [outlineCreateMode, setOutlineCreateMode] = useState<"heading" | "content" | null>(null);
+  const [outlineEditItemId, setOutlineEditItemId] = useState<string | null>(null);
+  const [confirmDeleteOutlineItemId, setConfirmDeleteOutlineItemId] = useState<string | null>(null);
+  const [relationshipPopup, setRelationshipPopup] = useState<{
+    x: number;
+    y: number;
+    fromLabel: string;
+    toLabel: string;
+    relationLabel: string;
+    relationshipType: string;
+    disciplines: string;
+    description: string;
+  } | null>(null);
+  const [evidenceMediaOverlay, setEvidenceMediaOverlay] = useState<{
+    elementId: string;
+    fileName: string;
+    description: string;
+    mediaUrl: string;
+    mediaMime: string;
+    rotationDeg: 0 | 90 | 180 | 270;
+  } | null>(null);
+  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
+  const [selectedFlowIds, setSelectedFlowIds] = useState<Set<string>>(new Set());
+  const [canvasInteractionLocked, setCanvasInteractionLocked] = useState(false);
+  const canManipulateCanvasElements = canWriteMap && !canvasInteractionLocked;
+  const hoveredNodeFrameRef = useRef<number | null>(null);
+  const queuedHoveredNodeRef = useRef<string | null>(null);
+  const hoveredEdgeFrameRef = useRef<number | null>(null);
+  const queuedHoveredEdgeRef = useRef<string | null>(null);
+  const [copiedFlowIds, setCopiedFlowIds] = useState<string[]>([]);
+  const [selectionMarquee, setSelectionMarquee] = useState<SelectionMarquee>({
+    active: false,
+    startClientX: 0,
+    startClientY: 0,
+    currentClientX: 0,
+    currentClientY: 0,
+  });
+  const [showDeleteSelectionConfirm, setShowDeleteSelectionConfirm] = useState(false);
+  const [leftAsideSlideIn, setLeftAsideSlideIn] = useState(false);
+  const [collapsedHeadingIds, setCollapsedHeadingIds] = useState<Set<string>>(new Set());
+  const [newHeadingTitle, setNewHeadingTitle] = useState("");
+  const [newHeadingLevel, setNewHeadingLevel] = useState<1 | 2 | 3>(1);
+  const [newHeadingParentId, setNewHeadingParentId] = useState("");
+  const [newContentHeadingId, setNewContentHeadingId] = useState("");
+  const [newContentText, setNewContentText] = useState("");
+  const [editHeadingTitle, setEditHeadingTitle] = useState("");
+  const [editHeadingLevel, setEditHeadingLevel] = useState<1 | 2 | 3>(1);
+  const [editHeadingParentId, setEditHeadingParentId] = useState("");
+  const [editContentHeadingId, setEditContentHeadingId] = useState("");
+  const [editContentText, setEditContentText] = useState("");
+  useEffect(() => {
+    return () => {
+      if (evidenceUploadPreviewUrl) URL.revokeObjectURL(evidenceUploadPreviewUrl);
+    };
+  }, [evidenceUploadPreviewUrl]);
+  useEffect(() => {
+    return () => {
+      convertedMediaObjectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+      convertedMediaObjectUrlsRef.current.clear();
+    };
+  }, []);
+  useEffect(() => {
+    if (!canvasInteractionLocked) return;
+    setSelectedFlowIds(new Set());
+    setSelectionMarquee({
+      active: false,
+      startClientX: 0,
+      startClientY: 0,
+      currentClientX: 0,
+      currentClientY: 0,
+    });
+  }, [canvasInteractionLocked]);
+  const normalizePreviewHex = useCallback((value: string | null | undefined): string | null => {
+    if (!value) return null;
+    const trimmed = value.trim();
+    if (!/^#[0-9a-fA-F]{6}$/.test(trimmed)) return null;
+    return trimmed.toUpperCase();
+  }, []);
+  const isHeicLike = useCallback((mimeRaw: string | null | undefined, nameRaw: string | null | undefined) => {
+    const mime = String(mimeRaw ?? "").toLowerCase();
+    const name = String(nameRaw ?? "").toLowerCase();
+    return mime.includes("heic") || mime.includes("heif") || name.endsWith(".heic") || name.endsWith(".heif");
+  }, []);
+  const convertHeicBlobToJpegBlob = useCallback(async (blob: Blob): Promise<Blob | null> => {
+    try {
+      const mod = await import("heic2any");
+      const heic2anyFn = (mod.default ?? mod) as (opts: { blob: Blob; toType: string; quality?: number }) => Promise<Blob | Blob[]>;
+      const converted = await heic2anyFn({ blob, toType: "image/jpeg", quality: 0.9 });
+      if (Array.isArray(converted)) return converted[0] ?? null;
+      return converted ?? null;
+    } catch {
+      return null;
+    }
+  }, []);
+  const blobLooksLikeHeif = useCallback(async (blob: Blob): Promise<boolean> => {
+    try {
+      const buffer = await blob.slice(0, 64).arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      if (bytes.length < 12) return false;
+      const ascii = String.fromCharCode(...bytes);
+      if (!ascii.includes("ftyp")) return false;
+      const brands = ["heic", "heix", "hevc", "hevx", "mif1", "msf1"];
+      return brands.some((brand) => ascii.includes(brand));
+    } catch {
+      return false;
+    }
+  }, []);
+  const hasUnsavedFlowShapeDraftChanges = useMemo(() => {
+    if (!selectedFlowShapeId) return false;
+    const selectedShape = elements.find(
+      (el) =>
+        el.id === selectedFlowShapeId &&
+        (el.element_type === "shape_rectangle" ||
+          el.element_type === "shape_circle" ||
+          el.element_type === "shape_pill" ||
+          el.element_type === "shape_pentagon" ||
+          el.element_type === "shape_chevron_left" ||
+          el.element_type === "shape_arrow")
+    );
+    if (!selectedShape) return false;
+    const cfg = (selectedShape.element_config as Record<string, unknown> | null) ?? {};
+    const isArrow = selectedShape.element_type === "shape_arrow";
+    const canFlipDirection = selectedShape.element_type === "shape_pentagon" || selectedShape.element_type === "shape_chevron_left";
+    const persistedHeading = isArrow ? "" : selectedShape.heading ?? "Shape text";
+    const persistedAlignRaw = String(cfg.align ?? "center");
+    const persistedAlign = persistedAlignRaw === "left" || persistedAlignRaw === "right" ? persistedAlignRaw : "center";
+    const persistedFontSizeRaw = Number(cfg.font_size ?? 24);
+    const persistedFontSize = Number.isFinite(persistedFontSizeRaw) ? Math.max(12, Math.min(168, Math.round(persistedFontSizeRaw))) : 24;
+    const draftFontSizeRaw = Number(flowShapeFontSizeDraft.trim());
+    const draftFontSize = Number.isFinite(draftFontSizeRaw) ? Math.max(12, Math.min(168, Math.round(draftFontSizeRaw))) : 24;
+    const persistedColor = normalizePreviewHex(selectedShape.color_hex ?? shapeDefaultFillColor) ?? shapeDefaultFillColor;
+    const draftColor = normalizePreviewHex(flowShapeColorDraft) ?? persistedColor;
+    const persistedFillMode = String(cfg.fill_mode ?? "fill") === "outline" ? "outline" : "fill";
+    const persistedOutlineColor =
+      typeof cfg.outline_color === "string" && /^#[0-9a-fA-F]{6}$/.test(cfg.outline_color) ? cfg.outline_color.toUpperCase() : persistedColor;
+    const draftOutlineColor = normalizePreviewHex(flowShapeOutlineColorDraft) ?? persistedOutlineColor;
+    const persistedOutlineWidthRaw = Number(cfg.outline_width ?? 3);
+    const persistedOutlineWidth = Number.isFinite(persistedOutlineWidthRaw) ? Math.max(1, Math.min(12, Math.round(persistedOutlineWidthRaw))) : 3;
+    const draftOutlineWidthRaw = Number(flowShapeOutlineWidthDraft.trim());
+    const draftOutlineWidth = Number.isFinite(draftOutlineWidthRaw) ? Math.max(1, Math.min(12, Math.round(draftOutlineWidthRaw))) : 3;
+    const persistedDirection = String(cfg.direction ?? "right") === "left" ? "left" : "right";
+    const persistedRotationRaw = Number(cfg.rotation_deg ?? 0);
+    const persistedRotation = persistedRotationRaw === 90 || persistedRotationRaw === 180 || persistedRotationRaw === 270 ? persistedRotationRaw : 0;
+    return (
+      flowShapeTextDraft !== persistedHeading ||
+      flowShapeBoldDraft !== Boolean(cfg.bold) ||
+      flowShapeItalicDraft !== Boolean(cfg.italic) ||
+      flowShapeUnderlineDraft !== Boolean(cfg.underline) ||
+      flowShapeAlignDraft !== persistedAlign ||
+      draftFontSize !== persistedFontSize ||
+      draftColor !== persistedColor ||
+      flowShapeFillModeDraft !== persistedFillMode ||
+      draftOutlineColor !== persistedOutlineColor ||
+      draftOutlineWidth !== persistedOutlineWidth ||
+      (canFlipDirection && flowShapeDirectionDraft !== persistedDirection) ||
+      (isArrow && flowShapeRotationDraft !== persistedRotation)
+    );
+  }, [
+    selectedFlowShapeId,
+    elements,
+    flowShapeTextDraft,
+    flowShapeBoldDraft,
+    flowShapeItalicDraft,
+    flowShapeUnderlineDraft,
+    flowShapeAlignDraft,
+    flowShapeFontSizeDraft,
+    flowShapeColorDraft,
+    flowShapeFillModeDraft,
+    flowShapeOutlineColorDraft,
+    flowShapeOutlineWidthDraft,
+    flowShapeDirectionDraft,
+    flowShapeRotationDraft,
+    shapeDefaultFillColor,
+    normalizePreviewHex,
+  ]);
+  const canvasPreviewElements = useMemo(() => {
+    if (!selectedProcessId && !selectedGroupingId && !selectedStickyId && !selectedTextBoxId && !selectedTableId && !selectedFlowShapeId) return elements;
+    let changed = false;
+    const next = elements.map((el) => {
+      if (selectedProcessId && el.id === selectedProcessId && el.element_type === "category") {
+        changed = true;
+        const parsedProcessSize = Number(processFontSizeDraft.trim());
+        const previewProcessSize = Number.isFinite(parsedProcessSize) ? Math.max(10, Math.min(72, Math.round(parsedProcessSize))) : 12;
+        return {
+          ...el,
+          heading: processHeadingDraft,
+          color_hex: processColorDraft ? normalizePreviewHex(processColorDraft) : el.color_hex,
+          element_config: {
+            ...((el.element_config as Record<string, unknown> | null) ?? {}),
+            font_size: previewProcessSize,
+            fill_mode: processFillModeDraft,
+            outline_color: normalizePreviewHex(processOutlineColorDraft) ?? (el.element_config as Record<string, unknown> | null)?.outline_color,
+            outline_width: (() => {
+              const parsed = Number(processOutlineWidthDraft.trim());
+              return Number.isFinite(parsed) ? Math.max(1, Math.min(12, Math.round(parsed))) : 1;
+            })(),
+          },
+        };
+      }
+      if (selectedTextBoxId && el.id === selectedTextBoxId && el.element_type === "text_box") {
+        changed = true;
+        const parsedTextSize = Number(textBoxFontSizeDraft.trim());
+        const previewTextSize = Number.isFinite(parsedTextSize) ? Math.max(16, Math.min(168, Math.round(parsedTextSize))) : 16;
+        return {
+          ...el,
+          heading: textBoxContentDraft,
+          element_config: {
+            ...((el.element_config as Record<string, unknown> | null) ?? {}),
+            bold: textBoxBoldDraft,
+            italic: textBoxItalicDraft,
+            underline: textBoxUnderlineDraft,
+            align: textBoxAlignDraft,
+            font_size: previewTextSize,
+            background_color: textBoxBackgroundColorDraft,
+            outline: textBoxOutlineDraft,
+            outline_color: normalizePreviewHex(textBoxOutlineColorDraft) ?? (el.element_config as Record<string, unknown> | null)?.outline_color,
+            outline_width: (() => {
+              const parsed = Number(textBoxOutlineWidthDraft.trim());
+              return Number.isFinite(parsed) ? Math.max(1, Math.min(12, Math.round(parsed))) : 2;
+            })(),
+          },
+        };
+      }
+      if (selectedGroupingId && el.id === selectedGroupingId && el.element_type === "grouping_container") {
+        changed = true;
+        return {
+          ...el,
+          heading: groupingLabelDraft,
+          element_config: {
+            ...((el.element_config as Record<string, unknown> | null) ?? {}),
+            header_bg_color: normalizePreviewHex(groupingHeaderColorDraft) ?? (el.element_config as Record<string, unknown> | null)?.header_bg_color,
+          },
+        };
+      }
+      if (selectedStickyId && el.id === selectedStickyId && el.element_type === "sticky_note") {
+        changed = true;
+        return {
+          ...el,
+          heading: stickyTextDraft,
+          element_config: {
+            ...((el.element_config as Record<string, unknown> | null) ?? {}),
+            background_color: normalizePreviewHex(stickyBackgroundColorDraft) ?? (el.element_config as Record<string, unknown> | null)?.background_color,
+            outline_color: normalizePreviewHex(stickyOutlineColorDraft) ?? (el.element_config as Record<string, unknown> | null)?.outline_color,
+            fill_mode: stickyFillModeDraft,
+            outline_width: (() => {
+              const parsed = Number(stickyOutlineWidthDraft.trim());
+              return Number.isFinite(parsed) ? Math.max(1, Math.min(12, Math.round(parsed))) : 1;
+            })(),
+          },
+        };
+      }
+      if (selectedTableId && el.id === selectedTableId && el.element_type === "table") {
+        changed = true;
+        const currentCfg = (el.element_config as Record<string, unknown> | null) ?? {};
+        const currentRowsRaw = Number(currentCfg.rows ?? tableMinRows);
+        const currentColumnsRaw = Number(currentCfg.columns ?? tableMinColumns);
+        const currentRows = Number.isFinite(currentRowsRaw) ? Math.max(tableMinRows, Math.floor(currentRowsRaw)) : tableMinRows;
+        const currentColumns = Number.isFinite(currentColumnsRaw) ? Math.max(tableMinColumns, Math.floor(currentColumnsRaw)) : tableMinColumns;
+        const currentWidth = Math.max(tableMinWidth, Number(el.width ?? tableDefaultWidth));
+        const currentHeight = Math.max(tableMinHeight, Number(el.height ?? tableDefaultHeight));
+        const cellWidth = currentWidth / Math.max(1, currentColumns);
+        const cellHeight = currentHeight / Math.max(1, currentRows);
+        const parsedRows = Number(tableRowsDraft.trim());
+        const parsedColumns = Number(tableColumnsDraft.trim());
+        const rows = Number.isFinite(parsedRows) ? Math.max(tableMinRows, Math.floor(parsedRows)) : tableMinRows;
+        const columns = Number.isFinite(parsedColumns) ? Math.max(tableMinColumns, Math.floor(parsedColumns)) : tableMinColumns;
+        const nextHeaderColor = normalizePreviewHex(tableHeaderBgDraft);
+        const nextGridLineColor = normalizePreviewHex(tableGridLineColorDraft);
+        const parsedGridLineWeight = Number(tableGridLineWeightDraft.trim());
+        const previewGridLineWeight = Number.isFinite(parsedGridLineWeight) ? Math.max(0.5, Math.min(6, Math.round(parsedGridLineWeight * 2) / 2)) : 0.5;
+        const parsedTableSize = Number(tableFontSizeDraft.trim());
+        const previewTableSize = Number.isFinite(parsedTableSize) ? Math.max(10, Math.min(72, Math.round(parsedTableSize))) : 10;
+        return {
+          ...el,
+          width: Math.max(tableMinWidth, cellWidth * columns),
+          height: Math.max(tableMinHeight, cellHeight * rows),
+          element_config: {
+            ...((el.element_config as Record<string, unknown> | null) ?? {}),
+            rows,
+            columns,
+            header_bg_color: nextHeaderColor,
+            grid_line_color: nextGridLineColor,
+            grid_line_weight: previewGridLineWeight,
+            bold: tableBoldDraft,
+            italic: tableItalicDraft,
+            underline: tableUnderlineDraft,
+            align: tableAlignDraft,
+            font_size: previewTableSize,
+          },
+        };
+      }
+      if (
+        selectedFlowShapeId &&
+        el.id === selectedFlowShapeId &&
+        (el.element_type === "shape_rectangle" ||
+          el.element_type === "shape_circle" ||
+          el.element_type === "shape_pill" ||
+          el.element_type === "shape_pentagon" ||
+          el.element_type === "shape_chevron_left" ||
+          el.element_type === "shape_arrow")
+      ) {
+        changed = true;
+        const parsedTextSize = Number(flowShapeFontSizeDraft.trim());
+        const previewTextSize = Number.isFinite(parsedTextSize) ? Math.max(16, Math.min(168, Math.round(parsedTextSize))) : 16;
+        const previewColor = normalizePreviewHex(flowShapeColorDraft) ?? el.color_hex;
+        const canFlipDirection = el.element_type === "shape_pentagon" || el.element_type === "shape_chevron_left";
+        const isArrow = el.element_type === "shape_arrow";
+        const currentRotationRaw = Number(((el.element_config as Record<string, unknown> | null) ?? {}).rotation_deg ?? 0);
+        const currentRotation = currentRotationRaw === 90 || currentRotationRaw === 180 || currentRotationRaw === 270 ? currentRotationRaw : 0;
+        const currentIsVertical = currentRotation === 90 || currentRotation === 270;
+        const nextIsVertical = flowShapeRotationDraft === 90 || flowShapeRotationDraft === 270;
+        const nextWidth =
+          isArrow && currentIsVertical !== nextIsVertical
+            ? Math.max(shapeArrowMinWidth, el.height || shapeArrowDefaultHeight)
+            : el.width;
+        const nextHeight =
+          isArrow && currentIsVertical !== nextIsVertical
+            ? Math.max(shapeArrowMinHeight, el.width || shapeArrowDefaultWidth)
+            : el.height;
+        return {
+          ...el,
+          heading: isArrow ? "" : flowShapeTextDraft,
+          color_hex: previewColor,
+          width: nextWidth,
+          height: nextHeight,
+          element_config: {
+            ...((el.element_config as Record<string, unknown> | null) ?? {}),
+            bold: flowShapeBoldDraft,
+            italic: flowShapeItalicDraft,
+            underline: flowShapeUnderlineDraft,
+            align: flowShapeAlignDraft,
+            font_size: previewTextSize,
+            fill_mode: flowShapeFillModeDraft,
+            outline_color: normalizePreviewHex(flowShapeOutlineColorDraft) ?? previewColor,
+            outline_width: (() => {
+              const parsed = Number(flowShapeOutlineWidthDraft.trim());
+              return Number.isFinite(parsed) ? Math.max(1, Math.min(12, Math.round(parsed))) : 3;
+            })(),
+            ...(canFlipDirection ? { direction: flowShapeDirectionDraft } : {}),
+            ...(isArrow ? { rotation_deg: flowShapeRotationDraft } : {}),
+          },
+        };
+      }
+      return el;
+    });
+    return changed ? next : elements;
+  }, [
+    elements,
+    selectedProcessId,
+    selectedGroupingId,
+    selectedStickyId,
+    selectedTextBoxId,
+    selectedTableId,
+    selectedFlowShapeId,
+    processHeadingDraft,
+    processColorDraft,
+    processFillModeDraft,
+    processOutlineColorDraft,
+    processOutlineWidthDraft,
+    processFontSizeDraft,
+    groupingLabelDraft,
+    groupingHeaderColorDraft,
+    stickyTextDraft,
+    stickyBackgroundColorDraft,
+    stickyOutlineColorDraft,
+    stickyFillModeDraft,
+    stickyOutlineWidthDraft,
+    textBoxContentDraft,
+    textBoxBoldDraft,
+    textBoxItalicDraft,
+    textBoxUnderlineDraft,
+    textBoxAlignDraft,
+    textBoxFontSizeDraft,
+    textBoxBackgroundColorDraft,
+    textBoxOutlineDraft,
+    textBoxOutlineColorDraft,
+    textBoxOutlineWidthDraft,
+    tableRowsDraft,
+    tableColumnsDraft,
+    tableHeaderBgDraft,
+    tableGridLineColorDraft,
+    tableGridLineWeightDraft,
+    tableBoldDraft,
+    tableItalicDraft,
+    tableUnderlineDraft,
+    tableAlignDraft,
+    tableFontSizeDraft,
+    flowShapeTextDraft,
+    flowShapeBoldDraft,
+    flowShapeItalicDraft,
+    flowShapeUnderlineDraft,
+    flowShapeAlignDraft,
+    flowShapeFontSizeDraft,
+    flowShapeColorDraft,
+    flowShapeFillModeDraft,
+    flowShapeOutlineColorDraft,
+    flowShapeOutlineWidthDraft,
+    flowShapeDirectionDraft,
+    flowShapeRotationDraft,
+    shapeArrowDefaultWidth,
+    shapeArrowDefaultHeight,
+    shapeArrowMinWidth,
+    shapeArrowMinHeight,
+    tableMinRows,
+    tableMinColumns,
+    tableMinWidth,
+    tableMinHeight,
+    tableDefaultWidth,
+    tableDefaultHeight,
+    shapeMinWidth,
+    shapeMinHeight,
+    normalizePreviewHex,
+  ]);
+
+  const typesById = useMemo(() => new Map(types.map((t) => [t.id, t])), [types]);
+  const elementsById = useMemo(() => new Map(elements.map((el) => [el.id, el])), [elements]);
+  const addDocumentTypes = useMemo(() => {
+    const grouped = new Map<string, DocumentTypeRow[]>();
+    types.forEach((t) => {
+      const key = `${getCanonicalTypeName(t.name)}::${t.level_rank}`;
+      const bucket = grouped.get(key);
+      if (bucket) bucket.push(t);
+      else grouped.set(key, [t]);
+    });
+    return [...grouped.values()]
+      .map((bucket) => {
+        bucket.sort((a, b) => {
+          const aCanonical = getCanonicalTypeName(a.name) === a.name.trim().toLowerCase() ? 1 : 0;
+          const bCanonical = getCanonicalTypeName(b.name) === b.name.trim().toLowerCase() ? 1 : 0;
+          if (aCanonical !== bCanonical) return bCanonical - aCanonical;
+          const aMapSpecific = a.map_id === mapId ? 1 : 0;
+          const bMapSpecific = b.map_id === mapId ? 1 : 0;
+          if (aMapSpecific !== bMapSpecific) return bMapSpecific - aMapSpecific;
+          return a.name.localeCompare(b.name);
+        });
+        return bucket[0];
+      })
+      .sort((a, b) => a.level_rank - b.level_rank || getDisplayTypeName(a.name).localeCompare(getDisplayTypeName(b.name)));
+  }, [types, mapId]);
+
+  const ranks = useMemo(() => {
+    const values = new Set<number>();
+    nodes.forEach((n) => {
+      const t = typesById.get(n.type_id);
+      if (t) values.add(t.level_rank);
+    });
+    if (!values.size) types.forEach((t) => values.add(t.level_rank));
+    return [...values].sort((a, b) => a - b);
+  }, [nodes, types, typesById]);
+
+  const rankLane = useMemo(() => {
+    const m = new Map<number, { min: number; max: number }>();
+    ranks.forEach((rank, i) => {
+      m.set(rank, { min: i * laneHeight + 20, max: i * laneHeight + laneHeight - 20 });
+    });
+    return m;
+  }, [ranks]);
+
+  const getClampRange = useCallback((typeId: string) => {
+    const t = typesById.get(typeId);
+    if (!t) return { min: 0, max: 3000 };
+    if (t.band_y_min !== null || t.band_y_max !== null) {
+      return { min: t.band_y_min ?? 0, max: t.band_y_max ?? 3000 };
+    }
+    return rankLane.get(t.level_rank) ?? { min: 0, max: 3000 };
+  }, [typesById, rankLane]);
+  const getNodeSize = useCallback((node: DocumentNodeRow) => {
+    const rawTypeName = typesById.get(node.type_id)?.name ?? "Document";
+    const isLandscape = isLandscapeTypeName(rawTypeName);
+    return getNormalizedDocumentSize(isLandscape, node.width, node.height);
+  }, [typesById]);
+  const findNearestFreePosition = useCallback((nodeId: string, startX: number, startY: number) => {
+    const movingNode = nodes.find((n) => n.id === nodeId);
+    if (!movingNode) return null;
+    const movingSize = getNodeSize(movingNode);
+    const occupied = nodes
+      .filter((n) => n.id !== nodeId)
+      .map((n) => {
+        const size = getNodeSize(n);
+        return { x: n.pos_x, y: n.pos_y, width: size.width, height: size.height };
+      });
+
+    const isFree = (x: number, y: number) =>
+      !occupied.some((box) =>
+        boxesOverlap(
+          { x, y, width: movingSize.width, height: movingSize.height },
+          box,
+          4
+        )
+      );
+
+    if (isFree(startX, startY)) return { x: startX, y: startY };
+
+    const step = minorGridSize;
+    const maxRing = 120;
+    for (let ring = 1; ring <= maxRing; ring += 1) {
+      for (let dx = -ring; dx <= ring; dx += 1) {
+        for (let dy = -ring; dy <= ring; dy += 1) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
+          const x = snapToMinorGrid(startX + dx * step);
+          const y = snapToMinorGrid(startY + dy * step);
+          if (isFree(x, y)) return { x, y };
+        }
+      }
+    }
+    return null;
+  }, [nodes, getNodeSize, snapToMinorGrid]);
+  const getFlowNodeBounds = useCallback((flowId: string) => {
+    if (flowId.startsWith("process:")) {
+      const elementId = parseProcessFlowId(flowId);
+      const el = canvasPreviewElements.find((item) => item.id === elementId);
+      if (!el) return null;
+      if (el.element_type === "grouping_container") {
+        return {
+          x: el.pos_x,
+          y: el.pos_y,
+          width: Math.max(groupingMinWidth, el.width || groupingDefaultWidth),
+          height: Math.max(groupingMinHeight, el.height || groupingDefaultHeight),
+        };
+      }
+      if (el.element_type === "system_circle") {
+        return { x: el.pos_x, y: el.pos_y, width: systemCircleDiameter, height: systemCircleElementHeight };
+      }
+      if (el.element_type === "process_component") {
+        return { x: el.pos_x, y: el.pos_y, width: processComponentWidth, height: processComponentElementHeight };
+      }
+      if (el.element_type === "person") {
+        const width = mapCategoryId === "org_chart" ? orgChartPersonWidth : personElementWidth;
+        const height = mapCategoryId === "org_chart" ? orgChartPersonHeight : personElementHeight;
+        return { x: el.pos_x, y: el.pos_y, width, height };
+      }
+      if (el.element_type === "sticky_note") {
+        return {
+          x: el.pos_x,
+          y: el.pos_y,
+          width: Math.max(stickyMinSize, el.width || stickyDefaultSize),
+          height: Math.max(stickyMinSize, el.height || stickyDefaultSize),
+        };
+      }
+      if (el.element_type === "image_asset") {
+        return {
+          x: el.pos_x,
+          y: el.pos_y,
+          width: Math.max(imageMinWidth, el.width || imageDefaultWidth),
+          height: Math.max(imageMinHeight, el.height || imageDefaultWidth),
+        };
+      }
+      if (el.element_type === "text_box") {
+        return {
+          x: el.pos_x,
+          y: el.pos_y,
+          width: Math.max(textBoxMinWidth, el.width || textBoxDefaultWidth),
+          height: Math.max(textBoxMinHeight, el.height || textBoxDefaultHeight),
+        };
+      }
+      if (el.element_type === "table") {
+        return {
+          x: el.pos_x,
+          y: el.pos_y,
+          width: Math.max(tableMinWidth, el.width || tableDefaultWidth),
+          height: Math.max(tableMinHeight, el.height || tableDefaultHeight),
+        };
+      }
+      if (el.element_type === "shape_rectangle") {
+        return {
+          x: el.pos_x,
+          y: el.pos_y,
+          width: Math.max(shapeMinWidth, el.width || shapeRectangleDefaultWidth),
+          height: Math.max(shapeMinHeight, el.height || shapeRectangleDefaultHeight),
+        };
+      }
+      if (el.element_type === "shape_circle") {
+        return {
+          x: el.pos_x,
+          y: el.pos_y,
+          width: Math.max(shapeMinWidth, el.width || shapeCircleDefaultSize),
+          height: Math.max(shapeMinHeight, el.height || shapeCircleDefaultSize),
+        };
+      }
+      if (el.element_type === "shape_pill") {
+        return {
+          x: el.pos_x,
+          y: el.pos_y,
+          width: Math.max(shapeMinWidth, el.width || shapePillDefaultWidth),
+          height: Math.max(shapeMinHeight, el.height || shapePillDefaultHeight),
+        };
+      }
+      if (el.element_type === "shape_pentagon") {
+        return {
+          x: el.pos_x,
+          y: el.pos_y,
+          width: Math.max(shapeMinWidth, el.width || shapePentagonDefaultWidth),
+          height: Math.max(shapeMinHeight, el.height || shapePentagonDefaultHeight),
+        };
+      }
+      if (el.element_type === "shape_chevron_left") {
+        return {
+          x: el.pos_x,
+          y: el.pos_y,
+          width: Math.max(shapeMinWidth, el.width || shapePentagonDefaultWidth),
+          height: Math.max(shapeMinHeight, el.height || shapePentagonDefaultHeight),
+        };
+      }
+      if (el.element_type === "shape_arrow") {
+        return {
+          x: el.pos_x,
+          y: el.pos_y,
+          width: Math.max(shapeArrowMinWidth, el.width || shapeArrowDefaultWidth),
+          height: Math.max(shapeArrowMinHeight, el.height || shapeArrowDefaultHeight),
+        };
+      }
+      if (isMethodologyElementType(el.element_type)) {
+        return {
+          x: el.pos_x,
+          y: el.pos_y,
+          width: Math.max(minorGridSize * 2, el.width || incidentDefaultWidth),
+          height: Math.max(minorGridSize, el.height || incidentSquareSize),
+        };
+      }
+      return {
+        x: el.pos_x,
+        y: el.pos_y,
+        width: Math.max(processMinWidth, el.width || processHeadingWidth),
+        height: Math.max(processMinHeight, el.height || processHeadingHeight),
+      };
+    }
+    const node = nodes.find((n) => n.id === flowId);
+    if (!node) return null;
+    const size = getNodeSize(node);
+    return { x: node.pos_x, y: node.pos_y, width: size.width, height: size.height };
+  }, [canvasPreviewElements, nodes, getNodeSize, mapCategoryId, minorGridSize, orgChartPersonHeight, orgChartPersonWidth, personElementHeight, personElementWidth, shapeArrowDefaultHeight, shapeArrowDefaultWidth, shapeArrowMinHeight, shapeArrowMinWidth, shapeCircleDefaultSize, shapeMinHeight, shapeMinWidth, shapePentagonDefaultHeight, shapePentagonDefaultWidth, shapePillDefaultHeight, shapePillDefaultWidth, shapeRectangleDefaultHeight, shapeRectangleDefaultWidth, tableDefaultWidth, tableDefaultHeight, tableMinWidth, tableMinHeight]);
+
+  const [flowNodes, setFlowNodes, onFlowNodesChange] = useNodesState<Node<FlowData>>([]);
+  const scheduleHoveredNodeId = useCallback((value: string | null) => {
+    if (isNodeDragActiveRef.current) return;
+    queuedHoveredNodeRef.current = value;
+    if (hoveredNodeFrameRef.current !== null) return;
+    hoveredNodeFrameRef.current = requestAnimationFrame(() => {
+      hoveredNodeFrameRef.current = null;
+      const next = queuedHoveredNodeRef.current;
+      setHoveredNodeId((prev) => (prev === next ? prev : next));
+    });
+  }, []);
+  const scheduleHoveredEdgeId = useCallback((value: string | null) => {
+    if (isNodeDragActiveRef.current) return;
+    queuedHoveredEdgeRef.current = value;
+    if (hoveredEdgeFrameRef.current !== null) return;
+    hoveredEdgeFrameRef.current = requestAnimationFrame(() => {
+      hoveredEdgeFrameRef.current = null;
+      const next = queuedHoveredEdgeRef.current;
+      setHoveredEdgeId((prev) => (prev === next ? prev : next));
+    });
+  }, []);
+  useEffect(() => {
+    return () => {
+      if (hoveredNodeFrameRef.current !== null) cancelAnimationFrame(hoveredNodeFrameRef.current);
+      if (hoveredEdgeFrameRef.current !== null) cancelAnimationFrame(hoveredEdgeFrameRef.current);
+    };
+  }, []);
+  const handleFlowNodesChange = useCallback((changes: NodeChange<Node<FlowData>>[]) => {
+    onFlowNodesChange(changes);
+    const dimensionChanges = changes.filter((c) => {
+      const change = c as { type?: string; id?: string; dimensions?: { width: number; height: number } };
+      return (
+        change.type === "dimensions" &&
+        typeof change.id === "string" &&
+        change.id.startsWith("process:") &&
+        !!change.dimensions &&
+        typeof (change as { resizing?: boolean }).resizing === "boolean"
+      );
+    }) as Array<{ id: string; dimensions: { width: number; height: number }; resizing?: boolean }>;
+    if (!dimensionChanges.length) return;
+
+    const nextSizes = new Map<string, { width: number; height: number }>();
+    const completedResizeIds = new Set<string>();
+    dimensionChanges.forEach((change) => {
+      const elementId = parseProcessFlowId(change.id);
+      const current = elementsById.get(elementId);
+      if (!current) return;
+      if (!canEditElement(current)) return;
+      if (current.element_type === "category") {
+        const width = Math.max(processMinWidth, snapToMinorGrid(change.dimensions.width));
+        const height = Math.max(processMinHeight, snapToMinorGrid(change.dimensions.height));
+        const currentWidth = Math.max(processMinWidth, snapToMinorGrid(current.width || processHeadingWidth));
+        const currentHeight = Math.max(processMinHeight, snapToMinorGrid(current.height || processHeadingHeight));
+        if (width !== currentWidth || height !== currentHeight) {
+          nextSizes.set(elementId, { width, height });
+          if (change.resizing === false) completedResizeIds.add(elementId);
+        }
+        return;
+      }
+      if (current.element_type === "grouping_container") {
+        const width = Math.max(groupingMinWidth, snapToMinorGrid(change.dimensions.width));
+        const height = Math.max(groupingMinHeight, snapToMinorGrid(change.dimensions.height));
+        const currentWidth = Math.max(groupingMinWidth, snapToMinorGrid(current.width || groupingDefaultWidth));
+        const currentHeight = Math.max(groupingMinHeight, snapToMinorGrid(current.height || groupingDefaultHeight));
+        if (width !== currentWidth || height !== currentHeight) {
+          nextSizes.set(elementId, { width, height });
+          if (change.resizing === false) completedResizeIds.add(elementId);
+        }
+        return;
+      }
+      if (current.element_type === "sticky_note") {
+        const width = Math.max(stickyMinSize, snapToMinorGrid(change.dimensions.width));
+        const height = Math.max(stickyMinSize, snapToMinorGrid(change.dimensions.height));
+        const currentWidth = Math.max(stickyMinSize, snapToMinorGrid(current.width || stickyDefaultSize));
+        const currentHeight = Math.max(stickyMinSize, snapToMinorGrid(current.height || stickyDefaultSize));
+        if (width !== currentWidth || height !== currentHeight) {
+          nextSizes.set(elementId, { width, height });
+          if (change.resizing === false) completedResizeIds.add(elementId);
+        }
+        return;
+      }
+      if (current.element_type === "image_asset") {
+        const width = Math.max(imageMinWidth, snapToMinorGrid(change.dimensions.width));
+        const height = Math.max(imageMinHeight, snapToMinorGrid(change.dimensions.height));
+        const currentWidth = Math.max(imageMinWidth, snapToMinorGrid(current.width || imageDefaultWidth));
+        const currentHeight = Math.max(imageMinHeight, snapToMinorGrid(current.height || imageDefaultWidth));
+        if (width !== currentWidth || height !== currentHeight) {
+          nextSizes.set(elementId, { width, height });
+          if (change.resizing === false) completedResizeIds.add(elementId);
+        }
+        return;
+      }
+      if (current.element_type === "text_box") {
+        const width = Math.max(textBoxMinWidth, snapToMinorGrid(change.dimensions.width));
+        const height = Math.max(textBoxMinHeight, snapToMinorGrid(change.dimensions.height));
+        const currentWidth = Math.max(textBoxMinWidth, snapToMinorGrid(current.width || textBoxDefaultWidth));
+        const currentHeight = Math.max(textBoxMinHeight, snapToMinorGrid(current.height || textBoxDefaultHeight));
+        if (width !== currentWidth || height !== currentHeight) {
+          nextSizes.set(elementId, { width, height });
+          if (change.resizing === false) completedResizeIds.add(elementId);
+        }
+        return;
+      }
+      if (current.element_type === "table") {
+        const width = Math.max(tableMinWidth, snapToMinorGrid(change.dimensions.width));
+        const height = Math.max(tableMinHeight, snapToMinorGrid(change.dimensions.height));
+        const currentWidth = Math.max(tableMinWidth, snapToMinorGrid(current.width || tableDefaultWidth));
+        const currentHeight = Math.max(tableMinHeight, snapToMinorGrid(current.height || tableDefaultHeight));
+        if (width !== currentWidth || height !== currentHeight) {
+          nextSizes.set(elementId, { width, height });
+          if (change.resizing === false) completedResizeIds.add(elementId);
+        }
+        return;
+      }
+      if (
+        current.element_type === "shape_rectangle" ||
+        current.element_type === "shape_circle" ||
+        current.element_type === "shape_pill" ||
+        current.element_type === "shape_pentagon" ||
+        current.element_type === "shape_chevron_left" ||
+        current.element_type === "shape_arrow"
+      ) {
+        if (current.id === selectedFlowShapeId && hasUnsavedFlowShapeDraftChanges) return;
+        const getShapeSize = (element: CanvasElementRow, override?: { width?: number; height?: number }) => {
+          const baseWidth =
+            element.element_type === "shape_circle"
+              ? shapeCircleDefaultSize
+              : element.element_type === "shape_pill"
+              ? shapePillDefaultWidth
+              : element.element_type === "shape_arrow"
+              ? shapeArrowDefaultWidth
+              : element.element_type === "shape_pentagon" || element.element_type === "shape_chevron_left"
+              ? shapePentagonDefaultWidth
+              : shapeRectangleDefaultWidth;
+          const baseHeight =
+            element.element_type === "shape_circle"
+              ? shapeCircleDefaultSize
+              : element.element_type === "shape_pill"
+              ? shapePillDefaultHeight
+              : element.element_type === "shape_arrow"
+              ? shapeArrowDefaultHeight
+              : element.element_type === "shape_pentagon" || element.element_type === "shape_chevron_left"
+              ? shapePentagonDefaultHeight
+              : shapeRectangleDefaultHeight;
+          const minWidth = element.element_type === "shape_arrow" ? shapeArrowMinWidth : shapeMinWidth;
+          const minHeight = element.element_type === "shape_arrow" ? shapeArrowMinHeight : shapeMinHeight;
+          let nextWidth = Math.max(minWidth, snapToMinorGrid(override?.width ?? element.width ?? baseWidth));
+          let nextHeight = Math.max(minHeight, snapToMinorGrid(override?.height ?? element.height ?? baseHeight));
+          if (element.element_type === "shape_circle") {
+            const side = Math.max(nextWidth, nextHeight, shapeMinWidth);
+            nextWidth = side;
+            nextHeight = side;
+          }
+          return { width: nextWidth, height: nextHeight };
+        };
+        const minWidth = current.element_type === "shape_arrow" ? shapeArrowMinWidth : shapeMinWidth;
+        const minHeight = current.element_type === "shape_arrow" ? shapeArrowMinHeight : shapeMinHeight;
+        let width = Math.max(minWidth, snapToMinorGrid(change.dimensions.width));
+        let height = Math.max(minHeight, snapToMinorGrid(change.dimensions.height));
+        const fallbackWidth =
+          current.element_type === "shape_circle"
+            ? shapeCircleDefaultSize
+            : current.element_type === "shape_pill"
+            ? shapePillDefaultWidth
+            : current.element_type === "shape_arrow"
+            ? shapeArrowDefaultWidth
+            : current.element_type === "shape_pentagon" || current.element_type === "shape_chevron_left"
+            ? shapePentagonDefaultWidth
+            : shapeRectangleDefaultWidth;
+        const fallbackHeight =
+          current.element_type === "shape_circle"
+            ? shapeCircleDefaultSize
+            : current.element_type === "shape_pill"
+            ? shapePillDefaultHeight
+            : current.element_type === "shape_arrow"
+            ? shapeArrowDefaultHeight
+            : current.element_type === "shape_pentagon" || current.element_type === "shape_chevron_left"
+            ? shapePentagonDefaultHeight
+            : shapeRectangleDefaultHeight;
+        let currentWidth = Math.max(minWidth, snapToMinorGrid(current.width || fallbackWidth));
+        let currentHeight = Math.max(minHeight, snapToMinorGrid(current.height || fallbackHeight));
+        if (current.element_type === "shape_circle") {
+          const side = Math.max(width, height, shapeMinWidth);
+          width = side;
+          height = side;
+          const currentSide = Math.max(currentWidth, currentHeight, shapeMinWidth);
+          currentWidth = currentSide;
+          currentHeight = currentSide;
+        }
+        const candidateRect = { x: current.pos_x, y: current.pos_y, width, height };
+        const isPentagonChevronPair = (a: CanvasElementRow["element_type"], b: CanvasElementRow["element_type"]) =>
+          (a === "shape_pentagon" && b === "shape_chevron_left") || (a === "shape_chevron_left" && b === "shape_pentagon");
+        const exceedsAllowedOverlap = (
+          a: { x: number; y: number; width: number; height: number },
+          b: { x: number; y: number; width: number; height: number },
+          allowed: number
+        ) => {
+          if (!boxesOverlap(a, b, 0)) return false;
+          const overlapWidth = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+          const overlapHeight = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+          return overlapWidth > allowed && overlapHeight > allowed;
+        };
+        const overlapsOtherShape = elements
+          .filter(
+            (el) =>
+              el.id !== elementId &&
+              (el.element_type === "shape_rectangle" ||
+                el.element_type === "shape_circle" ||
+                el.element_type === "shape_pill" ||
+                el.element_type === "shape_pentagon" ||
+                el.element_type === "shape_chevron_left" ||
+                el.element_type === "shape_arrow")
+          )
+          .some((el) => {
+            const pending = nextSizes.get(el.id);
+            const size = getShapeSize(el, pending ? { width: pending.width, height: pending.height } : undefined);
+            const otherRect = { x: el.pos_x, y: el.pos_y, width: size.width, height: size.height };
+            if (!boxesOverlap(candidateRect, otherRect, 0)) return false;
+            if (isPentagonChevronPair(current.element_type, el.element_type)) {
+              return exceedsAllowedOverlap(candidateRect, otherRect, minorGridSize * 2);
+            }
+            return true;
+          });
+        if (overlapsOtherShape) return;
+        if (current.element_type === "shape_arrow") {
+          const overlapsDocumentNode = nodes.some((doc) => {
+            const size = getNodeSize(doc);
+            return boxesOverlap(candidateRect, { x: doc.pos_x, y: doc.pos_y, width: size.width, height: size.height }, 0);
+          });
+          if (overlapsDocumentNode) return;
+          const overlapsAnyElement = elements
+            .filter((el) => el.id !== elementId)
+            .some((el) => {
+              const rect = getFlowNodeBounds(processFlowId(el.id));
+              if (!rect) return false;
+              return boxesOverlap(candidateRect, rect, 0);
+            });
+          if (overlapsAnyElement) return;
+        }
+        if (width !== currentWidth || height !== currentHeight) {
+          nextSizes.set(elementId, { width, height });
+          if (change.resizing === false) completedResizeIds.add(elementId);
+        }
+        return;
+      }
+      if (isMethodologyElementType(current.element_type)) {
+        let minWidth = bowtieDefaultWidth;
+        let minHeight = bowtieControlHeight;
+        if (current.element_type === "bowtie_hazard") {
+          minHeight = bowtieHazardHeight;
+        } else if (
+          current.element_type === "bowtie_top_event" ||
+          current.element_type === "bowtie_threat" ||
+          current.element_type === "bowtie_consequence"
+        ) {
+          minHeight = bowtieSquareHeight;
+        } else if (current.element_type === "bowtie_risk_rating") {
+          minHeight = bowtieRiskRatingHeight;
+        } else if (current.element_type === "incident_finding") {
+          minWidth = incidentDefaultWidth;
+          minHeight = incidentThreeOneHeight;
+        } else if (current.element_type.startsWith("incident_")) {
+          minWidth = incidentCardWidth;
+          minHeight = incidentCardHeight;
+        }
+        const width = Math.max(minWidth, snapToMinorGrid(change.dimensions.width));
+        const height = Math.max(minHeight, snapToMinorGrid(change.dimensions.height));
+        const currentWidth = Math.max(minWidth, snapToMinorGrid(current.width || minWidth));
+        const currentHeight = Math.max(minHeight, snapToMinorGrid(current.height || minHeight));
+        if (width !== currentWidth || height !== currentHeight) {
+          nextSizes.set(elementId, { width, height });
+          if (change.resizing === false) completedResizeIds.add(elementId);
+        }
+      }
+    });
+    if (!nextSizes.size) return;
+
+    nextSizes.forEach((size, elementId) => {
+      resizePersistValuesRef.current.set(elementId, size);
+      const existing = resizePersistTimersRef.current.get(elementId);
+      if (existing) clearTimeout(existing);
+      const timer = setTimeout(async () => {
+        const queued = resizePersistValuesRef.current.get(elementId);
+        if (!queued) return;
+        setElements((prev) => {
+          let changed = false;
+          const next = prev.map((el) => {
+            if (el.id !== elementId) return el;
+            const nextWidth = queued.width;
+            const nextHeight = queued.height;
+            if ((el.width ?? 0) === nextWidth && (el.height ?? 0) === nextHeight) return el;
+            changed = true;
+            return {
+              ...el,
+              width: nextWidth,
+              height: nextHeight,
+            };
+          });
+          return changed ? next : prev;
+        });
+        const { error: e } = await supabaseBrowser
+          .schema("ms")
+          .from("canvas_elements")
+          .update({ width: queued.width, height: queued.height })
+          .eq("id", elementId)
+          .eq("map_id", mapId);
+        if (e && !isAbortLikeError(e)) setError(e.message || "Unable to save component size.");
+        resizePersistTimersRef.current.delete(elementId);
+      }, completedResizeIds.has(elementId) ? 0 : 220);
+      resizePersistTimersRef.current.set(elementId, timer);
+    });
+  }, [onFlowNodesChange, elementsById, elements, mapId, snapToMinorGrid, canEditElement, selectedFlowShapeId, hasUnsavedFlowShapeDraftChanges, tableDefaultWidth, tableDefaultHeight, tableMinWidth, tableMinHeight]);
+
+  useEffect(() => {
+    return () => {
+      resizePersistTimersRef.current.forEach((timer) => clearTimeout(timer));
+      resizePersistTimersRef.current.clear();
+      resizePersistValuesRef.current.clear();
+    };
+  }, []);
+
+  const handleTableCellCommit = useCallback(
+    async (elementId: string, rowIndex: number, columnIndex: number, value: string) => {
+      const current = elements.find((el) => el.id === elementId && el.element_type === "table");
+      if (!current || !canEditElement(current)) return;
+      const cfg = (current.element_config as Record<string, unknown> | null) ?? {};
+      const existingRows = Array.isArray(cfg.cell_texts)
+        ? (cfg.cell_texts as unknown[]).map((row) => (Array.isArray(row) ? row.map((cell) => (cell == null ? "" : String(cell))) : []))
+        : [];
+      while (existingRows.length <= rowIndex) existingRows.push([]);
+      while (existingRows[rowIndex].length <= columnIndex) existingRows[rowIndex].push("");
+      existingRows[rowIndex][columnIndex] = value;
+      const nextConfig = {
+        ...cfg,
+        cell_texts: existingRows,
+      };
+      setElements((prev) =>
+        prev.map((el) => (el.id === elementId ? { ...el, element_config: nextConfig } : el))
+      );
+      if (!canWriteMap) return;
+      const { error: e } = await supabaseBrowser
+        .schema("ms")
+        .from("canvas_elements")
+        .update({ element_config: nextConfig })
+        .eq("id", elementId)
+        .eq("map_id", mapId);
+      if (e) setError(e.message || "Unable to save table cell.");
+    },
+    [elements, canEditElement, canWriteMap, mapId, setElements, setError]
+  );
+
+  const handleTableCellStyleCommit = useCallback(
+    async (
+      elementId: string,
+      rowIndex: number,
+      columnIndex: number,
+      style: {
+        bold?: boolean;
+        italic?: boolean;
+        underline?: boolean;
+        align?: "left" | "center" | "right";
+        vAlign?: "top" | "middle" | "bottom";
+        fontSize?: number;
+        backgroundColor?: string | null;
+      }
+    ) => {
+      let nextConfig: Record<string, unknown> | null = null;
+      let canPersist = false;
+      setElements((prev) => {
+        const current = prev.find((el) => el.id === elementId && el.element_type === "table");
+        if (!current || !canEditElement(current)) return prev;
+        canPersist = canWriteMap;
+        const cfg = (current.element_config as Record<string, unknown> | null) ?? {};
+        const existingRows = Array.isArray(cfg.cell_styles)
+          ? (cfg.cell_styles as unknown[]).map((row) =>
+              Array.isArray(row)
+                ? row.map((cellStyle) => ((cellStyle && typeof cellStyle === "object" ? cellStyle : {}) as Record<string, unknown>))
+                : []
+            )
+          : [];
+        while (existingRows.length <= rowIndex) existingRows.push([]);
+        while (existingRows[rowIndex].length <= columnIndex) existingRows[rowIndex].push({});
+        const align = style.align === "left" || style.align === "right" ? style.align : "center";
+        const vAlign = style.vAlign === "top" || style.vAlign === "bottom" ? style.vAlign : "middle";
+        const fontSizeRaw = Number(style.fontSize ?? 10);
+        const fontSize = Number.isFinite(fontSizeRaw) ? Math.max(10, Math.min(72, Math.round(fontSizeRaw))) : 10;
+        const backgroundColor =
+          typeof style.backgroundColor === "string" && /^#[0-9a-fA-F]{6}$/.test(style.backgroundColor)
+            ? style.backgroundColor.toUpperCase()
+            : style.backgroundColor === null
+            ? null
+            : undefined;
+        existingRows[rowIndex][columnIndex] = {
+          ...existingRows[rowIndex][columnIndex],
+          bold: Boolean(style.bold),
+          italic: Boolean(style.italic),
+          underline: Boolean(style.underline),
+          align,
+          v_align: vAlign,
+          font_size: fontSize,
+          ...(backgroundColor !== undefined ? { background_color: backgroundColor } : {}),
+        };
+        nextConfig = {
+          ...cfg,
+          cell_styles: existingRows,
+        };
+        return prev.map((el) => (el.id === elementId ? { ...el, element_config: nextConfig } : el));
+      });
+      if (!nextConfig || !canPersist) return;
+      const { error: e } = await supabaseBrowser
+        .schema("ms")
+        .from("canvas_elements")
+        .update({ element_config: nextConfig })
+        .eq("id", elementId)
+        .eq("map_id", mapId);
+      if (e) setError(e.message || "Unable to save table cell style.");
+    },
+    [canEditElement, canWriteMap, mapId, setElements, setError]
+  );
+  const handleOpenEvidenceMediaOverlay = useCallback(
+    (elementId: string) => {
+      const element = elements.find((el) => el.id === elementId && el.element_type === "incident_evidence");
+      if (!element) return;
+      const cfg = (element.element_config as Record<string, unknown> | null) ?? {};
+      const mediaUrl = imageUrlsByElementId[element.id];
+      if (!mediaUrl) return;
+      const rotationRaw = Number(cfg.media_rotation_deg ?? 0);
+      const rotationDeg: 0 | 90 | 180 | 270 =
+        rotationRaw === 90 || rotationRaw === 180 || rotationRaw === 270 ? rotationRaw : 0;
+      setEvidenceMediaOverlay({
+        elementId: element.id,
+        fileName: String(cfg.media_name ?? "").trim() || "Evidence",
+        description: String(cfg.description ?? "").trim(),
+        mediaUrl,
+        mediaMime: String(cfg.media_mime ?? "").trim(),
+        rotationDeg,
+      });
+    },
+    [elements, imageUrlsByElementId]
+  );
+
+  const handleToggleIncidentDetail = useCallback(
+    async (elementId: string, nextOpen: boolean) => {
+      let nextConfig: Record<string, unknown> | null = null;
+      let canPersist = false;
+      setElements((prev) => {
+        const current = prev.find((el) => el.id === elementId && el.element_type.startsWith("incident_"));
+        if (!current || !canEditElement(current)) return prev;
+        canPersist = canWriteMap;
+        nextConfig = {
+          ...((current.element_config as Record<string, unknown> | null) ?? {}),
+          incident_detail_open: nextOpen,
+        };
+        return prev.map((el) => (el.id === elementId ? { ...el, element_config: nextConfig } : el));
+      });
+      if (!nextConfig || !canPersist) return;
+      const { error: e } = await supabaseBrowser
+        .schema("ms")
+        .from("canvas_elements")
+        .update({ element_config: nextConfig })
+        .eq("id", elementId)
+        .eq("map_id", mapId);
+      if (e) setError(e.message || "Unable to save node detail state.");
+    },
+    [canEditElement, canWriteMap, mapId, setElements, setError]
+  );
+
+  useEffect(() => {
+    if (isNodeDragActiveRef.current) return;
+    const directReportCountByPersonNormalizedId = buildOrgDirectReportCountByPersonNormalizedId({
+      elements: canvasPreviewElements,
+      relations,
+      mapCategoryId,
+    });
+    const groupingElements = sortGroupingElementsForRender({
+      elements: canvasPreviewElements,
+      minWidth: groupingMinWidth,
+      minHeight: groupingMinHeight,
+      defaultWidth: groupingDefaultWidth,
+      defaultHeight: groupingDefaultHeight,
+    });
+    const builtNodes: Node<FlowData>[] = [
+        ...buildGroupingFlowNodes({
+          groupingElements,
+          selectedFlowIds,
+          canWriteMap: canManipulateCanvasElements,
+          canEditElement,
+        }),
+        ...buildDocumentFlowNodes({
+          nodes,
+          typesById,
+          selectedFlowIds,
+          canWriteMap: canManipulateCanvasElements,
+          getNodeSize,
+          unconfiguredDocumentTitle,
+        }),
+        ...canvasPreviewElements.map((el) => {
+          const primaryElementNode = buildPrimaryElementFlowNode({
+            element: el,
+            selectedFlowIds,
+            selectedTableId,
+            canEditElement,
+            canWriteMap: canManipulateCanvasElements,
+            selectedFlowShapeId,
+            hasUnsavedFlowShapeDraftChanges,
+            mapCategoryId,
+            userId,
+            userEmail,
+            memberDisplayNameByUserId,
+            formatStickyDate,
+            imageUrlsByElementId,
+            directReportCountByPersonNormalizedId,
+            orgDirectReportCountByPersonId,
+            onTableCellCommit: handleTableCellCommit,
+            onTableCellStyleCommit: handleTableCellStyleCommit,
+            onToggleIncidentDetail: handleToggleIncidentDetail,
+          });
+          if (primaryElementNode !== undefined) return primaryElementNode;
+          return buildSecondaryElementFlowNode({
+            element: el,
+            selectedFlowIds,
+            canEditElement,
+            canWriteMap: canManipulateCanvasElements,
+            imageUrlsByElementId,
+            onOpenEvidenceMedia: handleOpenEvidenceMediaOverlay,
+            onToggleIncidentDetail: handleToggleIncidentDetail,
+          });
+        }).filter(Boolean) as Node<FlowData>[],
+      ];
+    const nextNodes = canvasInteractionLocked
+      ? builtNodes.map((node) => ({ ...node, draggable: false, selectable: false }))
+      : builtNodes;
+    setFlowNodes(nextNodes);
+  }, [nodes, canvasPreviewElements, relations, typesById, setFlowNodes, getNodeSize, selectedFlowIds, selectedTableId, canManipulateCanvasElements, canEditElement, selectedFlowShapeId, hasUnsavedFlowShapeDraftChanges, mapCategoryId, memberDisplayNameByUserId, userEmail, userId, formatStickyDate, imageUrlsByElementId, isNodeDragActive, handleTableCellCommit, handleTableCellStyleCommit, handleOpenEvidenceMediaOverlay, handleToggleIncidentDetail, canvasInteractionLocked]);
+
+  useEffect(() => {
+    if (isNodeDragActiveRef.current) return;
+    const hoveredGroupingId = hoveredNodeId?.startsWith("process:") ? parseProcessFlowId(hoveredNodeId) : null;
+    const hoveredElementId = hoveredNodeId?.startsWith("process:") ? parseProcessFlowId(hoveredNodeId) : null;
+    const isRelationConnectedToHovered = (rel: NodeRelationRow) =>
+      !!hoveredNodeId &&
+      (rel.from_node_id === hoveredNodeId ||
+        rel.to_node_id === hoveredNodeId ||
+        (hoveredElementId !== null &&
+          (rel.source_system_element_id === hoveredElementId ||
+            rel.target_system_element_id === hoveredElementId ||
+            rel.source_grouping_element_id === hoveredElementId ||
+            rel.target_grouping_element_id === hoveredElementId)) ||
+        (hoveredGroupingId !== null &&
+          (rel.source_grouping_element_id === hoveredGroupingId || rel.target_grouping_element_id === hoveredGroupingId)));
+
+    const highlightedFlowNodeIds = new Set<string>();
+    relations.forEach((rel) => {
+      const isConnected = hoveredEdgeId ? rel.id === hoveredEdgeId : isRelationConnectedToHovered(rel);
+      if (!isConnected) return;
+      if (rel.from_node_id) highlightedFlowNodeIds.add(rel.from_node_id);
+      if (rel.to_node_id) highlightedFlowNodeIds.add(rel.to_node_id);
+      if (rel.source_system_element_id) highlightedFlowNodeIds.add(processFlowId(rel.source_system_element_id));
+      if (rel.target_system_element_id) highlightedFlowNodeIds.add(processFlowId(rel.target_system_element_id));
+      if (rel.source_grouping_element_id) highlightedFlowNodeIds.add(processFlowId(rel.source_grouping_element_id));
+      if (rel.target_grouping_element_id) highlightedFlowNodeIds.add(processFlowId(rel.target_grouping_element_id));
+    });
+
+    setFlowNodes((prev) =>
+      prev.map((node) => {
+        const classTokens = (node.className || "")
+          .split(/\s+/)
+          .filter(Boolean)
+          .filter((token) => token !== "rf-hover-related-document");
+        const isDocumentNode = node.data?.entityKind === "document";
+        const shouldHighlight = highlightedFlowNodeIds.has(node.id) && !node.selected && isDocumentNode;
+        if (shouldHighlight) classTokens.push("rf-hover-related-document");
+        const nextClassName = classTokens.join(" ");
+        if ((node.className || "") === nextClassName) return node;
+        return { ...node, className: nextClassName };
+      })
+    );
+  }, [hoveredNodeId, hoveredEdgeId, relations, setFlowNodes, isNodeDragActive]);
+
+  const flowEdgesBase = useMemo<Edge[]>(
+    () =>
+      buildFlowEdgesBase({
+        relations,
+        nodes,
+        elements: canvasPreviewElements,
+        getNodeSize,
+        mapCategoryId,
+      }),
+    [relations, nodes, canvasPreviewElements, getNodeSize, mapCategoryId]
+  );
+
+  const relationById = useMemo(() => new Map(relations.map((rel) => [rel.id, rel])), [relations]);
+  const flowEdges = useMemo(() => {
+    const hoveredNodeElementId = hoveredNodeId?.startsWith("process:") ? parseProcessFlowId(hoveredNodeId) : null;
+    const hoveredGroupingId = hoveredNodeElementId;
+    const isConnectedToHoveredNode = (rel: NodeRelationRow) =>
+      !!hoveredNodeId &&
+      (rel.from_node_id === hoveredNodeId ||
+        rel.to_node_id === hoveredNodeId ||
+        (hoveredNodeElementId !== null &&
+          (rel.source_system_element_id === hoveredNodeElementId ||
+            rel.target_system_element_id === hoveredNodeElementId ||
+            rel.source_grouping_element_id === hoveredNodeElementId ||
+            rel.target_grouping_element_id === hoveredNodeElementId)) ||
+        (hoveredGroupingId !== null &&
+          (rel.source_grouping_element_id === hoveredGroupingId || rel.target_grouping_element_id === hoveredGroupingId)));
+    const hasHoveredRelations = !!hoveredEdgeId || (!!hoveredNodeId && relations.some((rel) => isConnectedToHoveredNode(rel)));
+    if (!hasHoveredRelations) return flowEdgesBase;
+    return flowEdgesBase.map((edge) => {
+      const rel = relationById.get(edge.id);
+      if (!rel) return edge;
+      const isConnected = hoveredEdgeId ? edge.id === hoveredEdgeId : isConnectedToHoveredNode(rel);
+      const stroke = isConnected ? "#0f766e" : "#cbd5e1";
+      const strokeWidth = isConnected ? 1.8 : 1.1;
+      const labelFill = isConnected ? "#334155" : "#94a3b8";
+      return {
+        ...edge,
+        style: { ...(edge.style ?? {}), stroke, strokeWidth },
+        labelStyle: { ...(edge.labelStyle ?? {}), fill: labelFill },
+      };
+    });
+  }, [flowEdgesBase, relationById, hoveredNodeId, hoveredEdgeId, relations]);
+
+  const selectedNode = useMemo(
+    () => (selectedNodeId ? nodes.find((n) => n.id === selectedNodeId) ?? null : null),
+    [selectedNodeId, nodes]
+  );
+  const selectedProcess = useMemo(
+    () => (selectedProcessId ? elements.find((el) => el.id === selectedProcessId && el.element_type === "category") ?? null : null),
+    [selectedProcessId, elements]
+  );
+  const selectedSystem = useMemo(
+    () => (selectedSystemId ? elements.find((el) => el.id === selectedSystemId && el.element_type === "system_circle") ?? null : null),
+    [selectedSystemId, elements]
+  );
+  const selectedProcessComponent = useMemo(
+    () => (selectedProcessComponentId ? elements.find((el) => el.id === selectedProcessComponentId && el.element_type === "process_component") ?? null : null),
+    [selectedProcessComponentId, elements]
+  );
+  const selectedPerson = useMemo(
+    () => (selectedPersonId ? elements.find((el) => el.id === selectedPersonId && el.element_type === "person") ?? null : null),
+    [selectedPersonId, elements]
+  );
+  const selectedGrouping = useMemo(
+    () => (selectedGroupingId ? elements.find((el) => el.id === selectedGroupingId && el.element_type === "grouping_container") ?? null : null),
+    [selectedGroupingId, elements]
+  );
+  const selectedSticky = useMemo(
+    () => (selectedStickyId ? elements.find((el) => el.id === selectedStickyId && el.element_type === "sticky_note") ?? null : null),
+    [selectedStickyId, elements]
+  );
+  const selectedImage = useMemo(
+    () => (selectedImageId ? elements.find((el) => el.id === selectedImageId && el.element_type === "image_asset") ?? null : null),
+    [selectedImageId, elements]
+  );
+  const selectedTextBox = useMemo(
+    () => (selectedTextBoxId ? elements.find((el) => el.id === selectedTextBoxId && el.element_type === "text_box") ?? null : null),
+    [selectedTextBoxId, elements]
+  );
+  const selectedTable = useMemo(
+    () => (selectedTableId ? elements.find((el) => el.id === selectedTableId && el.element_type === "table") ?? null : null),
+    [selectedTableId, elements]
+  );
+  const selectedFlowShape = useMemo(
+    () =>
+      selectedFlowShapeId
+        ? elements.find(
+            (el) =>
+              el.id === selectedFlowShapeId &&
+              (el.element_type === "shape_rectangle" ||
+                el.element_type === "shape_circle" ||
+                el.element_type === "shape_pill" ||
+                el.element_type === "shape_pentagon" ||
+                el.element_type === "shape_chevron_left" ||
+                el.element_type === "shape_arrow")
+          ) ?? null
+        : null,
+    [selectedFlowShapeId, elements]
+  );
+  const selectedBowtieElement = useMemo(
+    () =>
+      selectedBowtieElementId
+        ? elements.find((el) => el.id === selectedBowtieElementId && isMethodologyElementType(el.element_type)) ?? null
+        : null,
+    [selectedBowtieElementId, elements]
+  );
+
+  const headingItems = useMemo(
+    () => outlineItems.filter((i) => i.kind === "heading"),
+    [outlineItems]
+  );
+  const level1Headings = useMemo(
+    () => headingItems.filter((h) => h.heading_level === 1),
+    [headingItems]
+  );
+  const level2Headings = useMemo(
+    () => headingItems.filter((h) => h.heading_level === 2),
+    [headingItems]
+  );
+  const headingById = useMemo(
+    () => new Map(headingItems.map((h) => [h.id, h])),
+    [headingItems]
+  );
+  const outlineEditItem = useMemo(
+    () => (outlineEditItemId ? outlineItems.find((i) => i.id === outlineEditItemId) ?? null : null),
+    [outlineEditItemId, outlineItems]
+  );
+
+  const hasCollapsedAncestor = useCallback((headingId: string | null) => {
+    let current = headingId;
+    while (current) {
+      if (collapsedHeadingIds.has(current)) return true;
+      current = headingById.get(current)?.parent_heading_id ?? null;
+    }
+    return false;
+  }, [collapsedHeadingIds, headingById]);
+
+  const visibleOutlineItems = useMemo(() => {
+    return outlineItems.filter((item) => {
+      if (item.kind === "heading") {
+        if (item.heading_level === 1) return true;
+        return !hasCollapsedAncestor(item.parent_heading_id);
+      }
+      return !hasCollapsedAncestor(item.heading_id);
+    });
+  }, [outlineItems, hasCollapsedAncestor]);
+  const activePrimaryLeftAsideKey = useMemo(() => {
+    if (isMobile) return null;
+    if (selectedSticky) return `sticky:${selectedSticky.id}`;
+    if (selectedImage) return `image:${selectedImage.id}`;
+    if (selectedTextBox) return `textbox:${selectedTextBox.id}`;
+    if (selectedTable) return `table:${selectedTable.id}`;
+    if (selectedFlowShape) return `shape:${selectedFlowShape.id}`;
+    if (selectedProcess) return `category:${selectedProcess.id}`;
+    if (selectedSystem) return `system:${selectedSystem.id}`;
+    if (selectedProcessComponent) return `process:${selectedProcessComponent.id}`;
+    if (selectedPerson) return `person:${selectedPerson.id}`;
+    if (selectedBowtieElement) return `bowtie:${selectedBowtieElement.id}`;
+    if (selectedGrouping) return `grouping:${selectedGrouping.id}`;
+    if (selectedNode) return `document:${selectedNode.id}`;
+    return null;
+  }, [isMobile, selectedSticky, selectedImage, selectedTextBox, selectedTable, selectedFlowShape, selectedProcess, selectedSystem, selectedProcessComponent, selectedPerson, selectedBowtieElement, selectedGrouping, selectedNode]);
+  const shouldShowDesktopStructurePanel =
+    !isMobile && !!selectedNodeId && desktopNodeAction === "structure" && !!outlineNodeId && outlineNodeId === selectedNodeId;
+  const searchCatalog = useMemo(() => {
+    const nodeEntries = nodes.map((node) => {
+      const t = typesById.get(node.type_id);
+      const isLandscape = isLandscapeTypeName(t?.name || "");
+      const size = getNormalizedDocumentSize(isLandscape, node.width, node.height);
+      return {
+        id: node.id,
+        label: node.title,
+        documentNumber: node.document_number ?? null,
+        kind: "Document",
+        x: node.pos_x,
+        y: node.pos_y,
+        width: size.width,
+        height: size.height,
+      };
+    });
+    const elementEntries = elements.map((el) => ({
+      id: `process:${el.id}`,
+      label: el.heading || getElementRelationshipTypeLabel(el.element_type),
+      documentNumber: null,
+      kind: getElementRelationshipTypeLabel(el.element_type),
+      x: el.pos_x,
+      y: el.pos_y,
+      width: el.width,
+      height: el.height,
+    }));
+    return [...nodeEntries, ...elementEntries];
+  }, [nodes, elements, typesById]);
+  const searchResults = useMemo(() => {
+    const term = searchQuery.trim().toLowerCase();
+    if (!term) return [];
+    return searchCatalog
+      .filter((item) =>
+        item.label.toLowerCase().includes(term) ||
+        (item.documentNumber ?? "").toLowerCase().includes(term) ||
+        item.kind.toLowerCase().includes(term)
+      )
+      .slice(0, 100)
+      .map((item) => ({
+        id: item.id,
+        label: item.label,
+        documentNumber: item.documentNumber,
+        kind: item.kind,
+      }));
+  }, [searchCatalog, searchQuery]);
+  const handleSelectSearchResult = useCallback((id: string) => {
+    if (!rf) return;
+    const match = searchCatalog.find((entry) => entry.id === id);
+    if (!match) return;
+    const centerX = match.x + match.width / 2;
+    const centerY = match.y + match.height / 2;
+    const viewportWidth = canvasRef.current?.clientWidth ?? window.innerWidth;
+    const viewportHeight = canvasRef.current?.clientHeight ?? window.innerHeight;
+    const zoom = 1.6;
+    rf.setViewport(
+      {
+        x: viewportWidth / 2 - centerX * zoom,
+        y: viewportHeight / 2 - centerY * zoom,
+        zoom,
+      },
+      { duration: 320 }
+    );
+    setShowSearchMenu(false);
+    setSearchQuery("");
+  }, [rf, searchCatalog]);
+
+  useEffect(() => {
+    if (!activePrimaryLeftAsideKey) {
+      setLeftAsideSlideIn(false);
+      return;
+    }
+    setLeftAsideSlideIn(false);
+    const raf = requestAnimationFrame(() => setLeftAsideSlideIn(true));
+    return () => cancelAnimationFrame(raf);
+  }, [activePrimaryLeftAsideKey]);
+
+  const loadOutline = useCallback(async (nodeId: string) => {
+    const { data, error: e } = await supabaseBrowser
+      .schema("ms")
+      .from("document_outline_items")
+      .select("id,map_id,node_id,kind,heading_level,parent_heading_id,heading_id,title,content_text,sort_order,created_at")
+      .eq("node_id", nodeId)
+      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true });
+    if (e) {
+      setError(e.message || "Unable to load outline.");
+      return;
+    }
+    setOutlineItems((data ?? []) as OutlineItemRow[]);
+  }, []);
+
+  useEffect(() => {
+    if (isPlatformAdmin) return;
+    setSaveAsGlobalTemplate(false);
+  }, [isPlatformAdmin]);
+
+  useEffect(() => {
+    if (!isTemplateEditor || !templateEditorTemplateId || loading || !canSaveTemplate) return;
+
+    setTemplateEditorStatus("saving");
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const snapshot = await buildTemplateSnapshot();
+          const { error: saveError } = await supabaseBrowser.rpc("save_investigation_template", {
+            p_name: templateEditorTemplateName?.trim() || map?.title || "Untitled Template",
+            p_snapshot: snapshot,
+            p_template_id: templateEditorTemplateId,
+            p_is_global: templateEditorIsGlobal,
+          });
+
+          if (saveError) throw saveError;
+          setTemplateEditorStatus("saved");
+        } catch (templateSyncError) {
+          setTemplateEditorStatus("error");
+          setError(templateSyncError instanceof Error ? templateSyncError.message : "Unable to sync template changes.");
+        }
+      })();
+    }, 900);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [
+    buildTemplateSnapshot,
+    canSaveTemplate,
+    isPlatformAdmin,
+    isTemplateEditor,
+    loading,
+    map?.title,
+    nodes,
+    elements,
+    relations,
+    types,
+    outlineItems,
+    templateEditorTemplateId,
+    templateEditorIsGlobal,
+    templateEditorTemplateName,
+  ]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const run = async (attempt: number) => {
+      const setLoadingStage = (progress: number, message: string) => {
+        if (cancelled) return;
+        setLoadingProgress((current) => {
+          const next = Math.max(current, progress);
+          if (next > current) {
+            setLoadingMessage(message);
+          }
+          return next;
+        });
+      };
+      let shouldRetry = false;
+
+      if (cancelled) return;
+      if (attempt === 0) {
+        setLoading(true);
+        setError(null);
+        setLoadingStage(25, "Checking workspace access...");
+      }
+      try {
+        const user = await ensurePortalSupabaseUser();
+        if (cancelled) return;
+        if (!user) {
+          window.location.assign(`/login?returnTo=${encodeURIComponent(`/system-maps/${mapId}`)}`);
+          return;
+        }
+        setUserId(user.id);
+        setLoadingStage(25, "Confirming your account session...");
+
+        const {
+          data: { session },
+        } = await supabaseBrowser.auth.getSession();
+
+        if (!session?.access_token) {
+          window.location.assign(`/login?returnTo=${encodeURIComponent(`/system-maps/${mapId}`)}`);
+          return;
+        }
+
+        setLoadingStage(25, "Checking billing and map permissions...");
+        const nextAccessState = await fetchAccessState(session.access_token);
+        if (cancelled) return;
+        setAccessState(nextAccessState);
+
+        if (accessRequiresSelection(nextAccessState)) {
+          window.location.assign("/subscribe");
+          return;
+        }
+
+        if (accessBlocksInvestigationEntry(nextAccessState)) {
+          window.location.assign("/dashboard?mapAccess=blocked");
+          return;
+        }
+
+        setLoadingStage(50, "Loading map shell, nodes, and canvas data...");
+        const [memberRes, mapRes, typeRes, nodeRes, elementRes, relRes, viewRes] = await Promise.all([
+          supabaseBrowser.schema("ms").from("map_members").select("role").eq("map_id", mapId).eq("user_id", user.id).maybeSingle(),
+          supabaseBrowser.schema("ms").from("system_maps").select("id,title,description,owner_id,updated_by_user_id,map_code,map_category,updated_at,created_at").eq("id", mapId).maybeSingle(),
+          supabaseBrowser.schema("ms").from("document_types").select("id,map_id,name,level_rank,band_y_min,band_y_max,is_active").eq("is_active", true).or(`map_id.eq.${mapId},map_id.is.null`).order("level_rank", { ascending: true }),
+          supabaseBrowser.schema("ms").from("document_nodes").select("id,map_id,type_id,title,document_number,discipline,owner_user_id,owner_name,user_group,pos_x,pos_y,width,height,is_archived").eq("map_id", mapId).eq("is_archived", false),
+          supabaseBrowser.schema("ms").from("canvas_elements").select(canvasElementSelectColumns).eq("map_id", mapId).order("created_at", { ascending: true }),
+          supabaseBrowser
+            .schema("ms")
+            .from("node_relations")
+            .select("*")
+            .eq("map_id", mapId),
+          supabaseBrowser.schema("ms").from("map_view_state").select("pan_x,pan_y,zoom").eq("map_id", mapId).eq("user_id", user.id).maybeSingle(),
+        ]);
+        if (cancelled) return;
+
+        if (memberRes.error || !memberRes.data?.role) {
+          setError("Unable to load this map. You may not have access.");
+          return;
+        }
+        if (mapRes.error || !mapRes.data) {
+          setError("Unable to load this map. You may not have access.");
+          return;
+        }
+        if (nodeRes.error) {
+          setError("Unable to load map documents.");
+          return;
+        }
+
+        setMapRole(memberRes.data.role as "read" | "partial_write" | "full_write");
+        const loadedMap = mapRes.data as SystemMap;
+        setMap(loadedMap);
+        const nextCategory = (loadedMap.map_category || defaultMapCategoryId) as MapCategoryId;
+        setMapCategoryId(nextCategory);
+        setLoadingStage(75, "Loading collaborators and investigation structure...");
+        await loadMapMembers(loadedMap.owner_id);
+        if (nextAccessState.currentAccessStatus === "active" && nextAccessState.currentAccessType === "pass_30d" && nextAccessState.currentAccessPeriodId) {
+          const { data: assignment, error: assignmentError } = await supabaseBrowser
+            .from("map_access_assignments")
+            .select("id")
+            .eq("access_period_id", nextAccessState.currentAccessPeriodId)
+            .eq("map_id", mapId)
+            .eq("user_id", user.id)
+            .maybeSingle();
+
+          if (assignmentError) {
+            setError(assignmentError.message || "Unable to confirm this map's current access period.");
+            return;
+          }
+
+          setHasCurrentPassAssignment(Boolean(assignment?.id));
+        } else {
+          setHasCurrentPassAssignment(true);
+        }
+        let loadedTypes = (typeRes.data ?? []) as DocumentTypeRow[];
+        if (!loadedTypes.length) {
+          setLoadingStage(75, "Rebuilding the default investigation structure...");
+          const { data: createdTypes, error: createTypesError } = await supabaseBrowser
+            .schema("ms")
+            .from("document_types")
+            .upsert(
+              fallbackHierarchy.map((item) => ({
+                map_id: mapId,
+                name: item.name,
+                level_rank: item.level_rank,
+                band_y_min: null,
+                band_y_max: null,
+                is_active: true,
+              })),
+              {
+                onConflict: "map_id,name",
+                ignoreDuplicates: true,
+              }
+            )
+            .select("id,map_id,name,level_rank,band_y_min,band_y_max,is_active")
+            .order("level_rank", { ascending: true });
+          if (createTypesError) {
+            setError(createTypesError.message || "No document types were found for this map.");
+          } else {
+            loadedTypes = (createdTypes ?? []) as DocumentTypeRow[];
+          }
+        }
+        const existingCanonicalTypeNames = new Set(loadedTypes.map((t) => getCanonicalTypeName(t.name)));
+        const missingFallback = fallbackHierarchy.filter((item) => !existingCanonicalTypeNames.has(getCanonicalTypeName(item.name)));
+        if (missingFallback.length) {
+          setLoadingStage(75, "Filling in any missing structure labels...");
+          const { data: insertedMissing, error: insertMissingError } = await supabaseBrowser
+            .schema("ms")
+            .from("document_types")
+            .upsert(
+              missingFallback.map((item) => ({
+                map_id: mapId,
+                name: item.name,
+                level_rank: item.level_rank,
+                band_y_min: null,
+                band_y_max: null,
+                is_active: true,
+              })),
+              {
+                onConflict: "map_id,name",
+                ignoreDuplicates: true,
+              }
+            )
+            .select("id,map_id,name,level_rank,band_y_min,band_y_max,is_active");
+          if (insertMissingError) {
+            setError(insertMissingError.message || "Unable to add missing document types.");
+          } else if (insertedMissing?.length) {
+            loadedTypes = [...loadedTypes, ...(insertedMissing as DocumentTypeRow[])].sort((a, b) => a.level_rank - b.level_rank);
+          }
+        }
+        loadedTypes = normalizeTypeRanks(loadedTypes);
+        setTypes(loadedTypes);
+        const loadedNodes = (nodeRes.data ?? []) as DocumentNodeRow[];
+        setNodes(loadedNodes);
+        setElements((elementRes.data ?? []) as CanvasElementRow[]);
+        setRelations((relRes.data ?? []) as NodeRelationRow[]);
+        const nextSaved: Record<string, { x: number; y: number }> = {};
+        loadedNodes.forEach((n) => (nextSaved[n.id] = { x: n.pos_x, y: n.pos_y }));
+        savedPos.current = nextSaved;
+
+        setLoadingStage(75, "Restoring your saved viewport...");
+        if (viewRes.data) {
+          const viewData = viewRes.data;
+          setHasStoredViewport(true);
+          setPendingViewport({ x: viewData.pan_x, y: viewData.pan_y, zoom: viewData.zoom });
+        } else {
+          setHasStoredViewport(false);
+        }
+        setLoadingStage(100, "Straightening lines and sharpening pencils...");
+      } catch (err) {
+        if (cancelled) return;
+        if (isAbortLikeError(err) && attempt < 3) {
+          shouldRetry = true;
+          retryTimer = setTimeout(() => {
+            void run(attempt + 1);
+          }, 250);
+          return;
+        }
+        const message = err instanceof Error ? err.message : String(err);
+        setError(message || "Unable to load map.");
+      } finally {
+        if (!cancelled && !shouldRetry) {
+          setLoadingProgress(100);
+          setLoadingMessage("Canvas ready.");
+          setLoading(false);
+        }
+      }
+    };
+
+    void run(0);
+    return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+    };
+  }, [mapId, loadMapMembers]);
+
+  useEffect(() => {
+    if (!rf || !pendingViewport) return;
+    rf.setViewport(pendingViewport, { duration: 250 });
+    mobileViewportInitializedRef.current = mapId;
+    setPendingViewport(null);
+  }, [rf, pendingViewport, mapId]);
+
+  useEffect(() => {
+    if (!isMobile || !rf || loading || hasStoredViewport || mobileViewportInitializedRef.current === mapId) return;
+
+    const viewportWidth = canvasRef.current?.clientWidth ?? window.innerWidth;
+    const viewportHeight = canvasRef.current?.clientHeight ?? window.innerHeight;
+    if (viewportWidth <= 0 || viewportHeight <= 0) return;
+
+    if (!searchCatalog.length) {
+      rf.setViewport({ x: 24, y: 24, zoom: 0.9 }, { duration: 280 });
+      mobileViewportInitializedRef.current = mapId;
+      return;
+    }
+
+    const paddingX = 44;
+    const paddingY = 56;
+    const bounds = searchCatalog.reduce(
+      (acc, item) => ({
+        minX: Math.min(acc.minX, item.x),
+        minY: Math.min(acc.minY, item.y),
+        maxX: Math.max(acc.maxX, item.x + item.width),
+        maxY: Math.max(acc.maxY, item.y + item.height),
+      }),
+      {
+        minX: Number.POSITIVE_INFINITY,
+        minY: Number.POSITIVE_INFINITY,
+        maxX: Number.NEGATIVE_INFINITY,
+        maxY: Number.NEGATIVE_INFINITY,
+      }
+    );
+
+    const contentWidth = Math.max(bounds.maxX - bounds.minX, 240);
+    const contentHeight = Math.max(bounds.maxY - bounds.minY, 240);
+    const zoom = clamp(
+      Math.min(
+        (viewportWidth - paddingX * 2) / contentWidth,
+        (viewportHeight - paddingY * 2) / contentHeight
+      ),
+      0.68,
+      1
+    );
+    const centerX = bounds.minX + contentWidth / 2;
+    const centerY = bounds.minY + contentHeight / 2;
+
+    rf.setViewport(
+      {
+        x: viewportWidth / 2 - centerX * zoom,
+        y: viewportHeight / 2 - centerY * zoom,
+        zoom,
+      },
+      { duration: 320 }
+    );
+    mobileViewportInitializedRef.current = mapId;
+  }, [isMobile, rf, loading, hasStoredViewport, mapId, searchCatalog]);
+
+  useEffect(() => {
+    if (!selectedNode) return;
+    setTitle(selectedNode.title ?? "");
+    setDocumentNumber(selectedNode.document_number ?? "");
+    setSelectedTypeId(selectedNode.type_id ?? "");
+    setDisciplineSelection(parseDisciplines(selectedNode.discipline));
+    setUserGroup(selectedNode.user_group ?? "");
+    setOwnerName(selectedNode.owner_name ?? "");
+  }, [selectedNode]);
+  useEffect(() => {
+    if (!selectedNodeId) setShowDisciplineMenu(false);
+    if (!selectedNodeId) setDesktopNodeAction(null);
+  }, [selectedNodeId]);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setUserEmail(localStorage.getItem("investigation_tool_user_email") || "");
+  }, []);
+
+  useEffect(() => {
+    mobileViewportInitializedRef.current = null;
+    setHasStoredViewport(false);
+  }, [mapId]);
+
+  useEffect(() => {
+    if (!selectedProcess) return;
+    setProcessHeadingDraft(selectedProcess.heading ?? "");
+    setProcessWidthDraft(String(Math.max(processMinWidthSquares, Math.round((selectedProcess.width || processHeadingWidth) / minorGridSize))));
+    setProcessHeightDraft(String(Math.max(processMinHeightSquares, Math.round((selectedProcess.height || processHeadingHeight) / minorGridSize))));
+    setProcessColorDraft(selectedProcess.color_hex ?? null);
+    const cfg = (selectedProcess.element_config as Record<string, unknown> | null) ?? {};
+    setProcessFillModeDraft(String(cfg.fill_mode ?? "fill") === "outline" ? "outline" : "fill");
+    setProcessOutlineColorDraft(typeof cfg.outline_color === "string" ? cfg.outline_color : selectedProcess.color_hex ?? null);
+    const outlineWidthRaw = Number(cfg.outline_width ?? 1);
+    setProcessOutlineWidthDraft(String(Number.isFinite(outlineWidthRaw) ? Math.max(1, Math.min(12, Math.round(outlineWidthRaw))) : 1));
+  }, [selectedProcess]);
+  useEffect(() => {
+    if (!selectedSystem) return;
+    setSystemNameDraft(selectedSystem.heading ?? "");
+  }, [selectedSystem]);
+  useEffect(() => {
+    if (!selectedProcessComponent) return;
+    setProcessComponentLabelDraft(selectedProcessComponent.heading ?? "");
+  }, [selectedProcessComponent]);
+  useEffect(() => {
+    if (!selectedPerson) return;
+    if (mapCategoryId === "org_chart") {
+      const cfg = parseOrgChartPersonConfig(selectedPerson.element_config);
+      setPersonRoleDraft(cfg.position_title);
+      setPersonRoleIdDraft(cfg.role_id);
+      setPersonDepartmentDraft(cfg.department);
+      setPersonOccupantNameDraft(cfg.occupant_name);
+      setPersonStartDateDraft(cfg.start_date);
+      setPersonEmploymentTypeDraft(cfg.employment_type);
+      setPersonActingNameDraft(cfg.acting_name);
+      setPersonActingStartDateDraft(cfg.acting_start_date);
+      setPersonRecruitingDraft(cfg.recruiting);
+      setPersonProposedRoleDraft(cfg.proposed_role);
+      return;
+    }
+    const labels = parsePersonLabels(selectedPerson.heading);
+    setPersonRoleDraft(labels.role);
+    setPersonRoleIdDraft("");
+    setPersonDepartmentDraft(labels.department);
+    setPersonOccupantNameDraft("");
+    setPersonStartDateDraft("");
+    setPersonEmploymentTypeDraft("fte");
+    setPersonActingNameDraft("");
+    setPersonActingStartDateDraft("");
+    setPersonRecruitingDraft(false);
+    setPersonProposedRoleDraft(false);
+  }, [selectedPerson, mapCategoryId]);
+  useEffect(() => {
+    if (!selectedProcess) return;
+    const cfg = (selectedProcess.element_config as Record<string, unknown> | null) ?? {};
+    const processSizeRaw = Number(cfg.font_size ?? 12);
+    setProcessFontSizeDraft(String(Number.isFinite(processSizeRaw) ? Math.max(10, Math.min(72, Math.round(processSizeRaw))) : 12));
+  }, [selectedProcess]);
+  useEffect(() => {
+    if (!selectedGrouping) return;
+    setGroupingLabelDraft(selectedGrouping.heading ?? "");
+    const cfg = (selectedGrouping.element_config as Record<string, unknown> | null) ?? {};
+    setGroupingHeaderColorDraft(typeof cfg.header_bg_color === "string" && /^#[0-9a-fA-F]{6}$/.test(cfg.header_bg_color) ? cfg.header_bg_color.toUpperCase() : "#FFFFFF");
+    setGroupingWidthDraft(String(Math.max(groupingMinWidthSquares, Math.round((selectedGrouping.width || groupingDefaultWidth) / minorGridSize))));
+    setGroupingHeightDraft(String(Math.max(groupingMinHeightSquares, Math.round((selectedGrouping.height || groupingDefaultHeight) / minorGridSize))));
+  }, [selectedGrouping, groupingDefaultWidth, groupingDefaultHeight, groupingMinWidthSquares, groupingMinHeightSquares, minorGridSize]);
+  useEffect(() => {
+    if (!selectedSticky) return;
+    setStickyTextDraft(selectedSticky.heading ?? "");
+    const cfg = (selectedSticky.element_config as Record<string, unknown> | null) ?? {};
+    setStickyBackgroundColorDraft(typeof cfg.background_color === "string" && /^#[0-9a-fA-F]{6}$/.test(cfg.background_color) ? cfg.background_color.toUpperCase() : "#FEF08A");
+    setStickyOutlineColorDraft(typeof cfg.outline_color === "string" && /^#[0-9a-fA-F]{6}$/.test(cfg.outline_color) ? cfg.outline_color.toUpperCase() : "#F59E0B");
+    setStickyFillModeDraft(String(cfg.fill_mode ?? "fill") === "outline" ? "outline" : "fill");
+    const outlineWidthRaw = Number(cfg.outline_width ?? 1);
+    setStickyOutlineWidthDraft(String(Number.isFinite(outlineWidthRaw) ? Math.max(1, Math.min(12, Math.round(outlineWidthRaw))) : 1));
+  }, [selectedSticky]);
+  useEffect(() => {
+    if (!selectedImage) return;
+    const cfg = (selectedImage.element_config as Record<string, unknown> | null) ?? {};
+    setImageDescriptionDraft(String(cfg.description ?? selectedImage.heading ?? ""));
+  }, [selectedImage]);
+  useEffect(() => {
+    if (!selectedTextBox) return;
+    const cfg = (selectedTextBox.element_config as Record<string, unknown> | null) ?? {};
+    setTextBoxContentDraft(selectedTextBox.heading ?? "Click to edit text box");
+    setTextBoxBoldDraft(Boolean(cfg.bold));
+    setTextBoxItalicDraft(Boolean(cfg.italic));
+    setTextBoxUnderlineDraft(Boolean(cfg.underline));
+    const align = String(cfg.align ?? "left");
+    setTextBoxAlignDraft(align === "center" || align === "right" ? align : "left");
+    const size = Number(cfg.font_size ?? 16);
+    setTextBoxFontSizeDraft(String(Number.isFinite(size) ? Math.max(16, Math.min(168, Math.round(size))) : 16));
+    const backgroundColor = typeof cfg.background_color === "string" && /^#[0-9a-fA-F]{6}$/.test(cfg.background_color) ? cfg.background_color.toUpperCase() : "#FFFFFF";
+    setTextBoxBackgroundColorDraft(backgroundColor);
+    setTextBoxOutlineDraft(Boolean(cfg.outline));
+    const outlineColor = typeof cfg.outline_color === "string" && /^#[0-9a-fA-F]{6}$/.test(cfg.outline_color) ? cfg.outline_color.toUpperCase() : "#111827";
+    setTextBoxOutlineColorDraft(outlineColor);
+    const outlineWidthRaw = Number(cfg.outline_width ?? 2);
+    setTextBoxOutlineWidthDraft(String(Number.isFinite(outlineWidthRaw) ? Math.max(1, Math.min(12, Math.round(outlineWidthRaw))) : 2));
+  }, [selectedTextBox]);
+  useEffect(() => {
+    if (!selectedTable) return;
+    const cfg = (selectedTable.element_config as Record<string, unknown> | null) ?? {};
+    const parsedRows = Number(cfg.rows ?? 2);
+    const parsedColumns = Number(cfg.columns ?? 2);
+    const rows = Number.isFinite(parsedRows) ? Math.max(tableMinRows, Math.floor(parsedRows)) : tableMinRows;
+    const columns = Number.isFinite(parsedColumns) ? Math.max(tableMinColumns, Math.floor(parsedColumns)) : tableMinColumns;
+    const headerBg = typeof cfg.header_bg_color === "string" ? cfg.header_bg_color : "";
+    const gridLineColor = typeof cfg.grid_line_color === "string" ? cfg.grid_line_color : "";
+    const gridLineWeightRaw = Number(cfg.grid_line_weight ?? 0.5);
+    setTableRowsDraft(String(rows));
+    setTableColumnsDraft(String(columns));
+    setTableHeaderBgDraft(headerBg.toUpperCase());
+    setTableGridLineColorDraft(gridLineColor.toUpperCase());
+    setTableGridLineWeightDraft(String(Number.isFinite(gridLineWeightRaw) ? Math.max(0.5, Math.min(6, Math.round(gridLineWeightRaw * 2) / 2)) : 0.5));
+    setTableBoldDraft(Boolean(cfg.bold));
+    setTableItalicDraft(Boolean(cfg.italic));
+    setTableUnderlineDraft(Boolean(cfg.underline));
+    const align = String(cfg.align ?? "center");
+    setTableAlignDraft(align === "left" || align === "right" ? align : "center");
+    const size = Number(cfg.font_size ?? 10);
+    setTableFontSizeDraft(String(Number.isFinite(size) ? Math.max(10, Math.min(72, Math.round(size))) : 10));
+  }, [selectedTable, tableMinRows, tableMinColumns]);
+  useEffect(() => {
+    if (!selectedFlowShape) {
+      hydratedFlowShapeDraftIdRef.current = null;
+      return;
+    }
+    if (hydratedFlowShapeDraftIdRef.current === selectedFlowShape.id) return;
+    const cfg = (selectedFlowShape.element_config as Record<string, unknown> | null) ?? {};
+    setFlowShapeTextDraft(selectedFlowShape.heading ?? "Shape text");
+    setFlowShapeBoldDraft(Boolean(cfg.bold));
+    setFlowShapeItalicDraft(Boolean(cfg.italic));
+    setFlowShapeUnderlineDraft(Boolean(cfg.underline));
+    const align = String(cfg.align ?? "center");
+    setFlowShapeAlignDraft(align === "left" || align === "right" ? align : "center");
+    const size = Number(cfg.font_size ?? 24);
+    setFlowShapeFontSizeDraft(String(Number.isFinite(size) ? Math.max(12, Math.min(168, Math.round(size))) : 24));
+    setFlowShapeColorDraft(selectedFlowShape.color_hex ?? shapeDefaultFillColor);
+    const fillModeRaw = String(cfg.fill_mode ?? "fill");
+    setFlowShapeFillModeDraft(fillModeRaw === "outline" ? "outline" : "fill");
+    const outlineColor =
+      typeof cfg.outline_color === "string" && /^#[0-9a-fA-F]{6}$/.test(cfg.outline_color)
+        ? cfg.outline_color.toUpperCase()
+        : (selectedFlowShape.color_hex ?? shapeDefaultFillColor);
+    setFlowShapeOutlineColorDraft(outlineColor);
+    const outlineWidthRaw = Number(cfg.outline_width ?? 3);
+    setFlowShapeOutlineWidthDraft(String(Number.isFinite(outlineWidthRaw) ? Math.max(1, Math.min(12, Math.round(outlineWidthRaw))) : 3));
+    const directionRaw = String(cfg.direction ?? "right");
+    setFlowShapeDirectionDraft(directionRaw === "left" ? "left" : "right");
+    const rotationRaw = Number(cfg.rotation_deg ?? 0);
+    setFlowShapeRotationDraft(
+      rotationRaw === 90 || rotationRaw === 180 || rotationRaw === 270 ? rotationRaw : 0
+    );
+    hydratedFlowShapeDraftIdRef.current = selectedFlowShape.id;
+  }, [selectedFlowShape]);
+  const imagePathPairs = useMemo(
+    () =>
+      elements
+        .filter((el) => el.element_type === "image_asset" || el.element_type === "incident_evidence")
+        .map((el) => {
+          const cfg = (el.element_config as Record<string, unknown> | null) ?? {};
+          const key = el.element_type === "incident_evidence" ? "media_storage_path" : "storage_path";
+          return {
+            id: el.id,
+            path: typeof cfg[key] === "string" ? String(cfg[key]) : "",
+          };
+        })
+        .filter((pair) => pair.path)
+        .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)),
+    [elements]
+  );
+  const imagePathSignature = useMemo(
+    () => imagePathPairs.map((pair) => `${pair.id}:${pair.path}`).join("|"),
+    [imagePathPairs]
+  );
+  useEffect(() => {
+    imagePathPairsRef.current = imagePathPairs;
+  }, [imagePathPairs]);
+  useEffect(() => {
+    let cancelled = false;
+    const pairs = imagePathPairsRef.current;
+    if (!pairs.length) {
+      convertedMediaObjectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+      convertedMediaObjectUrlsRef.current.clear();
+      setImageUrlsByElementId({});
+      return;
+    }
+    const run = async () => {
+      const paths = pairs.map((pair) => pair.path);
+      const { data, error: e } = await supabaseBrowser.storage.from("systemmap").createSignedUrls(paths, 3600);
+      if (cancelled) return;
+      if (e || !data) {
+        setImageUrlsByElementId({});
+        return;
+      }
+      const urlByPath = new Map<string, string>();
+      data.forEach((row) => {
+        if (row.path && row.signedUrl) urlByPath.set(row.path, row.signedUrl);
+      });
+      const next: Record<string, string> = {};
+      pairs.forEach((pair) => {
+        const signedUrl = urlByPath.get(pair.path);
+        if (signedUrl) next[pair.id] = signedUrl;
+      });
+      const incidentEvidenceIds = new Set(
+        elements.filter((el) => el.element_type === "incident_evidence").map((el) => el.id)
+      );
+      if (incidentEvidenceIds.size > 0) {
+        await Promise.all(
+          Object.entries(next).map(async ([elementId, signedUrl]) => {
+            if (!incidentEvidenceIds.has(elementId)) return;
+            try {
+              const response = await fetch(signedUrl);
+              if (!response.ok) return;
+              const blob = await response.blob();
+              const shouldConvert =
+                isHeicLike(blob.type, "") || (blob.type === "application/octet-stream" ? await blobLooksLikeHeif(blob) : await blobLooksLikeHeif(blob));
+              if (!shouldConvert) return;
+              const jpegBlob = await convertHeicBlobToJpegBlob(blob);
+              if (!jpegBlob || cancelled) return;
+              const objectUrl = URL.createObjectURL(jpegBlob);
+              convertedMediaObjectUrlsRef.current.add(objectUrl);
+              next[elementId] = objectUrl;
+            } catch {
+              // Keep signed URL fallback if conversion fails.
+            }
+          })
+        );
+      }
+      convertedMediaObjectUrlsRef.current.forEach((url) => {
+        if (!Object.values(next).includes(url)) {
+          URL.revokeObjectURL(url);
+          convertedMediaObjectUrlsRef.current.delete(url);
+        }
+      });
+      setImageUrlsByElementId(next);
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [imagePathSignature, elements, isHeicLike, blobLooksLikeHeif, convertHeicBlobToJpegBlob]);
+  const handleRotateEvidenceMediaOverlay = useCallback(() => {
+    setEvidenceMediaOverlay((prev) => {
+      if (!prev) return prev;
+      const nextRotation = ((prev.rotationDeg + 90) % 360) as 0 | 90 | 180 | 270;
+      return { ...prev, rotationDeg: nextRotation };
+    });
+  }, []);
+  const handleCancelEvidenceMediaOverlay = useCallback(() => {
+    setEvidenceMediaOverlay(null);
+  }, []);
+  const handleSaveEvidenceMediaOverlay = useCallback(async () => {
+    if (!evidenceMediaOverlay) return;
+    const element = elements.find((el) => el.id === evidenceMediaOverlay.elementId && el.element_type === "incident_evidence");
+    if (!element) {
+      setEvidenceMediaOverlay(null);
+      return;
+    }
+    const currentConfig = (element.element_config as Record<string, unknown> | null) ?? {};
+    const nextConfig: Record<string, unknown> = {
+      ...currentConfig,
+      media_name: evidenceMediaOverlay.fileName.trim() || String(currentConfig.media_name ?? "").trim() || "Evidence",
+      description: evidenceMediaOverlay.description,
+      media_rotation_deg: evidenceMediaOverlay.rotationDeg,
+    };
+    const unchanged =
+      String(currentConfig.media_name ?? "").trim() === String(nextConfig.media_name ?? "").trim() &&
+      String(currentConfig.description ?? "") === String(nextConfig.description ?? "") &&
+      Number(currentConfig.media_rotation_deg ?? 0) === Number(nextConfig.media_rotation_deg ?? 0);
+    if (!unchanged) {
+      const { data, error: e } = await supabaseBrowser
+        .schema("ms")
+        .from("canvas_elements")
+        .update({ element_config: nextConfig })
+        .eq("id", element.id)
+        .eq("map_id", mapId)
+        .select(canvasElementSelectColumns)
+        .single();
+      if (e || !data) {
+        setError(e?.message || "Unable to save evidence media details.");
+      } else {
+        const updated = data as unknown as CanvasElementRow;
+        setElements((prev) => prev.map((el) => (el.id === updated.id ? updated : el)));
+        setBowtieDraft((prev) => (selectedBowtieElementId === updated.id ? (updated.element_config as Record<string, string | boolean> | null) ?? prev : prev));
+      }
+    }
+    setEvidenceMediaOverlay(null);
+  }, [evidenceMediaOverlay, elements, mapId, canvasElementSelectColumns, setError, setElements, selectedBowtieElementId]);
+  useEffect(() => {
+    if (!selectedBowtieElement) return;
+    const currentConfig = (selectedBowtieElement.element_config as Record<string, string | boolean> | null) ?? {};
+    setBowtieDraft({
+      ...currentConfig,
+      ...(selectedBowtieElement.element_type !== "bowtie_risk_rating"
+        ? {
+            description: getMethodologyDisplayText(
+              selectedBowtieElement.element_type,
+              selectedBowtieElement.heading,
+              String(currentConfig.description ?? "")
+            ),
+          }
+        : {}),
+    });
+  }, [selectedBowtieElement]);
+  useEffect(() => {
+    if (evidenceUploadPreviewUrl) URL.revokeObjectURL(evidenceUploadPreviewUrl);
+    setEvidenceUploadPreviewUrl(null);
+    setEvidenceUploadFile(null);
+  }, [selectedBowtieElementId]);
+  const handleClearEvidenceUploadFile = useCallback(() => {
+    if (evidenceUploadPreviewUrl) URL.revokeObjectURL(evidenceUploadPreviewUrl);
+    setEvidenceUploadPreviewUrl(null);
+    setEvidenceUploadFile(null);
+  }, [evidenceUploadPreviewUrl]);
+  const handleSelectEvidenceUploadFile = useCallback(
+    async (file: File | null) => {
+      if (evidenceUploadPreviewUrl) URL.revokeObjectURL(evidenceUploadPreviewUrl);
+      setEvidenceUploadPreviewUrl(null);
+      setEvidenceUploadFile(null);
+      if (!file) return;
+      let nextFile = file;
+      const looksHeic = isHeicLike(file.type, file.name) || (await blobLooksLikeHeif(file));
+      if (looksHeic) {
+        const jpegBlob = await convertHeicBlobToJpegBlob(file);
+        if (jpegBlob) {
+          const baseName = file.name.replace(/\.[^/.]+$/, "");
+          nextFile = new File([jpegBlob], `${baseName}.jpg`, { type: "image/jpeg" });
+        }
+      }
+      setEvidenceUploadFile(nextFile);
+      const objectUrl = URL.createObjectURL(nextFile);
+      setEvidenceUploadPreviewUrl(objectUrl);
+    },
+    [evidenceUploadPreviewUrl, isHeicLike, blobLooksLikeHeif, convertHeicBlobToJpegBlob]
+  );
+  const handleDeleteEvidenceAttachment = useCallback(async () => {
+    if (!selectedBowtieElement || selectedBowtieElement.element_type !== "incident_evidence") return;
+    const currentConfig = (selectedBowtieElement.element_config as Record<string, unknown> | null) ?? {};
+    const path = typeof currentConfig.media_storage_path === "string" ? currentConfig.media_storage_path : "";
+    if (path) {
+      const { error: removeError } = await supabaseBrowser.storage.from("systemmap").remove([path]);
+      if (removeError) {
+        setError(removeError.message || "Unable to delete attachment from storage.");
+        return;
+      }
+    }
+    const nextConfig: Record<string, unknown> = { ...currentConfig };
+    delete nextConfig.media_storage_path;
+    delete nextConfig.media_mime;
+    delete nextConfig.media_name;
+    nextConfig.media_rotation_deg = 0;
+    const { data, error: updateError } = await supabaseBrowser
+      .schema("ms")
+      .from("canvas_elements")
+      .update({ element_config: nextConfig })
+      .eq("id", selectedBowtieElement.id)
+      .eq("map_id", mapId)
+      .select(canvasElementSelectColumns)
+      .single();
+    if (updateError || !data) {
+      setError(updateError?.message || "Unable to clear attachment from evidence node.");
+      return;
+    }
+    const updated = data as unknown as CanvasElementRow;
+    setElements((prev) => prev.map((el) => (el.id === updated.id ? updated : el)));
+    setBowtieDraft((updated.element_config as Record<string, string | boolean> | null) ?? {});
+    setImageUrlsByElementId((prev) => {
+      const next = { ...prev };
+      delete next[selectedBowtieElement.id];
+      return next;
+    });
+    if (evidenceUploadPreviewUrl) URL.revokeObjectURL(evidenceUploadPreviewUrl);
+    setEvidenceUploadPreviewUrl(null);
+    setEvidenceUploadFile(null);
+  }, [
+    selectedBowtieElement,
+    mapId,
+    canvasElementSelectColumns,
+    setElements,
+    setError,
+    evidenceUploadPreviewUrl,
+  ]);
+  useEffect(() => {
+    if (!map) return;
+    setMapTitleDraft(map.title);
+    setMapInfoNameDraft(map.title);
+    setMapInfoDescriptionDraft(map.description ?? "");
+    setMapCodeDraft(map.map_code ?? "");
+  }, [map]);
+
+  useEffect(() => {
+    if (!canSaveTemplate) {
+      setShowTemplateMenu(false);
+      setTemplateResults([]);
+      setSelectedTemplateId(null);
+      setTemplateSaveMessage(null);
+    }
+  }, [canSaveTemplate]);
+
+  useEffect(() => {
+    if (!showTemplateMenu || !canSaveTemplate) return;
+    void loadTemplateResults(templateQuery.trim().length >= 4 ? templateQuery : "");
+  }, [showTemplateMenu, canSaveTemplate, templateQuery, loadTemplateResults]);
+
+  useEffect(() => {
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as globalThis.Node | null;
+      if (addMenuRef.current && target && addMenuRef.current.contains(target)) return;
+      setShowAddMenu(false);
+      if (templateMenuRef.current && target && templateMenuRef.current.contains(target)) return;
+      setShowTemplateMenu(false);
+      if (searchMenuRef.current && target && searchMenuRef.current.contains(target)) return;
+      setShowSearchMenu(false);
+      if (printMenuRef.current && target && printMenuRef.current.contains(target)) return;
+      setShowPrintMenu(false);
+      if (disciplineMenuRef.current && target && disciplineMenuRef.current.contains(target)) return;
+      setShowDisciplineMenu(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(max-width: 768px), (pointer: coarse)");
+    const apply = () => setIsMobile(mq.matches || window.innerWidth <= 768);
+    apply();
+    const handleResize = () => apply();
+    window.addEventListener("resize", handleResize);
+    if (typeof mq.addEventListener === "function") {
+      mq.addEventListener("change", apply);
+      return () => {
+        mq.removeEventListener("change", apply);
+        window.removeEventListener("resize", handleResize);
+      };
+    }
+    mq.addListener(apply);
+    return () => {
+      mq.removeListener(apply);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (outlineNodeId) return;
+    setOutlineCreateMode(null);
+    setOutlineEditItemId(null);
+    setEditHeadingTitle("");
+    setEditHeadingLevel(1);
+    setEditHeadingParentId("");
+    setEditContentHeadingId("");
+    setEditContentText("");
+    setConfirmDeleteOutlineItemId(null);
+    setCollapsedHeadingIds(new Set());
+  }, [outlineNodeId]);
+
+  useEffect(() => {
+    if (outlineCreateMode !== "content") return;
+    if (!newContentHeadingId && headingItems.length) {
+      setNewContentHeadingId(headingItems[0].id);
+    }
+  }, [outlineCreateMode, newContentHeadingId, headingItems]);
+
+  useEffect(() => {
+    if (!relationshipPopup) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as globalThis.Node | null;
+      if (relationshipPopupRef.current && target && relationshipPopupRef.current.contains(target)) return;
+      setRelationshipPopup(null);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [relationshipPopup]);
+  useEffect(() => {
+    if (!showMapInfoAside) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as globalThis.Node | null;
+      if (mapInfoAsideRef.current && target && mapInfoAsideRef.current.contains(target)) return;
+      if (mapInfoButtonRef.current && target && mapInfoButtonRef.current.contains(target)) return;
+      setShowMapInfoAside(false);
+      setIsEditingMapInfo(false);
+      if (map) {
+        setMapInfoNameDraft(map.title);
+        setMapInfoDescriptionDraft(map.description ?? "");
+        setMapCodeDraft(map.map_code ?? "");
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [showMapInfoAside, map]);
+  useEffect(() => {
+    if (!showMapInfoAside) return;
+    const hasAnyLeftAsideOpen =
+      !!selectedNodeId ||
+      !!selectedProcessId ||
+      !!selectedSystemId ||
+      !!selectedProcessComponentId ||
+      !!selectedPersonId ||
+      !!selectedStickyId ||
+      !!selectedImageId ||
+      !!selectedTextBoxId ||
+      !!selectedTableId ||
+      !!selectedFlowShapeId ||
+      !!selectedBowtieElementId ||
+      !!selectedGroupingId ||
+      !!outlineNodeId ||
+      !!desktopNodeAction ||
+      !!showAddRelationship ||
+      !!mobileNodeMenuId;
+    if (hasAnyLeftAsideOpen) {
+      setShowMapInfoAside(false);
+      setIsEditingMapInfo(false);
+      if (map) {
+        setMapInfoNameDraft(map.title);
+        setMapInfoDescriptionDraft(map.description ?? "");
+        setMapCodeDraft(map.map_code ?? "");
+      }
+    }
+  }, [
+    showMapInfoAside,
+    selectedNodeId,
+    selectedProcessId,
+    selectedSystemId,
+    selectedProcessComponentId,
+    selectedPersonId,
+    selectedStickyId,
+    selectedImageId,
+    selectedTextBoxId,
+    selectedTableId,
+    selectedFlowShapeId,
+    selectedBowtieElementId,
+    selectedGroupingId,
+    outlineNodeId,
+    desktopNodeAction,
+    showAddRelationship,
+    mobileNodeMenuId,
+    map,
+  ]);
+
+  useEffect(() => {
+    const onKeyDown = async (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName?.toLowerCase();
+      const isEditable =
+        !!target &&
+        (target.isContentEditable || tag === "input" || tag === "textarea" || tag === "select");
+      if (isEditable) return;
+
+      const isCopy = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "c";
+      const isPaste = (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "v";
+
+      if (isCopy) {
+        if (!selectedFlowIds.size) return;
+        event.preventDefault();
+        setCopiedFlowIds([...selectedFlowIds]);
+        clipboardPasteCountRef.current = 1;
+        return;
+      }
+
+      if (isPaste) {
+        if (!copiedFlowIds.length) return;
+        if (!canWriteMap) {
+          setError("You have view access only for this map.");
+          return;
+        }
+        event.preventDefault();
+        const step = clipboardPasteCountRef.current;
+        const offset = minorGridSize * 2 * step;
+
+        const sourceNodeIds = copiedFlowIds.filter((id) => !id.startsWith("process:"));
+        const sourceElementIds = copiedFlowIds
+          .filter((id) => id.startsWith("process:"))
+          .map((id) => parseProcessFlowId(id));
+
+        const sourceNodes = nodes.filter((n) => sourceNodeIds.includes(n.id));
+        const sourceElements = elements.filter((el) => sourceElementIds.includes(el.id));
+
+        const nodePayload = sourceNodes.map((n) => ({
+          map_id: mapId,
+          type_id: n.type_id,
+          title: n.title,
+          document_number: n.document_number,
+          discipline: n.discipline,
+          owner_user_id: n.owner_user_id,
+          owner_name: n.owner_name,
+          user_group: n.user_group,
+          pos_x: snapToMinorGrid(n.pos_x + offset),
+          pos_y: snapToMinorGrid(n.pos_y + offset),
+          width: n.width,
+          height: n.height,
+          is_archived: false,
+        }));
+
+        const elementPayload = sourceElements.map((el) => ({
+          map_id: mapId,
+          element_type: el.element_type,
+          heading: el.heading,
+          color_hex: el.color_hex,
+          created_by_user_id: userId ?? el.created_by_user_id,
+          element_config: (el.element_config as Record<string, unknown> | null) ?? null,
+          pos_x: snapToMinorGrid(el.pos_x + offset),
+          pos_y: snapToMinorGrid(el.pos_y + offset),
+          width: el.width,
+          height: el.height,
+        }));
+
+        let insertedNodes: DocumentNodeRow[] = [];
+        let insertedElements: CanvasElementRow[] = [];
+
+        if (nodePayload.length) {
+          const { data, error: e } = await supabaseBrowser
+            .schema("ms")
+            .from("document_nodes")
+            .insert(nodePayload)
+            .select("id,map_id,type_id,title,document_number,discipline,owner_user_id,owner_name,user_group,pos_x,pos_y,width,height,is_archived");
+          if (e) {
+            setError(e.message || "Unable to paste document nodes.");
+            return;
+          }
+          insertedNodes = (data ?? []) as DocumentNodeRow[];
+        }
+
+        if (elementPayload.length) {
+          const { data, error: e } = await supabaseBrowser
+            .schema("ms")
+            .from("canvas_elements")
+            .insert(elementPayload)
+            .select(canvasElementSelectColumns);
+          if (e) {
+            setError(e.message || "Unable to paste canvas elements.");
+            return;
+          }
+          insertedElements = (data ?? []) as CanvasElementRow[];
+        }
+
+        if (insertedNodes.length) {
+          insertedNodes.forEach((n) => {
+            savedPos.current[n.id] = { x: n.pos_x, y: n.pos_y };
+          });
+          setNodes((prev) => [...prev, ...insertedNodes]);
+        }
+        if (insertedElements.length) {
+          setElements((prev) => [...prev, ...insertedElements]);
+        }
+        if (insertedNodes.length || insertedElements.length) {
+          const nextSelected = new Set<string>();
+          insertedNodes.forEach((n) => nextSelected.add(n.id));
+          insertedElements.forEach((el) => nextSelected.add(`process:${el.id}`));
+          setSelectedFlowIds(nextSelected);
+          clipboardPasteCountRef.current += 1;
+        }
+        return;
+      }
+
+      if (event.key !== "Delete") return;
+      if (!selectedFlowIds.size) return;
+      event.preventDefault();
+      setShowDeleteSelectionConfirm(true);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [
+    selectedFlowIds,
+    copiedFlowIds,
+    canWriteMap,
+    mapId,
+    nodes,
+    elements,
+    snapToMinorGrid,
+    userId,
+  ]);
+
+  const onMoveEnd = useCallback((_event: unknown, viewport: Viewport) => {
+    if (!userId) return;
+    if (saveViewportTimer.current) clearTimeout(saveViewportTimer.current);
+    saveViewportTimer.current = setTimeout(async () => {
+      const { error: e } = await supabaseBrowser
+        .schema("ms")
+        .from("map_view_state")
+        .upsert({ map_id: mapId, user_id: userId, pan_x: viewport.x, pan_y: viewport.y, zoom: viewport.zoom }, { onConflict: "map_id,user_id" });
+      if (e && !isAbortLikeError(e)) setError(e.message || "Unable to save viewport state.");
+    }, 500);
+  }, [mapId, userId]);
+
+  const { handleSaveMapTitle, handleCloseMapInfoAside, handleSaveMapInfo, handleUpdateMapMemberRole } =
+    useCanvasMapInfoActions({
+      canManageMapMetadata,
+      map,
+      mapTitleDraft,
+      mapInfoNameDraft,
+      mapInfoDescriptionDraft,
+      mapCodeDraft,
+      loadMapMembers,
+      setError,
+      setSavingMapTitle,
+      setSavingMapInfo,
+      setSavingMemberRoleUserId,
+      setMap,
+      setMapTitleDraft,
+      setIsEditingMapTitle,
+      setMapTitleSavedFlash,
+      setShowMapInfoAside,
+      setIsEditingMapInfo,
+      setMapInfoNameDraft,
+      setMapInfoDescriptionDraft,
+      setMapCodeDraft,
+    });
+
+  const { onNodeDragStop } = useCanvasNodeDragStop({
+    canWriteMap,
+    canEditElement,
+    nodes,
+    elements,
+    mapId,
+    snapToMinorGrid,
+    findNearestFreePosition,
+    selectedFlowIds,
+    flowNodes,
+    setError,
+    setElements,
+    setNodes,
+    setFlowNodes,
+    savedPos,
+  });
+  const {
+    handleAddBlankDocument,
+    handleAddProcessHeading,
+    handleAddSystemCircle,
+    handleAddProcessComponent,
+    handleAddPerson,
+    handleAddGroupingContainer,
+    handleAddStickyNote,
+    handleAddTextBox,
+    handleAddTable,
+    handleAddShapeRectangle,
+    handleAddShapeCircle,
+    handleAddShapePill,
+    handleAddShapePentagon,
+    handleAddShapeChevronLeft,
+    handleAddShapeArrow,
+    handleAddImageAsset,
+    handleAddBowtieHazard,
+    handleAddBowtieTopEvent,
+    handleAddBowtieThreat,
+    handleAddBowtieConsequence,
+    handleAddBowtieControl,
+    handleAddBowtieEscalationFactor,
+    handleAddBowtieRecoveryMeasure,
+    handleAddBowtieDegradationIndicator,
+    handleAddBowtieRiskRating,
+    handleAddIncidentSequenceStep,
+    handleAddIncidentOutcome,
+    handleAddIncidentTaskCondition,
+    handleAddIncidentFactor,
+    handleAddIncidentSystemFactor,
+    handleAddIncidentControlBarrier,
+    handleAddIncidentEvidence,
+    handleAddIncidentFinding,
+    handleAddIncidentRecommendation,
+    handleSaveProcessHeading,
+    handleSaveSystemName,
+    handleSaveProcessComponent,
+    handleSavePerson,
+    handleSaveGroupingContainer,
+    handleSaveStickyNote,
+    handleSaveImageAsset,
+    handleSaveTextBox,
+    handleSaveTable,
+    handleSaveFlowShape,
+  } = useCanvasElementActions({
+    mapCategoryId,
+    canWriteMap,
+    canCreateSticky,
+    canEditElement,
+    mapId,
+    userId,
+    rf,
+    canvasRef,
+    snapToMinorGrid,
+    setError,
+    setShowAddMenu,
+    setNodes,
+    setElements,
+    savedPos,
+    addDocumentTypes,
+    isLandscapeTypeName,
+    unconfiguredDocumentTitle,
+    landscapeDefaultWidth,
+    defaultWidth,
+    landscapeDefaultHeight,
+    defaultHeight,
+    canvasElementSelectColumns,
+    processHeadingWidth,
+    processHeadingHeight,
+    systemCircleDiameter,
+    systemCircleElementHeight,
+    processComponentWidth,
+    processComponentElementHeight,
+    buildPersonHeading,
+    personElementWidth,
+    personElementHeight,
+    orgChartPersonWidth,
+    orgChartPersonHeight,
+    groupingDefaultWidth,
+    groupingDefaultHeight,
+    stickyDefaultSize,
+    imageDefaultWidth,
+    imageMinWidth,
+    imageMinHeight,
+    textBoxDefaultWidth,
+    textBoxDefaultHeight,
+    tableDefaultWidth,
+    tableDefaultHeight,
+    tableMinWidth,
+    tableMinHeight,
+    tableMinRows,
+    tableMinColumns,
+    shapeRectangleDefaultWidth,
+    shapeRectangleDefaultHeight,
+    shapeCircleDefaultSize,
+    shapePillDefaultWidth,
+    shapePillDefaultHeight,
+    shapePentagonDefaultWidth,
+    shapePentagonDefaultHeight,
+    shapeArrowDefaultWidth,
+    shapeArrowDefaultHeight,
+    shapeArrowMinWidth,
+    shapeArrowMinHeight,
+    shapeMinWidth,
+    shapeMinHeight,
+    shapeDefaultFillColor,
+    bowtieDefaultWidth,
+    bowtieHazardHeight,
+    bowtieSquareHeight,
+    bowtieControlHeight,
+    bowtieRiskRatingHeight,
+    incidentCardWidth,
+    incidentCardHeight,
+    incidentDefaultWidth,
+    incidentThreeTwoHeight,
+    incidentSquareSize,
+    incidentFourThreeHeight,
+    incidentThreeOneHeight,
+    selectedProcessId,
+    processHeadingDraft,
+    processFontSizeDraft,
+    processWidthDraft,
+    processHeightDraft,
+    processFillModeDraft,
+    processOutlineColorDraft,
+    processOutlineWidthDraft,
+    processMinWidthSquares,
+    processMinHeightSquares,
+    processMinWidth,
+    processMinHeight,
+    minorGridSize,
+    processColorDraft,
+    setSelectedProcessId,
+    selectedSystemId,
+    systemNameDraft,
+    setSelectedSystemId,
+    selectedProcessComponentId,
+    processComponentLabelDraft,
+    setSelectedProcessComponentId,
+    selectedPersonId,
+    personRoleDraft,
+    personRoleIdDraft,
+    personDepartmentDraft,
+    personOccupantNameDraft,
+    personStartDateDraft,
+    personEmploymentTypeDraft,
+    personActingNameDraft,
+    personActingStartDateDraft,
+    personRecruitingDraft,
+    personProposedRoleDraft,
+    setSelectedPersonId,
+    selectedGroupingId,
+    groupingLabelDraft,
+    groupingHeaderColorDraft,
+    groupingWidthDraft,
+    groupingHeightDraft,
+    groupingMinWidthSquares,
+    groupingMinHeightSquares,
+    groupingMinWidth,
+    groupingMinHeight,
+    setSelectedGroupingId,
+    selectedStickyId,
+    stickyTextDraft,
+    stickyBackgroundColorDraft,
+    stickyOutlineColorDraft,
+    stickyFillModeDraft,
+    stickyOutlineWidthDraft,
+    selectedImageId,
+    imageDescriptionDraft,
+    selectedTextBoxId,
+    textBoxContentDraft,
+    textBoxBoldDraft,
+    textBoxItalicDraft,
+    textBoxUnderlineDraft,
+    textBoxAlignDraft,
+    textBoxFontSizeDraft,
+    textBoxBackgroundColorDraft,
+    textBoxOutlineDraft,
+    textBoxOutlineColorDraft,
+    textBoxOutlineWidthDraft,
+    selectedTableId,
+    tableRowsDraft,
+    tableColumnsDraft,
+    tableHeaderBgDraft,
+    tableGridLineColorDraft,
+    tableGridLineWeightDraft,
+    tableBoldDraft,
+    tableItalicDraft,
+    tableUnderlineDraft,
+    tableAlignDraft,
+    tableFontSizeDraft,
+    selectedFlowShapeId,
+    flowShapeTextDraft,
+    flowShapeAlignDraft,
+    flowShapeBoldDraft,
+    flowShapeItalicDraft,
+    flowShapeUnderlineDraft,
+    flowShapeFontSizeDraft,
+    flowShapeColorDraft,
+    flowShapeFillModeDraft,
+    flowShapeOutlineColorDraft,
+    flowShapeOutlineWidthDraft,
+    flowShapeDirectionDraft,
+    flowShapeRotationDraft,
+    elements,
+    nodes,
+    setSelectedStickyId,
+    setSelectedImageId,
+    setSelectedTextBoxId,
+    setSelectedTableId,
+    setSelectedFlowShapeId,
+  });
+  const {
+    showImageUploadModal,
+    imageUploadFile,
+    imageUploadPreviewUrl,
+    imageUploadDescription,
+    setImageUploadDescription,
+    imageUploadSaving,
+    handleStartAddImageAsset,
+    handleSelectImageUploadFile,
+    handleCancelImageUpload,
+    handleConfirmImageUpload,
+  } = useCanvasImageUpload({
+    canWriteMap,
+    mapId,
+    userId,
+    setError,
+    setShowAddMenu,
+    handleAddImageAsset,
+  });
+  const insertCanvasElements = useCallback(
+    async (payloads: CanvasElementInsertPayload[]) => {
+      if (!payloads.length) return [];
+      const { data, error: insertError } = await supabaseBrowser
+        .schema("ms")
+        .from("canvas_elements")
+        .insert(payloads)
+        .select(canvasElementSelectColumns);
+      if (insertError) throw insertError;
+      const insertedRows = (data as CanvasElementRow[] | null) ?? [];
+      if (insertedRows.length) {
+        setElements((current) => [...current, ...insertedRows]);
+      }
+      return insertedRows;
+    },
+    [setElements]
+  );
+  const updateCanvasElements = useCallback(
+    async (updates: CanvasElementUpdatePayload[]) => {
+      if (!updates.length) return;
+      await Promise.all(
+        updates.map(async ({ id, fields }) => {
+          const { error: updateError } = await supabaseBrowser
+            .schema("ms")
+            .from("canvas_elements")
+            .update(fields)
+            .eq("id", id);
+          if (updateError) throw updateError;
+        })
+      );
+      setElements((current) =>
+        current.map((element) => {
+          const match = updates.find((update) => update.id === element.id);
+          return match ? { ...element, ...match.fields } : element;
+        })
+      );
+    },
+    [setElements]
+  );
+  const buildWizardGroupLayout = useCallback(
+    (itemCount: number, itemWidth: number, itemHeight: number) => {
+      const columns = itemCount <= 1 ? 1 : itemCount <= 4 ? 2 : 3;
+      const rows = Math.max(1, Math.ceil(itemCount / columns));
+      const edgePadding = minorGridSize * 2;
+      const gap = minorGridSize;
+      return {
+        columns,
+        rows,
+        gap,
+        itemWidth,
+        itemHeight,
+        horizontalPadding: edgePadding,
+        topPadding: edgePadding,
+        bottomPadding: edgePadding,
+        width: Math.max(
+          groupingMinWidth,
+          edgePadding * 2 + columns * itemWidth + Math.max(0, columns - 1) * gap
+        ),
+        height: Math.max(
+          groupingMinHeight,
+          edgePadding + rows * itemHeight + Math.max(0, rows - 1) * gap + edgePadding
+        ),
+      };
+    },
+    [groupingMinHeight, groupingMinWidth]
+  );
+  const findWizardGroupElements = useCallback(
+    (groupElement: CanvasElementRow, step: SystemMapWizardCommitPayload["step"]) => {
+      const allowedTypes = new Set(stepElementTypesByWizardStep[step]);
+      const rightEdge = groupElement.pos_x + (groupElement.width || groupingDefaultWidth);
+      const bottomEdge = groupElement.pos_y + (groupElement.height || groupingDefaultHeight);
+      return elements
+        .filter((element) => {
+          if (!allowedTypes.has(element.element_type)) return false;
+          const elementRight = element.pos_x + (element.width || 0);
+          const elementBottom = element.pos_y + (element.height || 0);
+          return (
+            element.pos_x >= groupElement.pos_x &&
+            element.pos_y >= groupElement.pos_y &&
+            elementRight <= rightEdge &&
+            elementBottom <= bottomEdge
+          );
+        })
+        .sort((a, b) => (a.pos_y === b.pos_y ? a.pos_x - b.pos_x : a.pos_y - b.pos_y));
+    },
+    [elements, groupingDefaultHeight, groupingDefaultWidth]
+  );
+  const findExistingWizardGroup = useCallback(
+    (heading: string) =>
+      elements
+        .filter(
+          (element) =>
+            element.element_type === "grouping_container" &&
+            (element.heading || "").trim().toLowerCase() === heading.trim().toLowerCase()
+        )
+        .sort((a, b) => (a.pos_x === b.pos_x ? a.pos_y - b.pos_y : a.pos_x - b.pos_x))[0] ?? null,
+    [elements]
+  );
+  const getNextWizardGroupPosition = useCallback(
+    (groupWidth: number, groupHeight: number) => {
+      const groupingElements = elements.filter((element) => element.element_type === "grouping_container");
+      if (groupingElements.length) {
+        const rightmostGroup = groupingElements.reduce((best, current) => {
+          const bestEdge = best.pos_x + (best.width || groupingDefaultWidth);
+          const currentEdge = current.pos_x + (current.width || groupingDefaultWidth);
+          return currentEdge > bestEdge ? current : best;
+        });
+        return {
+          x: snapToMinorGrid(rightmostGroup.pos_x + (rightmostGroup.width || groupingDefaultWidth) + majorGridSize),
+          y: snapToMinorGrid(rightmostGroup.pos_y),
+        };
+      }
+      const center = getCanvasFlowCenter();
+      if (!center) {
+        return {
+          x: snapToMinorGrid(majorGridSize),
+          y: snapToMinorGrid(majorGridSize),
+        };
+      }
+      return {
+        x: snapToMinorGrid(center.x - groupWidth / 2),
+        y: snapToMinorGrid(center.y - groupHeight / 2),
+      };
+    },
+    [elements, getCanvasFlowCenter, groupingDefaultWidth, majorGridSize, snapToMinorGrid]
+  );
+  const handleWizardCommitStep = useCallback(
+    async (payload: SystemMapWizardCommitPayload) => {
+      if (!canUseWizard || !userId) return;
+      const createGroupAndInsert = async (
+        step: SystemMapWizardCommitPayload["step"],
+        heading: string,
+        itemWidth: number,
+        itemHeight: number,
+        nodeBuilder: (origin: { x: number; y: number }, index: number) => CanvasElementInsertPayload | null,
+        meaningfulCount: number
+      ) => {
+        if (!meaningfulCount) return;
+        const existingGroup = findExistingWizardGroup(heading);
+        const existingNodes = existingGroup ? findWizardGroupElements(existingGroup, step) : [];
+        const totalCount = existingNodes.length + meaningfulCount;
+        const layout = buildWizardGroupLayout(totalCount, itemWidth, itemHeight);
+        const groupPosition = existingGroup
+          ? {
+              x: snapToMinorGrid(existingGroup.pos_x),
+              y: snapToMinorGrid(existingGroup.pos_y),
+            }
+          : getNextWizardGroupPosition(layout.width, layout.height);
+        const relayoutUpdates: CanvasElementUpdatePayload[] = [];
+        existingNodes.forEach((node, index) => {
+          const column = index % layout.columns;
+          const row = Math.floor(index / layout.columns);
+          const origin = {
+            x: snapToMinorGrid(groupPosition.x + layout.horizontalPadding + column * (layout.itemWidth + layout.gap)),
+            y: snapToMinorGrid(groupPosition.y + layout.topPadding + row * (layout.itemHeight + layout.gap)),
+          };
+          relayoutUpdates.push({
+            id: node.id,
+            fields: {
+              pos_x: origin.x,
+              pos_y: origin.y,
+              width: layout.itemWidth,
+              height: layout.itemHeight,
+            },
+          });
+        });
+        const nodePayloads: CanvasElementInsertPayload[] = [];
+        for (let index = 0; index < meaningfulCount; index += 1) {
+          const absoluteIndex = existingNodes.length + index;
+          const column = absoluteIndex % layout.columns;
+          const row = Math.floor(absoluteIndex / layout.columns);
+          const origin = {
+            x: snapToMinorGrid(groupPosition.x + layout.horizontalPadding + column * (layout.itemWidth + layout.gap)),
+            y: snapToMinorGrid(groupPosition.y + layout.topPadding + row * (layout.itemHeight + layout.gap)),
+          };
+          const nodePayload = nodeBuilder(origin, index);
+          if (nodePayload) nodePayloads.push(nodePayload);
+        }
+        if (existingGroup) {
+          await updateCanvasElements([
+            {
+              id: existingGroup.id,
+              fields: {
+                pos_x: groupPosition.x,
+                pos_y: groupPosition.y,
+                width: layout.width,
+                height: layout.height,
+              },
+            },
+            ...relayoutUpdates,
+          ]);
+          await insertCanvasElements(nodePayloads);
+          return;
+        }
+        const groupPayload: CanvasElementInsertPayload = {
+          map_id: mapId,
+          element_type: "grouping_container",
+          heading,
+          color_hex: null,
+          created_by_user_id: userId,
+          pos_x: groupPosition.x,
+          pos_y: groupPosition.y,
+          width: layout.width,
+          height: layout.height,
+        };
+        await insertCanvasElements([groupPayload, ...nodePayloads]);
+      };
+
+      const isFilled = (value: string) => value.trim().length > 0;
+
+      if (payload.step === "sequence") {
+        const items = payload.items.filter((item) => isFilled(item.heading) || isFilled(item.description) || isFilled(item.timestamp) || isFilled(item.location));
+        await createGroupAndInsert("sequence", stepGroupHeadingByWizardStep.sequence, incidentCardWidth, incidentCardHeight, (origin, index) => {
+          const item = items[index];
+          return {
+            map_id: mapId,
+            element_type: "incident_sequence_step",
+            heading: item.heading.trim() || `Sequence Step ${index + 1}`,
+            color_hex: "#bfdbfe",
+            created_by_user_id: userId,
+            element_config: {
+              description: item.description.trim(),
+              timestamp: item.timestamp.trim(),
+              location: item.location.trim(),
+            },
+            pos_x: origin.x,
+            pos_y: origin.y,
+            width: incidentCardWidth,
+            height: incidentCardHeight,
+          };
+        }, items.length);
+        return;
+      }
+
+      if (payload.step === "people") {
+        const items = payload.items.filter((item) => isFilled(item.roleName) || isFilled(item.occupantName));
+        await createGroupAndInsert("people", stepGroupHeadingByWizardStep.people, personElementWidth, personElementHeight, (origin, index) => {
+          const item = items[index];
+          return {
+            map_id: mapId,
+            element_type: "person",
+            heading: buildPersonHeading(item.roleName.trim() || "Role Name", item.occupantName.trim() || "Occupant Name"),
+            color_hex: null,
+            created_by_user_id: userId,
+            element_config: {
+              position_title: item.roleName.trim(),
+              role_id: "",
+              department: "",
+              occupant_name: item.occupantName.trim(),
+              start_date: "",
+              employment_type: "fte",
+              acting_name: "",
+              acting_start_date: "",
+              recruiting: false,
+              contractor_role: false,
+              proposed_role: false,
+            },
+            pos_x: origin.x,
+            pos_y: origin.y,
+            width: personElementWidth,
+            height: personElementHeight,
+          };
+        }, items.length);
+        return;
+      }
+
+      if (payload.step === "task-condition") {
+        const items = payload.items.filter((item) => isFilled(item.heading) || isFilled(item.description) || isFilled(item.environmentalContext));
+        await createGroupAndInsert("task-condition", stepGroupHeadingByWizardStep["task-condition"], incidentCardWidth, incidentCardHeight, (origin, index) => {
+          const item = items[index];
+          return {
+            map_id: mapId,
+            element_type: "incident_task_condition",
+            heading: item.heading.trim() || `Task / Condition ${index + 1}`,
+            color_hex: "#fb923c",
+            created_by_user_id: userId,
+            element_config: {
+              description: item.description.trim(),
+              state: item.state,
+              environmental_context: item.environmentalContext.trim(),
+            },
+            pos_x: origin.x,
+            pos_y: origin.y,
+            width: incidentCardWidth,
+            height: incidentCardHeight,
+          };
+        }, items.length);
+        return;
+      }
+
+      if (payload.step === "factors") {
+        const items = payload.items.filter((item) => isFilled(item.heading) || isFilled(item.description) || isFilled(item.category));
+        await createGroupAndInsert("factors", stepGroupHeadingByWizardStep.factors, incidentCardWidth, incidentCardHeight, (origin, index) => {
+          const item = items[index];
+          if (item.kind === "incident_system_factor") {
+            return {
+              map_id: mapId,
+              element_type: "incident_system_factor",
+              heading: item.heading.trim() || `System Factor ${index + 1}`,
+              color_hex: "#a78bfa",
+              created_by_user_id: userId,
+              element_config: {
+                description: item.description.trim(),
+                category: item.category.trim(),
+                cause_level: item.classification,
+              },
+              pos_x: origin.x,
+              pos_y: origin.y,
+              width: incidentCardWidth,
+              height: incidentCardHeight,
+            };
+          }
+          return {
+            map_id: mapId,
+            element_type: "incident_factor",
+            heading: item.heading.trim() || `Factor ${index + 1}`,
+            color_hex: "#fde047",
+            created_by_user_id: userId,
+            element_config: {
+              factor_presence: item.presence,
+              factor_classification: item.classification,
+              influence_type: item.category.trim(),
+              description: item.description.trim(),
+            },
+            pos_x: origin.x,
+            pos_y: origin.y,
+            width: incidentCardWidth,
+            height: incidentCardHeight,
+          };
+        }, items.length);
+        return;
+      }
+
+      if (payload.step === "control-barrier") {
+        const items = payload.items.filter((item) => isFilled(item.heading) || isFilled(item.description) || isFilled(item.controlType) || isFilled(item.ownerText));
+        await createGroupAndInsert("control-barrier", stepGroupHeadingByWizardStep["control-barrier"], incidentCardWidth, incidentCardHeight, (origin, index) => {
+          const item = items[index];
+          return {
+            map_id: mapId,
+            element_type: "incident_control_barrier",
+            heading: item.heading.trim() || `Control / Barrier ${index + 1}`,
+            color_hex: "#4ade80",
+            created_by_user_id: userId,
+            element_config: {
+              barrier_state: item.barrierState,
+              barrier_role: item.barrierRole,
+              description: item.description.trim(),
+              control_type: item.controlType.trim(),
+              owner_text: item.ownerText.trim(),
+              verification_method: "",
+              verification_frequency: "",
+            },
+            pos_x: origin.x,
+            pos_y: origin.y,
+            width: incidentCardWidth,
+            height: incidentCardHeight,
+          };
+        }, items.length);
+        return;
+      }
+
+      if (payload.step === "evidence") {
+        const items = payload.items.filter((item) => isFilled(item.heading) || isFilled(item.description) || isFilled(item.evidenceType) || isFilled(item.source));
+        await createGroupAndInsert("evidence", stepGroupHeadingByWizardStep.evidence, incidentCardWidth, incidentCardHeight, (origin, index) => {
+          const item = items[index];
+          return {
+            map_id: mapId,
+            element_type: "incident_evidence",
+            heading: item.heading.trim() || `Evidence ${index + 1}`,
+            color_hex: "#cbd5e1",
+            created_by_user_id: userId,
+            element_config: {
+              evidence_type: item.evidenceType.trim(),
+              description: item.description.trim(),
+              source: item.source.trim(),
+              show_canvas_preview: false,
+              media_storage_path: "",
+              media_mime: "",
+              media_name: "",
+              media_rotation_deg: 0,
+            },
+            pos_x: origin.x,
+            pos_y: origin.y,
+            width: incidentCardWidth,
+            height: incidentCardHeight,
+          };
+        }, items.length);
+        return;
+      }
+
+      if (payload.step === "finding") {
+        const items = payload.items.filter((item) => isFilled(item.heading) || isFilled(item.description));
+        await createGroupAndInsert("finding", stepGroupHeadingByWizardStep.finding, bowtieDefaultWidth, bowtieControlHeight, (origin, index) => {
+          const item = items[index];
+          return {
+            map_id: mapId,
+            element_type: "incident_finding",
+            heading: item.heading.trim() || `Finding ${index + 1}`,
+            color_hex: "#1d4ed8",
+            created_by_user_id: userId,
+            element_config: {
+              description: item.description.trim(),
+              confidence_level: item.confidenceLevel,
+            },
+            pos_x: origin.x,
+            pos_y: origin.y,
+            width: bowtieDefaultWidth,
+            height: bowtieControlHeight,
+          };
+        }, items.length);
+        return;
+      }
+
+      const items = payload.items.filter((item) => isFilled(item.heading) || isFilled(item.description) || isFilled(item.ownerText) || isFilled(item.dueDate));
+      await createGroupAndInsert("recommendation", stepGroupHeadingByWizardStep.recommendation, incidentCardWidth, incidentCardHeight, (origin, index) => {
+        const item = items[index];
+        return {
+          map_id: mapId,
+          element_type: "incident_recommendation",
+          heading: item.heading.trim() || `Recommendation ${index + 1}`,
+          color_hex: "#14b8a6",
+          created_by_user_id: userId,
+          element_config: {
+            action_type: item.actionType,
+            owner_text: item.ownerText.trim(),
+            due_date: item.dueDate.trim(),
+            description: item.description.trim(),
+          },
+          pos_x: origin.x,
+          pos_y: origin.y,
+          width: incidentCardWidth,
+          height: incidentCardHeight,
+        };
+      }, items.length);
+    },
+    [
+      bowtieControlHeight,
+      bowtieDefaultWidth,
+      buildPersonHeading,
+      buildWizardGroupLayout,
+      canUseWizard,
+      getNextWizardGroupPosition,
+      insertCanvasElements,
+      mapId,
+      personElementHeight,
+      personElementWidth,
+      snapToMinorGrid,
+      userId,
+    ]
+  );
+  const {
+    relatedRows,
+    relatedGroupingRows,
+    relatedSystemRows,
+    relatedProcessComponentRows,
+    relatedPersonRows,
+    resolvePersonRelationLabels,
+    resolveGroupingRelationLabels,
+    resolveDocumentRelationLabels,
+    mobileRelatedItems,
+    relationshipSourceNode,
+    relationshipSourceSystem,
+    relationshipSourceGrouping,
+    relationshipModeGrouping,
+    allowDocumentTargets,
+    allowSystemTargets,
+    documentRelationCandidates,
+    documentRelationCandidateLabelById,
+    documentRelationCandidateIdByLabel,
+    systemRelationCandidates,
+    systemRelationCandidateLabelById,
+    systemRelationCandidateIdByLabel,
+    groupingRelationCandidates,
+    groupingRelationCandidateLabelById,
+    groupingRelationCandidateIdByLabel,
+    alreadyRelatedDocumentTargetIds,
+    alreadyRelatedSystemTargetIds,
+    alreadyRelatedGroupingTargetIds,
+  } = useCanvasRelationshipDerived({
+    relations,
+    selectedNodeId,
+    selectedGroupingId,
+    selectedSystemId,
+    selectedProcessComponentId,
+    selectedPersonId,
+    relationshipSourceNodeId,
+    relationshipSourceSystemId,
+    relationshipSourceGroupingId,
+    relationshipDocumentQuery,
+    relationshipSystemQuery,
+    relationshipGroupingQuery,
+    nodes,
+    elements,
+    mapCategoryId,
+  });
+  const orgDirectReportCountByPersonId = useMemo(() => {
+    const counts = new Map<string, number>();
+    if (mapCategoryId !== "org_chart") return counts;
+    const normalizeRef = (value: string | null | undefined) => {
+      if (!value) return "";
+      const trimmed = String(value).replace(/^process:/i, "").trim().toLowerCase();
+      const uuidMatch = trimmed.match(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i);
+      return uuidMatch ? uuidMatch[0].toLowerCase() : trimmed;
+    };
+    const peopleByNormalizedId = new Map(
+      elements
+        .filter((el) => el.element_type === "person")
+        .map((el) => [normalizeRef(el.id), el] as const)
+    );
+    const resolvePersonByAnyRef = (refs: Array<string | null | undefined>) => {
+      for (const ref of refs) {
+        const normalized = normalizeRef(ref ?? "");
+        if (!normalized) continue;
+        const person = peopleByNormalizedId.get(normalized);
+        if (person) return person;
+      }
+      return null;
+    };
+    peopleByNormalizedId.forEach((person) => counts.set(person.id, 0));
+    relations.forEach((r) => {
+      const relationType = String(r.relation_type ?? "").trim().toLowerCase();
+      if (relationType !== "reports_to") return;
+      const source = resolvePersonByAnyRef([
+        r.source_system_element_id,
+        r.from_node_id,
+      ]);
+      const target = resolvePersonByAnyRef([
+        r.target_system_element_id,
+        r.to_node_id,
+      ]);
+      if (!source || !target) return;
+      if (source.id === target.id) return;
+      const leaderId = source.pos_y <= target.pos_y ? source.id : target.id;
+      counts.set(leaderId, (counts.get(leaderId) ?? 0) + 1);
+    });
+    return counts;
+  }, [elements, mapCategoryId, relations]);
+  useEffect(() => {
+    if (mapCategoryId !== "org_chart") return;
+    const personElements = elements.filter((el) => el.element_type === "person");
+    if (!personElements.length) return;
+    const changed = personElements
+      .map((person) => {
+        const cfg = parseOrgChartPersonConfig(person.element_config);
+        const nextCount = orgDirectReportCountByPersonId.get(person.id) ?? 0;
+        const currentKnownCount = Number.isFinite(Number(cfg.direct_report_count))
+          ? Math.max(0, Math.floor(Number(cfg.direct_report_count)))
+          : 0;
+        // Never downgrade an existing non-zero persisted count to zero from client-side inference.
+        // This avoids hiding the label when relation IDs are stored in older endpoint fields.
+        if (nextCount === 0 && currentKnownCount > 0) return null;
+        if (cfg.direct_report_count === nextCount) return null;
+        return {
+          id: person.id,
+          nextConfig: {
+            ...cfg,
+            direct_report_count: nextCount,
+          },
+          nextCount,
+        };
+      })
+      .filter((entry): entry is { id: string; nextConfig: ReturnType<typeof parseOrgChartPersonConfig>; nextCount: number } => Boolean(entry));
+    if (!changed.length) return;
+    const changedConfigById = new Map(changed.map((entry) => [entry.id, entry.nextConfig] as const));
+    setElements((prev) =>
+      prev.map((el) =>
+        changedConfigById.has(el.id)
+          ? {
+              ...el,
+              element_config: changedConfigById.get(el.id) ?? el.element_config,
+            }
+          : el
+      )
+    );
+    if (!canWriteMap) return;
+    void Promise.all(
+      changed.map((entry) =>
+        supabaseBrowser
+          .schema("ms")
+          .from("canvas_elements")
+          .update({ element_config: entry.nextConfig })
+          .eq("id", entry.id)
+          .eq("map_id", mapId)
+      )
+    ).catch((e) => {
+      setError(e?.message || "Unable to persist direct report counts.");
+    });
+  }, [canWriteMap, elements, mapCategoryId, mapId, orgDirectReportCountByPersonId, setElements, setError]);
+  const orgDirectReportCandidates = useMemo(() => {
+    if (mapCategoryId !== "org_chart" || !relationshipSourceSystemId) return [];
+    const sourceId = parseProcessFlowId(relationshipSourceSystemId);
+    const term = relationshipSystemQuery.trim().toLowerCase();
+    return elements
+      .filter((el) => el.element_type === "person")
+      .filter((el) => el.id !== sourceId)
+      .map((el) => {
+        const cfg = parseOrgChartPersonConfig(el.element_config);
+        const actingName = cfg.acting_name.trim();
+        const occupantName = cfg.occupant_name.trim();
+        const nameLine = actingName ? `${actingName} (A)` : occupantName || "VACANT";
+        const detailLine = `${cfg.position_title || "Position Title"}${cfg.role_id ? ` (${cfg.role_id})` : ""}`;
+        const haystack = [cfg.position_title, cfg.role_id, occupantName, actingName, el.heading, nameLine, detailLine]
+          .join(" ")
+          .toLowerCase();
+        return {
+          id: el.id,
+          nameLine,
+          detailLine,
+          disabled: alreadyRelatedSystemTargetIds.has(el.id),
+          haystack,
+        };
+      })
+      .filter((candidate) => !term || candidate.haystack.includes(term))
+      .map(({ haystack: _ignore, ...candidate }) => candidate)
+      .sort((a, b) => a.nameLine.localeCompare(b.nameLine));
+  }, [alreadyRelatedSystemTargetIds, elements, mapCategoryId, relationshipSourceSystemId, relationshipSystemQuery]);
+  const orgDirectReportSourceLabel = useMemo(() => {
+    if (!relationshipSourceSystemId || mapCategoryId !== "org_chart") return "";
+    const source = elements.find((el) => el.id === parseProcessFlowId(relationshipSourceSystemId) && el.element_type === "person");
+    if (!source) return "";
+    const cfg = parseOrgChartPersonConfig(source.element_config);
+    const actingName = cfg.acting_name.trim();
+    const occupantName = cfg.occupant_name.trim();
+    return actingName ? `${actingName} (A)` : occupantName || "VACANT";
+  }, [elements, mapCategoryId, relationshipSourceSystemId]);
+  const relatedBowtieRows = useMemo(() => {
+    if (!selectedBowtieElementId) return [];
+    return relations.filter(
+      (r) => r.target_system_element_id === selectedBowtieElementId || r.source_system_element_id === selectedBowtieElementId
+    );
+  }, [relations, selectedBowtieElementId]);
+  const relatedImageRows = useMemo(() => {
+    if (!selectedImageId) return [];
+    return relations.filter((r) => r.target_system_element_id === selectedImageId || r.source_system_element_id === selectedImageId);
+  }, [relations, selectedImageId]);
+  const startEditRelation = useCallback((r: NodeRelationRow) => {
+    setEditingRelationId(r.id);
+    setEditingRelationDescription(r.relationship_description ?? "");
+    setEditingRelationCategory(normalizeRelationshipCategoryForMap(r.relationship_category, mapCategoryId, r.relationship_custom_type));
+    setEditingRelationCustomType(r.relationship_custom_type ?? "");
+    setEditingRelationDisciplines(
+      (r.relationship_disciplines ?? []).filter(
+        (key): key is DisciplineKey => disciplineKeySet.has(key as DisciplineKey)
+      )
+    );
+    setShowEditingRelationDisciplineMenu(false);
+  }, [mapCategoryId]);
+  const cancelEditRelation = useCallback(() => {
+    setEditingRelationId(null);
+    setEditingRelationDescription("");
+    setEditingRelationCategory(getDefaultRelationshipCategoryForMap(mapCategoryId));
+    setEditingRelationCustomType("");
+    setEditingRelationDisciplines([]);
+    setShowEditingRelationDisciplineMenu(false);
+  }, [mapCategoryId]);
+  const calculateRiskLevel = useCallback((likelihoodRaw: string, consequenceRaw: string) => {
+    const likelihoodScoreByKey: Record<string, number> = {
+      rare: 1,
+      unlikely: 2,
+      possible: 3,
+      likely: 4,
+      almost_certain: 5,
+    };
+    const consequenceScoreByKey: Record<string, number> = {
+      insignificant: 1,
+      minor: 2,
+      moderate: 3,
+      major: 4,
+      severe: 5,
+    };
+    const likelihood = likelihoodScoreByKey[likelihoodRaw] ?? 3;
+    const consequence = consequenceScoreByKey[consequenceRaw] ?? 3;
+    const score = likelihood * consequence;
+    if (score <= 4) return "low";
+    if (score <= 9) return "medium";
+    if (score <= 16) return "high";
+    return "extreme";
+  }, []);
+  const handleSaveBowtieElement = useCallback(async () => {
+    if (!canWriteMap) {
+      setError("You have view access only for this map.");
+      return;
+    }
+    if (!selectedBowtieElement) return;
+    const elementType = selectedBowtieElement.element_type;
+    const nextConfig: Record<string, unknown> = { ...bowtieDraft };
+    const defaultLabel = methodologyDefaultLabelByType[elementType] || "Node";
+    let nextHeading = defaultLabel;
+    if (elementType === "bowtie_risk_rating") {
+      const likelihood = String(nextConfig.likelihood || "possible");
+      const consequence = String(nextConfig.consequence || "moderate");
+      const riskLevel = calculateRiskLevel(likelihood, consequence);
+      nextConfig.risk_level = riskLevel;
+      nextHeading = `${riskLevel.charAt(0).toUpperCase()}${riskLevel.slice(1)}`;
+    } else {
+      nextConfig.description = getMethodologyDisplayText(
+        elementType,
+        selectedBowtieElement.heading,
+        String(nextConfig.description ?? "")
+      );
+    }
+    if (elementType === "incident_evidence" && evidenceUploadFile) {
+      const ext = evidenceUploadFile.name.includes(".") ? evidenceUploadFile.name.split(".").pop() : "bin";
+      const safeBaseName =
+        evidenceUploadFile.name
+          .replace(/\.[^/.]+$/, "")
+          .replace(/[^a-zA-Z0-9-_ ]/g, "")
+          .trim()
+          .replace(/\s+/g, "-")
+          .toLowerCase() || "evidence";
+      const storagePath = `${mapId}/${Date.now()}-${crypto.randomUUID()}-${safeBaseName}.${ext}`;
+      const { error: uploadError } = await supabaseBrowser.storage.from("systemmap").upload(storagePath, evidenceUploadFile, {
+        cacheControl: "3600",
+        upsert: false,
+      });
+      if (uploadError) {
+        setError(uploadError.message || "Unable to upload evidence file.");
+        return;
+      }
+      const previousPath = typeof nextConfig.media_storage_path === "string" ? nextConfig.media_storage_path : "";
+      if (previousPath && previousPath !== storagePath) {
+        await supabaseBrowser.storage.from("systemmap").remove([previousPath]);
+      }
+      nextConfig.media_storage_path = storagePath;
+      nextConfig.media_mime = evidenceUploadFile.type || "";
+      nextConfig.media_name = evidenceUploadFile.name;
+    }
+    const { data, error: e } = await supabaseBrowser
+      .schema("ms")
+      .from("canvas_elements")
+      .update({ heading: nextHeading, element_config: nextConfig })
+      .eq("id", selectedBowtieElement.id)
+      .eq("map_id", mapId)
+      .select(canvasElementSelectColumns)
+      .single();
+    if (e || !data) {
+      setError(e?.message || "Unable to save bow tie node.");
+      return;
+    }
+    const updated = data as unknown as CanvasElementRow;
+    setElements((prev) => prev.map((el) => (el.id === updated.id ? updated : el)));
+    if (evidenceUploadFile) {
+      if (evidenceUploadPreviewUrl) URL.revokeObjectURL(evidenceUploadPreviewUrl);
+      setEvidenceUploadPreviewUrl(null);
+      setEvidenceUploadFile(null);
+    }
+    setSelectedBowtieElementId(null);
+  }, [
+    canWriteMap,
+    selectedBowtieElement,
+    bowtieDraft,
+    calculateRiskLevel,
+    mapId,
+    setError,
+    setElements,
+    canvasElementSelectColumns,
+    evidenceUploadFile,
+    evidenceUploadPreviewUrl,
+  ]);
+  const closeAddRelationshipModal = useCallback(() => {
+    setShowAddRelationship(false);
+    setRelationshipSourceNodeId(null);
+    setRelationshipSourceSystemId(null);
+    setRelationshipSourceGroupingId(null);
+    setRelationshipTargetDocumentId("");
+    setRelationshipTargetSystemId("");
+    setRelationshipTargetGroupingId("");
+    setRelationshipDocumentQuery("");
+    setRelationshipSystemQuery("");
+    setRelationshipGroupingQuery("");
+    setShowRelationshipDocumentOptions(false);
+    setShowRelationshipSystemOptions(false);
+    setShowRelationshipGroupingOptions(false);
+    setRelationshipDescription("");
+    setRelationshipDisciplineSelection([]);
+    setShowRelationshipDisciplineMenu(false);
+    setRelationshipCategory(getDefaultRelationshipCategoryForMap(mapCategoryId));
+    setRelationshipCustomType("");
+  }, []);
+  const closeDesktopDrilldownPanels = useCallback(() => {
+    setDesktopNodeAction(null);
+    closeAddRelationshipModal();
+    setOutlineNodeId(null);
+    setConfirmDeleteNodeId(null);
+    setConfirmDeleteOutlineItemId(null);
+    setOutlineCreateMode(null);
+    setOutlineEditItemId(null);
+    setEditHeadingTitle("");
+    setEditHeadingLevel(1);
+    setEditHeadingParentId("");
+    setEditContentHeadingId("");
+    setEditContentText("");
+  }, [closeAddRelationshipModal]);
+  const handleCloseDocumentPropertiesPanel = useCallback(() => {
+    setSelectedNodeId(null);
+    closeDesktopDrilldownPanels();
+  }, [closeDesktopDrilldownPanels]);
+  const closeAllLeftAsides = useCallback(() => {
+    setSelectedNodeId(null);
+    setSelectedProcessId(null);
+    setSelectedSystemId(null);
+    setSelectedProcessComponentId(null);
+    setSelectedPersonId(null);
+    setSelectedGroupingId(null);
+    setSelectedStickyId(null);
+    setSelectedImageId(null);
+    setSelectedTextBoxId(null);
+    setSelectedTableId(null);
+    setSelectedFlowShapeId(null);
+    setSelectedBowtieElementId(null);
+    closeDesktopDrilldownPanels();
+    setMobileNodeMenuId(null);
+  }, [closeDesktopDrilldownPanels]);
+  const handleToggleMapInfoAside = useCallback(() => {
+    closeAllLeftAsides();
+    setShowMapInfoAside((prev) => {
+      const next = !prev;
+      if (next) setIsEditingMapInfo(false);
+      return next;
+    });
+  }, [closeAllLeftAsides]);
+
+  const openAddRelationshipFromSource = useCallback(
+    (source: { nodeId?: string | null; systemId?: string | null; groupingId?: string | null }) => {
+      setRelationshipSourceNodeId(source.nodeId ?? null);
+      setRelationshipSourceSystemId(source.systemId ?? null);
+      setRelationshipSourceGroupingId(source.groupingId ?? null);
+      setRelationshipDocumentQuery("");
+      setRelationshipSystemQuery("");
+      setRelationshipGroupingQuery("");
+      setRelationshipTargetDocumentId("");
+      setRelationshipTargetSystemId("");
+      setRelationshipTargetGroupingId("");
+      setShowRelationshipDocumentOptions(false);
+      setShowRelationshipSystemOptions(false);
+      setShowRelationshipGroupingOptions(false);
+      setRelationshipDescription("");
+      setRelationshipDisciplineSelection([]);
+      setShowRelationshipDisciplineMenu(false);
+      setRelationshipCategory(getDefaultRelationshipCategoryForMap(mapCategoryId));
+      setRelationshipCustomType("");
+      setShowAddRelationship(true);
+      setDesktopNodeAction("relationship");
+    },
+    []
+  );
+  const handleAddOrgDirectReport = useCallback(async () => {
+    if (!canWriteMap) {
+      setError("You have view access only for this map.");
+      return;
+    }
+    if (mapCategoryId !== "org_chart") return;
+    const sourceId = relationshipSourceSystemId ? parseProcessFlowId(relationshipSourceSystemId) : "";
+    const targetId = relationshipTargetSystemId ? parseProcessFlowId(relationshipTargetSystemId) : "";
+    if (!sourceId || !targetId || sourceId === targetId) {
+      setError("Please select a valid direct report.");
+      return;
+    }
+    const sourcePerson = elements.find((el) => el.id === sourceId && el.element_type === "person");
+    const targetPerson = elements.find((el) => el.id === targetId && el.element_type === "person");
+    if (!sourcePerson || !targetPerson) {
+      setError("Direct report links must be person-to-person.");
+      return;
+    }
+    const exists = relations.some(
+      (r) =>
+        r.source_system_element_id &&
+        r.target_system_element_id &&
+        ((parseProcessFlowId(r.source_system_element_id) === sourceId && parseProcessFlowId(r.target_system_element_id) === targetId) ||
+          (parseProcessFlowId(r.source_system_element_id) === targetId && parseProcessFlowId(r.target_system_element_id) === sourceId))
+    );
+    if (exists) {
+      setError("Direct report link already exists.");
+      return;
+    }
+    const { data, error: e } = await supabaseBrowser
+      .schema("ms")
+      .from("node_relations")
+      .insert({
+        map_id: mapId,
+        from_node_id: null,
+        to_node_id: null,
+        source_grouping_element_id: null,
+        target_grouping_element_id: null,
+        source_system_element_id: sourceId,
+        target_system_element_id: targetId,
+        relation_type: "reports_to",
+        relationship_category: "other",
+        relationship_custom_type: "direct_report",
+        relationship_description: relationshipDescription.trim() || null,
+        relationship_disciplines: null,
+      })
+      .select("*")
+      .single();
+    if (e || !data) {
+      setError(e?.message || "Unable to link direct report.");
+      return;
+    }
+    setRelations((prev) => [...prev, data as NodeRelationRow]);
+    closeAddRelationshipModal();
+    setDesktopNodeAction(null);
+  }, [
+    canWriteMap,
+    closeAddRelationshipModal,
+    elements,
+    mapCategoryId,
+    mapId,
+    relationshipDescription,
+    relationshipSourceSystemId,
+    relationshipTargetSystemId,
+    relations,
+    setError,
+    setRelations,
+  ]);
+
+  const { handleAddRelation, handleDeleteRelation, handleUpdateRelation, handleDeleteNode, handleSaveNode } =
+    useCanvasRelationNodeActions({
+      canWriteMap,
+      mapCategoryId,
+      mapId,
+      setError,
+      relations,
+      elements,
+      relationshipSourceNodeId,
+      relationshipSourceSystemId,
+      relationshipSourceGroupingId,
+      relationshipTargetGroupingId,
+      relationshipTargetDocumentId,
+      relationshipTargetSystemId,
+      relationshipDescription,
+      relationshipDisciplineSelection,
+      relationshipCategory,
+      relationshipCustomType,
+      closeAddRelationshipModal,
+      setRelations,
+      editingRelationCategory,
+      editingRelationCustomType,
+      editingRelationDescription,
+      editingRelationDisciplines,
+      setEditingRelationId,
+      setEditingRelationDescription,
+      setEditingRelationCategory,
+      setEditingRelationCustomType,
+      setEditingRelationDisciplines,
+      setShowEditingRelationDisciplineMenu,
+      selectedNodeId,
+      nodes,
+      selectedTypeId,
+      typesById,
+      title,
+      documentNumber,
+      disciplineSelection,
+      userGroup,
+      ownerName,
+      isLandscapeTypeName,
+      getNodeSize,
+      getNormalizedDocumentSize,
+      serializeDisciplines,
+      setNodes,
+      setSelectedNodeId,
+      setSelectedFlowIds,
+      outlineNodeId,
+      setOutlineNodeId,
+      setOutlineItems,
+    });
+  const { handleDeleteProcessElement, handleDeleteSelectedComponents } = useCanvasDeleteSelectionActions({
+    canWriteMap,
+    canEditElement,
+    mapId,
+    elements,
+    setError,
+    setElements,
+    setRelations,
+    setSelectedFlowIds,
+    processFlowId,
+    parseProcessFlowId,
+    selectedProcessId,
+    setSelectedProcessId,
+    selectedSystemId,
+    setSelectedSystemId,
+    selectedProcessComponentId,
+    setSelectedProcessComponentId,
+    selectedPersonId,
+    setSelectedPersonId,
+    selectedGroupingId,
+    setSelectedGroupingId,
+    selectedStickyId,
+    setSelectedStickyId,
+    selectedImageId,
+    setSelectedImageId,
+    selectedTextBoxId,
+    setSelectedTextBoxId,
+    selectedTableId,
+    setSelectedTableId,
+    selectedFlowShapeId,
+    setSelectedFlowShapeId,
+    selectedFlowIds,
+    handleDeleteNode,
+    setShowDeleteSelectionConfirm,
+  });
+
+  const {
+    handleCreateHeading,
+    handleCreateContent,
+    openOutlineEditor,
+    closeOutlineEditor,
+    handleSaveOutlineEdit,
+    handleDeleteOutlineItem,
+  } = useCanvasOutlineActions({
+    mapId,
+    outlineNodeId,
+    outlineItems,
+    headingItems,
+    newHeadingTitle,
+    newHeadingLevel,
+    newHeadingParentId,
+    newContentHeadingId,
+    newContentText,
+    outlineEditItem,
+    editHeadingTitle,
+    editHeadingLevel,
+    editHeadingParentId,
+    editContentHeadingId,
+    editContentText,
+    confirmDeleteOutlineItemId,
+    outlineEditItemId,
+    setError,
+    setOutlineCreateMode,
+    setNewHeadingTitle,
+    setNewHeadingLevel,
+    setNewHeadingParentId,
+    setNewContentHeadingId,
+    setNewContentText,
+    setOutlineEditItemId,
+    setEditHeadingTitle,
+    setEditHeadingLevel,
+    setEditHeadingParentId,
+    setEditContentHeadingId,
+    setEditContentText,
+    setCollapsedHeadingIds,
+    setConfirmDeleteOutlineItemId,
+    loadOutline,
+  });
+  useEffect(() => {
+    if (isMobile) return;
+    if (selectedNodeId) return;
+    closeDesktopDrilldownPanels();
+  }, [selectedNodeId, isMobile, closeDesktopDrilldownPanels]);
+
+  const { handlePaneClickClearSelection, handlePaneMouseDown } = useCanvasPaneSelectionActions({
+    rf,
+    flowNodes,
+    getFlowNodeBounds,
+    canUseContextMenu,
+    canWriteMap: canManipulateCanvasElements,
+    setSelectionMarquee,
+    setSelectedFlowIds,
+    setHoveredEdgeId,
+    onPaneBlankClick: closeAllLeftAsides,
+  });
+
+  const sharedRelationshipSectionProps = useMemo(
+    () => ({
+      editingRelationId,
+      editingRelationDescription,
+      setEditingRelationDescription,
+      editingRelationCategory,
+      setEditingRelationCategory,
+      relationshipCategoryOptions,
+      editingRelationCustomType,
+      setEditingRelationCustomType,
+      editingRelationDisciplines,
+      setEditingRelationDisciplines,
+      showEditingRelationDisciplineMenu,
+      setShowEditingRelationDisciplineMenu,
+      disciplineOptions,
+      getDisciplineLabel: (key: DisciplineKey) => disciplineLabelByKey.get(key),
+      onStartEdit: startEditRelation,
+      onDelete: handleDeleteRelation,
+      onSave: (id: string) => void handleUpdateRelation(id),
+      onCancelEdit: cancelEditRelation,
+      actionDisabledReason: readOnlyActionReason,
+    }),
+    [
+      cancelEditRelation,
+      disciplineLabelByKey,
+      disciplineOptions,
+      editingRelationCategory,
+      editingRelationCustomType,
+      editingRelationDescription,
+      editingRelationDisciplines,
+      editingRelationId,
+      handleDeleteRelation,
+      handleUpdateRelation,
+      relationshipCategoryOptions,
+      readOnlyActionReason,
+      setEditingRelationCategory,
+      setEditingRelationCustomType,
+      setEditingRelationDescription,
+      setEditingRelationDisciplines,
+      setShowEditingRelationDisciplineMenu,
+      showEditingRelationDisciplineMenu,
+      startEditRelation,
+    ]
+  );
+
+  if (loading) {
+    return <SystemMapLoadingView progress={loadingProgress} message={loadingMessage} />;
+  }
+
+  if (!map) {
+    return <div className="flex min-h-screen items-center justify-center text-rose-700">{error || "Map not found."}</div>;
+  }
+
+  return (
+    <div className="flex h-dvh min-h-dvh flex-col overflow-hidden bg-stone-50 md:min-h-screen">
+      <MapCanvasHeader
+        map={map}
+        isTemplateEditor={isTemplateEditor}
+        mapRole={mapRole}
+        accessState={accessState}
+        canManageMapMetadata={canManageMapMetadata}
+        isEditingMapTitle={isEditingMapTitle}
+        mapTitleDraft={mapTitleDraft}
+        setMapTitleDraft={setMapTitleDraft}
+        setIsEditingMapTitle={setIsEditingMapTitle}
+        handleSaveMapTitle={handleSaveMapTitle}
+        savingMapTitle={savingMapTitle}
+        mapTitleSavedFlash={mapTitleSavedFlash}
+        mapInfoButtonRef={mapInfoButtonRef}
+        closeAllLeftAsides={closeAllLeftAsides}
+        setShowMapInfoAside={setShowMapInfoAside}
+        setIsEditingMapInfo={setIsEditingMapInfo}
+        setError={setError}
+      />
+
+      <CanvasActionButtons
+        isMobile={isMobile}
+        backHref={backHref}
+        backTitle={backTitle}
+        showMapInfoAside={showMapInfoAside}
+        onToggleMapInfo={handleToggleMapInfoAside}
+        rf={rf}
+        setShowAddMenu={setShowAddMenu}
+        showAddMenu={showAddMenu}
+        addMenuRef={addMenuRef}
+        canSaveTemplate={!isTemplateEditor && canSaveTemplate}
+        canvasInteractionLocked={canvasInteractionLocked}
+        onToggleCanvasInteractionLock={() => setCanvasInteractionLocked((prev) => !prev)}
+        isPlatformAdmin={isPlatformAdmin}
+        saveAsGlobalTemplate={saveAsGlobalTemplate}
+        setSaveAsGlobalTemplate={handleToggleGlobalTemplateSave}
+        templateDisabledReason={templateDisabledReason}
+        showTemplateMenu={showTemplateMenu}
+        setShowTemplateMenu={setShowTemplateMenu}
+        templateMenuRef={templateMenuRef}
+        templateQuery={templateQuery}
+        setTemplateQuery={handleTemplateQueryChange}
+        templateResults={templateResults}
+        isLoadingTemplates={isLoadingTemplates}
+        isSavingTemplate={isSavingTemplate}
+        templateSaveMessage={templateSaveMessage}
+        onSelectTemplate={handleSelectTemplateResult}
+        onSaveTemplate={() => void handleSaveTemplate()}
+        showSearchMenu={showSearchMenu}
+        setShowSearchMenu={setShowSearchMenu}
+        searchMenuRef={searchMenuRef}
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        searchResults={searchResults}
+        onSelectSearchResult={handleSelectSearchResult}
+        canWriteMap={canWriteMap}
+        canUseWizard={canUseWizard}
+        addDisabledReason={addDisabledReason}
+        wizardDisabledReason={wizardDisabledReason}
+        canPrint={canPrintMap}
+        printDisabledReason={readOnlyActionReason}
+        onOpenWizard={() => {
+          if (!canUseWizard) return;
+          setShowWizardModal(true);
+        }}
+        canCreateSticky={canCreateSticky}
+        handleAddBlankDocument={handleAddBlankDocument}
+        handleAddSystemCircle={handleAddSystemCircle}
+        handleAddProcessComponent={handleAddProcessComponent}
+        handleAddPerson={handleAddPerson}
+        handleAddProcessHeading={handleAddProcessHeading}
+        handleAddGroupingContainer={handleAddGroupingContainer}
+        handleAddStickyNote={handleAddStickyNote}
+        handleStartAddImageAsset={handleStartAddImageAsset}
+        handleAddTextBox={handleAddTextBox}
+        handleAddTable={handleAddTable}
+        handleAddShapeRectangle={handleAddShapeRectangle}
+        handleAddShapeCircle={handleAddShapeCircle}
+        handleAddShapePill={handleAddShapePill}
+        handleAddShapePentagon={handleAddShapePentagon}
+        handleAddShapeChevronLeft={handleAddShapeChevronLeft}
+        handleAddShapeArrow={handleAddShapeArrow}
+        handleAddBowtieHazard={handleAddBowtieHazard}
+        handleAddBowtieTopEvent={handleAddBowtieTopEvent}
+        handleAddBowtieThreat={handleAddBowtieThreat}
+        handleAddBowtieConsequence={handleAddBowtieConsequence}
+        handleAddBowtieControl={handleAddBowtieControl}
+        handleAddBowtieEscalationFactor={handleAddBowtieEscalationFactor}
+        handleAddBowtieRecoveryMeasure={handleAddBowtieRecoveryMeasure}
+        handleAddBowtieDegradationIndicator={handleAddBowtieDegradationIndicator}
+        handleAddBowtieRiskRating={handleAddBowtieRiskRating}
+        handleAddIncidentSequenceStep={handleAddIncidentSequenceStep}
+        handleAddIncidentOutcome={handleAddIncidentOutcome}
+        handleAddIncidentTaskCondition={handleAddIncidentTaskCondition}
+        handleAddIncidentFactor={handleAddIncidentFactor}
+        handleAddIncidentSystemFactor={handleAddIncidentSystemFactor}
+        handleAddIncidentControlBarrier={handleAddIncidentControlBarrier}
+        handleAddIncidentEvidence={handleAddIncidentEvidence}
+        handleAddIncidentFinding={handleAddIncidentFinding}
+        handleAddIncidentRecommendation={handleAddIncidentRecommendation}
+        allowedNodeKinds={allowedNodeKinds}
+        showPrintMenu={showPrintMenu}
+        setShowPrintMenu={setShowPrintMenu}
+        printMenuRef={printMenuRef}
+        onPrintCurrentView={() => void handlePrintCurrentView()}
+        onPrintSelectArea={handlePrintSelectArea}
+        isPreparingPrint={isPreparingPrint}
+      />
+      <SystemMapWelcomeModal
+        open={showWelcomeModal}
+        isMobile={isMobile}
+        onStartManual={() => setShowWelcomeModal(false)}
+        onStartWizard={() => {
+          setShowWelcomeModal(false);
+          if (canUseWizard) setShowWizardModal(true);
+        }}
+      />
+      <SystemMapWizardModal
+        open={showWizardModal}
+        isMobile={isMobile}
+        onClose={() => setShowWizardModal(false)}
+        isSaving={wizardSaving}
+        onCommitStep={async (payload) => {
+          setWizardSaving(true);
+          try {
+            await handleWizardCommitStep(payload);
+          } finally {
+            setWizardSaving(false);
+          }
+        }}
+      />
+
+      <MapInfoAside
+        isMobile={isMobile}
+        showMapInfoAside={showMapInfoAside}
+        mapInfoAsideRef={mapInfoAsideRef}
+        handleCloseMapInfoAside={handleCloseMapInfoAside}
+        canManageMapMetadata={canManageMapMetadata}
+        isEditingMapInfo={isEditingMapInfo}
+        mapInfoNameDraft={mapInfoNameDraft}
+        setMapInfoNameDraft={setMapInfoNameDraft}
+        mapCodeDraft={mapCodeDraft}
+        setMapCodeDraft={setMapCodeDraft}
+        mapInfoDescriptionDraft={mapInfoDescriptionDraft}
+        setMapInfoDescriptionDraft={setMapInfoDescriptionDraft}
+        map={map}
+        savingMapInfo={savingMapInfo}
+        handleSaveMapInfo={handleSaveMapInfo}
+        setIsEditingMapInfo={setIsEditingMapInfo}
+        setMapInfoDescriptionDraftFromMap={() => setMapInfoDescriptionDraft(map.description ?? "")}
+        setMapCodeDraftFromMap={() => setMapCodeDraft(map.map_code ?? "")}
+        mapMembers={mapMembers}
+        userId={userId}
+        userEmail={userEmail}
+        savingMemberRoleUserId={savingMemberRoleUserId}
+        handleUpdateMapMemberRole={handleUpdateMapMemberRole}
+        mapRoleLabel={mapRoleLabel}
+      />
+
+      <main className="relative min-h-0 flex-1 overflow-hidden pb-0">
+        <div
+          ref={canvasRef}
+          className="h-full w-full bg-stone-50"
+          onMouseDown={handlePaneMouseDown}
+          onClick={(e) => {
+            if (e.target !== e.currentTarget) return;
+            setMobileNodeMenuId(null);
+            setShowAddMenu(false);
+          }}
+        >
+          <ReactFlow
+            nodes={flowNodes}
+            edges={flowEdges}
+            nodeTypes={flowNodeTypes}
+            edgeTypes={flowEdgeTypes}
+            onlyRenderVisibleElements
+            nodesConnectable={false}
+            edgesReconnectable={false}
+            nodesFocusable={false}
+            edgesFocusable={false}
+            onInit={(instance) => setRf({ fitView: instance.fitView, screenToFlowPosition: instance.screenToFlowPosition, setViewport: instance.setViewport })}
+            onNodesChange={handleFlowNodesChange}
+            onNodeClick={(event, n) =>
+              handleCanvasNodeClick({
+                event,
+                node: n,
+                mapRole,
+                elements,
+                canEditElement,
+                isMobile,
+                lastMobileTapRef,
+                setSelectedFlowIds,
+                setSelectedNodeId,
+                setSelectedProcessId,
+                setSelectedSystemId,
+                setSelectedProcessComponentId,
+                setSelectedPersonId,
+                setSelectedGroupingId,
+                setSelectedStickyId,
+                setSelectedImageId,
+                setSelectedTextBoxId,
+                setSelectedTableId,
+                setSelectedFlowShapeId,
+                setSelectedBowtieElementId,
+                setMobileNodeMenuId,
+              })
+            }
+            onNodeContextMenu={(e, n) => {
+              if (!canUseContextMenu || canvasInteractionLocked) return;
+              e.preventDefault();
+              if (n.data.entityKind === "grouping_container") {
+                const target = e.target as HTMLElement | null;
+                const clickedGroupingHandle = !!target?.closest(".grouping-drag-handle, .grouping-select-handle");
+                if (!clickedGroupingHandle) return;
+              }
+              if (isMobile) {
+                setMobileNodeMenuId(n.id);
+                return;
+              }
+              setSelectedFlowIds((prev) => {
+                const next = new Set(prev);
+                if (next.has(n.id)) next.delete(n.id);
+                else next.add(n.id);
+                return next;
+              });
+            }}
+            onPaneClick={() => {
+              scheduleHoveredNodeId(null);
+              scheduleHoveredEdgeId(null);
+              handlePaneClickClearSelection();
+            }}
+            onPaneContextMenu={(e) => {
+              if (!canUseContextMenu) return;
+              e.preventDefault();
+            }}
+            onNodeMouseEnter={(_, n) => scheduleHoveredNodeId(n.id)}
+            onNodeMouseLeave={() => scheduleHoveredNodeId(null)}
+            onNodeDragStart={() => {
+              isNodeDragActiveRef.current = true;
+              setIsNodeDragActive(true);
+            }}
+            onNodeDragStop={(event, node) => {
+              void onNodeDragStop(event, node).finally(() => {
+                isNodeDragActiveRef.current = false;
+                setIsNodeDragActive(false);
+              });
+            }}
+            onMoveEnd={onMoveEnd}
+            nodesDraggable={canManipulateCanvasElements}
+            onEdgeMouseEnter={(_, edge) => scheduleHoveredEdgeId(edge.id)}
+            onEdgeMouseLeave={() => scheduleHoveredEdgeId(null)}
+            onEdgeClick={(event, edge) => {
+              event.preventDefault();
+              event.stopPropagation();
+              const rel = relations.find((r) => r.id === edge.id);
+              if (!rel) return;
+              const fromNode = rel.from_node_id ? nodes.find((n) => n.id === rel.from_node_id) : null;
+              const fromSystem = rel.source_system_element_id
+                ? elements.find((el) => el.id === rel.source_system_element_id && el.element_type !== "grouping_container")
+                : null;
+              const fromGrouping = rel.source_grouping_element_id
+                ? elements.find((el) => el.id === rel.source_grouping_element_id && el.element_type === "grouping_container")
+                : null;
+              const toNode = rel.to_node_id ? nodes.find((n) => n.id === rel.to_node_id) : null;
+              const toSystem = rel.target_system_element_id
+                ? elements.find((el) => el.id === rel.target_system_element_id && el.element_type !== "grouping_container")
+                : null;
+              const toGrouping = rel.target_grouping_element_id
+                ? elements.find((el) => el.id === rel.target_grouping_element_id && el.element_type === "grouping_container")
+                : null;
+              const fromLabel =
+                fromNode?.title ||
+                (fromSystem ? getElementDisplayName(fromSystem) : null) ||
+                fromGrouping?.heading ||
+                "Unknown source";
+              const toLabel = toNode?.title || (toSystem ? getElementDisplayName(toSystem) : null) || toGrouping?.heading || "Unknown destination";
+              const relationLabel = getDisplayRelationType(rel.relation_type);
+              const relationshipType = getRelationshipCategoryLabel(rel.relationship_category, rel.relationship_custom_type);
+              const disciplines = getRelationshipDisciplineLetters(rel.relationship_disciplines);
+              const description = rel.relationship_description?.trim() || "No relationship context added by user";
+              setRelationshipPopup({
+                x: event.clientX,
+                y: event.clientY,
+                fromLabel,
+                toLabel,
+                relationLabel,
+                relationshipType,
+                disciplines: disciplines || "None",
+                description,
+              });
+            }}
+            panOnDrag
+            elementsSelectable={canManipulateCanvasElements}
+            selectionOnDrag={canManipulateCanvasElements}
+            zoomOnScroll
+            snapToGrid
+            snapGrid={[minorGridSize, minorGridSize]}
+            minZoom={isMobile ? 0.2 : 0.2}
+            maxZoom={2}
+            fitView={!isMobile}
+            fitViewOptions={{ padding: 0.2 }}
+            style={{ backgroundColor: "#fafaf9" }}
+          >
+            <Background id="minor" variant={BackgroundVariant.Lines} gap={minorGridSize} size={1} color="#e7e5e4" />
+            <Background id="major" variant={BackgroundVariant.Lines} gap={majorGridSize} size={1.2} color="#d6d3d1" />
+          </ReactFlow>
+        </div>
+
+        <CanvasPrintOverlay
+          printSelectionMode={printSelectionMode}
+          printHeaderHeightPx={PRINT_HEADER_HEIGHT_PX}
+          activePrintSelectionRect={activePrintSelectionRect}
+          onOverlayPointerDown={handlePrintOverlayPointerDown}
+          onOverlayPointerMove={handlePrintOverlayPointerMove}
+          onOverlayPointerUp={handlePrintOverlayPointerUp}
+          showPrintSelectionConfirm={showPrintSelectionConfirm}
+          onCancelPrintSelection={exitPrintSelectionMode}
+          onConfirmPrintArea={() => void handleConfirmPrintArea()}
+          onCopyPrintAreaImage={() => void handleCopyPrintAreaImageToClipboard()}
+          isCopyingPrintImage={isCopyingPrintImage}
+          printSelectionCopyMessage={printSelectionCopyMessage}
+          isPreparingPrint={isPreparingPrint}
+          showPrintPreview={showPrintPreview}
+          printPreviewHtml={printPreviewHtml}
+          printOrientation={printOrientation}
+          onSetPortrait={() => setPrintOrientation("portrait")}
+          onSetLandscape={() => setPrintOrientation("landscape")}
+          onSavePrint={() => {
+            const w = printPreviewFrameRef.current?.contentWindow;
+            if (!w) return;
+            w.focus();
+            w.print();
+          }}
+          onClosePreview={() => setShowPrintPreview(false)}
+          printPreviewFrameRef={printPreviewFrameRef}
+        />
+
+        <CanvasFloatingOverlays
+          selectionMarquee={selectionMarquee}
+          showDeleteSelectionConfirm={showDeleteSelectionConfirm}
+          selectedFlowIdsSize={selectedFlowIds.size}
+          onDeleteSelected={handleDeleteSelectedComponents}
+          onCancelDeleteSelected={() => setShowDeleteSelectionConfirm(false)}
+          showImageUploadModal={showImageUploadModal}
+          onCancelImageUpload={handleCancelImageUpload}
+          onSelectImageUploadFile={handleSelectImageUploadFile}
+          imageUploadPreviewUrl={imageUploadPreviewUrl}
+          imageUploadDescription={imageUploadDescription}
+          setImageUploadDescription={setImageUploadDescription}
+          onConfirmImageUpload={() => {
+            void handleConfirmImageUpload();
+          }}
+          imageUploadFile={imageUploadFile}
+          imageUploadSaving={imageUploadSaving}
+          evidenceMediaOverlay={evidenceMediaOverlay}
+          onCancelEvidenceMediaOverlay={handleCancelEvidenceMediaOverlay}
+          onSaveEvidenceMediaOverlay={() => {
+            void handleSaveEvidenceMediaOverlay();
+          }}
+          onRotateEvidenceMediaOverlay={handleRotateEvidenceMediaOverlay}
+          onChangeEvidenceMediaOverlayFileName={(value) =>
+            setEvidenceMediaOverlay((prev) => (prev ? { ...prev, fileName: value } : prev))
+          }
+          onChangeEvidenceMediaOverlayDescription={(value) =>
+            setEvidenceMediaOverlay((prev) => (prev ? { ...prev, description: value } : prev))
+          }
+          relationshipPopup={relationshipPopup}
+          relationshipPopupRef={relationshipPopupRef}
+        />
+
+
+        <MobileNodeActionSheet
+          open={Boolean(isMobile && mobileNodeMenuId)}
+          title={mobileNodeMenuId ? (nodes.find((n) => n.id === mobileNodeMenuId)?.title || "Document") : "Document"}
+          onEditProperties={() => {
+            if (!mobileNodeMenuId) return;
+            setSelectedProcessId(null);
+            setSelectedNodeId(mobileNodeMenuId);
+            setMobileNodeMenuId(null);
+          }}
+          onAddRelationship={() => {
+            if (!mobileNodeMenuId) return;
+            setRelationshipSourceNodeId(mobileNodeMenuId);
+            setRelationshipSourceSystemId(null);
+            setRelationshipSourceGroupingId(null);
+            setRelationshipDocumentQuery("");
+            setRelationshipSystemQuery("");
+            setRelationshipGroupingQuery("");
+            setRelationshipTargetDocumentId("");
+            setRelationshipTargetSystemId("");
+            setRelationshipTargetGroupingId("");
+            setShowRelationshipDocumentOptions(false);
+            setShowRelationshipSystemOptions(false);
+            setShowRelationshipGroupingOptions(false);
+            setRelationshipDescription("");
+            setRelationshipDisciplineSelection([]);
+            setShowRelationshipDisciplineMenu(false);
+            setRelationshipCategory(getDefaultRelationshipCategoryForMap(mapCategoryId));
+            setRelationshipCustomType("");
+            setShowAddRelationship(true);
+            setMobileNodeMenuId(null);
+          }}
+          onOpenStructure={() => {
+            if (!mobileNodeMenuId) return;
+            setOutlineCreateMode(null);
+            closeOutlineEditor();
+            setConfirmDeleteOutlineItemId(null);
+            setCollapsedHeadingIds(new Set());
+            setOutlineNodeId(mobileNodeMenuId);
+            setMobileNodeMenuId(null);
+            void loadOutline(mobileNodeMenuId);
+          }}
+          onDeleteDocument={() => {
+            if (!mobileNodeMenuId) return;
+            setConfirmDeleteNodeId(mobileNodeMenuId);
+            setMobileNodeMenuId(null);
+          }}
+          onClose={() => setMobileNodeMenuId(null)}
+        />
+
+        <MobileAddRelationshipModal
+          open={Boolean(showAddRelationship && isMobile)}
+          sourceLabel={relationshipSourceNode?.title || relationshipSourceGrouping?.heading || "Unknown source"}
+          relationshipModeGrouping={relationshipModeGrouping}
+          relationshipGroupingQuery={relationshipGroupingQuery}
+          setRelationshipGroupingQuery={setRelationshipGroupingQuery}
+          groupingRelationCandidateIdByLabel={groupingRelationCandidateIdByLabel}
+          setRelationshipTargetGroupingId={setRelationshipTargetGroupingId}
+          alreadyRelatedGroupingTargetIds={alreadyRelatedGroupingTargetIds}
+          showRelationshipGroupingOptions={showRelationshipGroupingOptions}
+          setShowRelationshipGroupingOptions={setShowRelationshipGroupingOptions}
+          groupingRelationCandidates={groupingRelationCandidates}
+          groupingRelationCandidateLabelById={groupingRelationCandidateLabelById}
+          allowDocumentTargets={allowDocumentTargets}
+          relationshipDocumentQuery={relationshipDocumentQuery}
+          setRelationshipDocumentQuery={setRelationshipDocumentQuery}
+          documentRelationCandidateIdByLabel={documentRelationCandidateIdByLabel}
+          setRelationshipTargetDocumentId={setRelationshipTargetDocumentId}
+          alreadyRelatedDocumentTargetIds={alreadyRelatedDocumentTargetIds}
+          showRelationshipDocumentOptions={showRelationshipDocumentOptions}
+          setShowRelationshipDocumentOptions={setShowRelationshipDocumentOptions}
+          documentRelationCandidates={documentRelationCandidates}
+          documentRelationCandidateLabelById={documentRelationCandidateLabelById}
+          allowSystemTargets={allowSystemTargets}
+          relationshipSystemQuery={relationshipSystemQuery}
+          setRelationshipSystemQuery={setRelationshipSystemQuery}
+          systemRelationCandidateIdByLabel={systemRelationCandidateIdByLabel}
+          setRelationshipTargetSystemId={setRelationshipTargetSystemId}
+          alreadyRelatedSystemTargetIds={alreadyRelatedSystemTargetIds}
+          showRelationshipSystemOptions={showRelationshipSystemOptions}
+          setShowRelationshipSystemOptions={setShowRelationshipSystemOptions}
+          systemRelationCandidates={systemRelationCandidates}
+          systemRelationCandidateLabelById={systemRelationCandidateLabelById}
+          getElementRelationshipDisplayLabel={getElementRelationshipDisplayLabel}
+          relationshipDisciplineSelection={relationshipDisciplineSelection}
+          disciplineLabelByKey={disciplineLabelByKey}
+          showRelationshipDisciplineMenu={showRelationshipDisciplineMenu}
+          setShowRelationshipDisciplineMenu={setShowRelationshipDisciplineMenu}
+          disciplineOptions={disciplineOptions}
+          setRelationshipDisciplineSelection={setRelationshipDisciplineSelection}
+          relationshipCategory={relationshipCategory}
+          setRelationshipCategory={setRelationshipCategory}
+          relationshipCategoryOptions={relationshipCategoryOptions}
+          relationshipCustomType={relationshipCustomType}
+          setRelationshipCustomType={setRelationshipCustomType}
+          relationshipDescription={relationshipDescription}
+          setRelationshipDescription={setRelationshipDescription}
+          relationshipTargetDocumentId={relationshipTargetDocumentId}
+          relationshipTargetSystemId={relationshipTargetSystemId}
+          relationshipTargetGroupingId={relationshipTargetGroupingId}
+          onCancel={closeAddRelationshipModal}
+          onAdd={handleAddRelation}
+        />
+
+        <CanvasConfirmDialogs
+          confirmDeleteNodeId={confirmDeleteNodeId}
+          isMobile={isMobile}
+          setConfirmDeleteNodeId={setConfirmDeleteNodeId}
+          handleDeleteNode={handleDeleteNode}
+          confirmDeleteOutlineItemId={confirmDeleteOutlineItemId}
+          setConfirmDeleteOutlineItemId={setConfirmDeleteOutlineItemId}
+          handleDeleteOutlineItem={handleDeleteOutlineItem}
+        />
+
+        <CanvasElementPropertyOverlays
+          categoryProps={{
+            open: !!selectedProcess,
+            isMobile,
+            leftAsideSlideIn,
+            processHeadingDraft,
+            setProcessHeadingDraft,
+            processFontSizeDraft,
+            setProcessFontSizeDraft,
+            processFillModeDraft,
+            setProcessFillModeDraft,
+            processOutlineColorDraft,
+            setProcessOutlineColorDraft,
+            processOutlineWidthDraft,
+            setProcessOutlineWidthDraft,
+            categoryColorOptions,
+            processColorDraft,
+            setProcessColorDraft,
+            onDelete: async () => {
+              if (!selectedProcess) return;
+              await handleDeleteProcessElement(selectedProcess.id);
+            },
+            onSave: handleSaveProcessHeading,
+            onClose: () => setSelectedProcessId(null),
+            actionDisabledReason: readOnlyActionReason,
+          }}
+          systemProps={{
+            open: !!selectedSystem,
+            isMobile,
+            leftAsideSlideIn,
+            systemNameDraft,
+            setSystemNameDraft,
+            onDelete: async () => {
+              if (!selectedSystem) return;
+              await handleDeleteProcessElement(selectedSystem.id);
+            },
+            onSave: handleSaveSystemName,
+            onClose: () => setSelectedSystemId(null),
+            onAddRelationship: () => {
+              if (!selectedSystem) return;
+              openAddRelationshipFromSource({ systemId: selectedSystem.id });
+            },
+            relatedRows: relatedSystemRows,
+            resolveLabels: resolveDocumentRelationLabels,
+            relationshipSectionProps: sharedRelationshipSectionProps,
+            actionDisabledReason: readOnlyActionReason,
+          }}
+          processProps={{
+            open: !!selectedProcessComponent,
+            isMobile,
+            leftAsideSlideIn,
+            processComponentLabelDraft,
+            setProcessComponentLabelDraft,
+            onDelete: async () => {
+              if (!selectedProcessComponent) return;
+              await handleDeleteProcessElement(selectedProcessComponent.id);
+            },
+            onSave: handleSaveProcessComponent,
+            onClose: () => setSelectedProcessComponentId(null),
+            onAddRelationship: () => {
+              if (!selectedProcessComponent) return;
+              openAddRelationshipFromSource({ systemId: selectedProcessComponent.id });
+            },
+            relatedRows: relatedProcessComponentRows,
+            resolveLabels: resolveDocumentRelationLabels,
+            relationshipSectionProps: sharedRelationshipSectionProps,
+            actionDisabledReason: readOnlyActionReason,
+          }}
+          personProps={{
+            open: !!selectedPerson,
+            isMobile,
+            leftAsideSlideIn,
+            mapCategoryId,
+            personRoleDraft,
+            setPersonRoleDraft,
+            personRoleIdDraft,
+            setPersonRoleIdDraft,
+            personDepartmentDraft,
+            setPersonDepartmentDraft,
+            personOccupantNameDraft,
+            setPersonOccupantNameDraft,
+            personStartDateDraft,
+            setPersonStartDateDraft,
+            personEmploymentTypeDraft,
+            setPersonEmploymentTypeDraft,
+            personActingNameDraft,
+            setPersonActingNameDraft,
+            personActingStartDateDraft,
+            setPersonActingStartDateDraft,
+            personRecruitingDraft,
+            setPersonRecruitingDraft,
+            personProposedRoleDraft,
+            setPersonProposedRoleDraft,
+            orgChartDepartmentOptions,
+            onDelete: async () => {
+              if (!selectedPerson) return;
+              await handleDeleteProcessElement(selectedPerson.id);
+            },
+            onSave: handleSavePerson,
+            onClose: () => setSelectedPersonId(null),
+            onAddRelationship: () => {
+              if (!selectedPerson) return;
+              openAddRelationshipFromSource({ systemId: selectedPerson.id });
+            },
+            relatedRows: relatedPersonRows,
+            resolveLabels: resolvePersonRelationLabels,
+            relationshipSectionProps: sharedRelationshipSectionProps,
+            actionDisabledReason: readOnlyActionReason,
+          }}
+          bowtieProps={{
+            open: !!selectedBowtieElement,
+            isMobile,
+            leftAsideSlideIn,
+            bowtieElementType:
+              selectedBowtieElement?.element_type && isMethodologyElementType(selectedBowtieElement.element_type)
+                ? (selectedBowtieElement.element_type as
+                    | "bowtie_hazard"
+                    | "bowtie_top_event"
+                    | "bowtie_threat"
+                    | "bowtie_consequence"
+                    | "bowtie_control"
+                    | "bowtie_escalation_factor"
+                    | "bowtie_recovery_measure"
+                    | "bowtie_degradation_indicator"
+                    | "bowtie_risk_rating"
+                    | "incident_sequence_step"
+                    | "incident_outcome"
+                    | "incident_task_condition"
+                    | "incident_factor"
+                    | "incident_system_factor"
+                    | "incident_control_barrier"
+                    | "incident_evidence"
+                    | "incident_finding"
+                    | "incident_recommendation")
+                : null,
+            bowtieDraft,
+            setBowtieDraft,
+            evidenceUploadPreviewUrl,
+            evidenceUploadFileName: evidenceUploadFile?.name ?? "",
+            evidenceUploadFileMime: evidenceUploadFile?.type ?? "",
+            evidenceCurrentMediaName: String(bowtieDraft.media_name ?? ""),
+            evidenceCurrentMediaMime: String(bowtieDraft.media_mime ?? ""),
+            evidenceCurrentMediaUrl:
+              selectedBowtieElement?.element_type === "incident_evidence" ? imageUrlsByElementId[selectedBowtieElement.id] ?? null : null,
+            onSelectEvidenceUploadFile: handleSelectEvidenceUploadFile,
+            onClearEvidenceUploadFile: handleClearEvidenceUploadFile,
+            onDeleteEvidenceAttachment: handleDeleteEvidenceAttachment,
+            onDelete: async () => {
+              if (!selectedBowtieElement) return;
+              if (selectedBowtieElement.element_type === "incident_evidence") {
+                const cfg = (selectedBowtieElement.element_config as Record<string, unknown> | null) ?? {};
+                const path = typeof cfg.media_storage_path === "string" ? cfg.media_storage_path : "";
+                if (path) {
+                  await supabaseBrowser.storage.from("systemmap").remove([path]);
+                }
+              }
+              await handleDeleteProcessElement(selectedBowtieElement.id);
+              setSelectedBowtieElementId(null);
+            },
+            onSave: handleSaveBowtieElement,
+            onClose: () => setSelectedBowtieElementId(null),
+            onAddRelationship: () => {
+              if (!selectedBowtieElement) return;
+              openAddRelationshipFromSource({ systemId: selectedBowtieElement.id });
+            },
+            relatedRows: relatedBowtieRows,
+            resolveLabels: resolvePersonRelationLabels,
+            relationshipSectionProps: sharedRelationshipSectionProps,
+            actionDisabledReason: readOnlyActionReason,
+          }}
+          groupingProps={{
+            open: !!selectedGrouping,
+            isMobile,
+            leftAsideSlideIn,
+            groupingLabelDraft,
+            setGroupingLabelDraft,
+            groupingHeaderColorDraft,
+            setGroupingHeaderColorDraft,
+            onDelete: async () => {
+              if (!selectedGrouping) return;
+              await handleDeleteProcessElement(selectedGrouping.id);
+            },
+            onSave: handleSaveGroupingContainer,
+            onClose: () => setSelectedGroupingId(null),
+            onAddRelationship: () => {
+              if (!selectedGrouping) return;
+              openAddRelationshipFromSource({ groupingId: selectedGrouping.id });
+            },
+            relatedRows: relatedGroupingRows,
+            resolveLabels: resolveGroupingRelationLabels,
+            relationshipSectionProps: sharedRelationshipSectionProps,
+            actionDisabledReason: readOnlyActionReason,
+          }}
+          stickyProps={{
+            open: !!selectedSticky,
+            isMobile,
+            leftAsideSlideIn,
+            stickyTextDraft,
+            setStickyTextDraft,
+            stickyBackgroundColorDraft,
+            setStickyBackgroundColorDraft,
+            stickyOutlineColorDraft,
+            setStickyOutlineColorDraft,
+            stickyFillModeDraft,
+            setStickyFillModeDraft,
+            stickyOutlineWidthDraft,
+            setStickyOutlineWidthDraft,
+            onDelete: async () => {
+              if (!selectedSticky) return;
+              await handleDeleteProcessElement(selectedSticky.id);
+            },
+            onSave: handleSaveStickyNote,
+            onClose: () => setSelectedStickyId(null),
+            actionDisabledReason: readOnlyActionReason,
+          }}
+          imageProps={{
+            open: !!selectedImage,
+            isMobile,
+            leftAsideSlideIn,
+            imageDescriptionDraft,
+            setImageDescriptionDraft,
+            onDelete: async () => {
+              if (!selectedImage) return;
+              const cfg = (selectedImage.element_config as Record<string, unknown> | null) ?? {};
+              const path = typeof cfg.storage_path === "string" ? cfg.storage_path : "";
+              if (path) {
+                await supabaseBrowser.storage.from("systemmap").remove([path]);
+              }
+              await handleDeleteProcessElement(selectedImage.id);
+              setSelectedImageId(null);
+            },
+            onSave: handleSaveImageAsset,
+            onClose: () => setSelectedImageId(null),
+            onAddRelationship: () => {
+              if (!selectedImage) return;
+              openAddRelationshipFromSource({ systemId: selectedImage.id });
+            },
+            relatedRows: relatedImageRows,
+            resolveLabels: resolvePersonRelationLabels,
+            relationshipSectionProps: sharedRelationshipSectionProps,
+            actionDisabledReason: readOnlyActionReason,
+          }}
+          textBoxProps={{
+            open: !!selectedTextBox,
+            isMobile,
+            leftAsideSlideIn,
+            textBoxContentDraft,
+            setTextBoxContentDraft,
+            textBoxBoldDraft,
+            setTextBoxBoldDraft,
+            textBoxItalicDraft,
+            setTextBoxItalicDraft,
+            textBoxUnderlineDraft,
+            setTextBoxUnderlineDraft,
+            textBoxAlignDraft,
+            setTextBoxAlignDraft,
+            textBoxFontSizeDraft,
+            setTextBoxFontSizeDraft,
+            textBoxBackgroundColorDraft,
+            setTextBoxBackgroundColorDraft,
+            textBoxOutlineDraft,
+            setTextBoxOutlineDraft,
+            textBoxOutlineColorDraft,
+            setTextBoxOutlineColorDraft,
+            textBoxOutlineWidthDraft,
+            setTextBoxOutlineWidthDraft,
+            onDelete: async () => {
+              if (!selectedTextBox) return;
+              await handleDeleteProcessElement(selectedTextBox.id);
+              setSelectedTextBoxId(null);
+            },
+            onSave: handleSaveTextBox,
+            onClose: () => setSelectedTextBoxId(null),
+            actionDisabledReason: readOnlyActionReason,
+          }}
+          tableProps={{
+            open: !!selectedTable,
+            isMobile,
+            leftAsideSlideIn,
+            tableRowsDraft,
+            setTableRowsDraft,
+            tableColumnsDraft,
+            setTableColumnsDraft,
+            tableHeaderBgDraft,
+            setTableHeaderBgDraft,
+            tableGridLineColorDraft,
+            setTableGridLineColorDraft,
+            tableGridLineWeightDraft,
+            setTableGridLineWeightDraft,
+            tableBoldDraft,
+            setTableBoldDraft,
+            tableItalicDraft,
+            setTableItalicDraft,
+            tableUnderlineDraft,
+            setTableUnderlineDraft,
+            tableAlignDraft,
+            setTableAlignDraft,
+            tableFontSizeDraft,
+            setTableFontSizeDraft,
+            tableMinRows,
+            tableMinColumns,
+            onDelete: async () => {
+              if (!selectedTable) return;
+              await handleDeleteProcessElement(selectedTable.id);
+              setSelectedTableId(null);
+            },
+            onSave: handleSaveTable,
+            onClose: () => setSelectedTableId(null),
+            actionDisabledReason: readOnlyActionReason,
+          }}
+          flowShapeProps={{
+            open: !!selectedFlowShape,
+            isMobile,
+            leftAsideSlideIn,
+            title:
+              selectedFlowShape?.element_type === "shape_circle"
+                ? "Circle Properties"
+                : selectedFlowShape?.element_type === "shape_pill"
+                ? "Pill Properties"
+                : selectedFlowShape?.element_type === "shape_pentagon"
+                ? "Pentagon Properties"
+                : selectedFlowShape?.element_type === "shape_chevron_left"
+                ? "Chevron Properties"
+                : selectedFlowShape?.element_type === "shape_arrow"
+                ? "Arrow Properties"
+                : "Rectangle Properties",
+            shapeTextDraft: flowShapeTextDraft,
+            setShapeTextDraft: setFlowShapeTextDraft,
+            shapeAlignDraft: flowShapeAlignDraft,
+            setShapeAlignDraft: setFlowShapeAlignDraft,
+            shapeBoldDraft: flowShapeBoldDraft,
+            setShapeBoldDraft: setFlowShapeBoldDraft,
+            shapeItalicDraft: flowShapeItalicDraft,
+            setShapeItalicDraft: setFlowShapeItalicDraft,
+            shapeUnderlineDraft: flowShapeUnderlineDraft,
+            setShapeUnderlineDraft: setFlowShapeUnderlineDraft,
+            shapeFontSizeDraft: flowShapeFontSizeDraft,
+            setShapeFontSizeDraft: setFlowShapeFontSizeDraft,
+            shapeColorDraft: flowShapeColorDraft,
+            setShapeColorDraft: setFlowShapeColorDraft,
+            shapeFillModeDraft: flowShapeFillModeDraft,
+            setShapeFillModeDraft: setFlowShapeFillModeDraft,
+            shapeOutlineColorDraft: flowShapeOutlineColorDraft,
+            setShapeOutlineColorDraft: setFlowShapeOutlineColorDraft,
+            shapeOutlineWidthDraft: flowShapeOutlineWidthDraft,
+            setShapeOutlineWidthDraft: setFlowShapeOutlineWidthDraft,
+            canFlipDirection:
+              selectedFlowShape?.element_type === "shape_pentagon" ||
+              selectedFlowShape?.element_type === "shape_chevron_left",
+            shapeDirectionDraft: flowShapeDirectionDraft,
+            setShapeDirectionDraft: setFlowShapeDirectionDraft,
+            supportsText: selectedFlowShape?.element_type !== "shape_arrow",
+            canRotate: selectedFlowShape?.element_type === "shape_arrow",
+            shapeRotationDraft: flowShapeRotationDraft,
+            setShapeRotationDraft: setFlowShapeRotationDraft,
+            onDelete: async () => {
+              if (!selectedFlowShape) return;
+              await handleDeleteProcessElement(selectedFlowShape.id);
+              setSelectedFlowShapeId(null);
+            },
+            onSave: handleSaveFlowShape,
+            onClose: () => setSelectedFlowShapeId(null),
+            actionDisabledReason: readOnlyActionReason,
+          }}
+          documentProps={{
+            open: !!selectedNode && !isMobile,
+            leftAsideSlideIn,
+            onClose: handleCloseDocumentPropertiesPanel,
+            onOpenRelationship: () => {
+              if (!selectedNode) return;
+              openAddRelationshipFromSource({ nodeId: selectedNode.id });
+            },
+            onOpenStructure: async () => {
+              if (!selectedNode) return;
+              setOutlineCreateMode(null);
+              closeOutlineEditor();
+              setConfirmDeleteOutlineItemId(null);
+              setCollapsedHeadingIds(new Set());
+              setOutlineNodeId(selectedNode.id);
+              await loadOutline(selectedNode.id);
+              setDesktopNodeAction("structure");
+            },
+            onOpenDelete: () => {
+              if (!selectedNode) return;
+              setConfirmDeleteNodeId(selectedNode.id);
+              setDesktopNodeAction("delete");
+            },
+            selectedTypeId,
+            setSelectedTypeId,
+            showTypeSelectArrowUp,
+            setShowTypeSelectArrowUp,
+            addDocumentTypes,
+            getDisplayTypeName,
+            title,
+            setTitle,
+            documentNumber,
+            setDocumentNumber,
+            disciplineMenuRef,
+            showDisciplineMenu,
+            setShowDisciplineMenu,
+            disciplineSelection,
+            setDisciplineSelection,
+            disciplineOptions,
+            getDisciplineLabel: (key) => disciplineLabelByKey.get(key),
+            userGroup,
+            setUserGroup,
+            showUserGroupSelectArrowUp,
+            setShowUserGroupSelectArrowUp,
+            userGroupOptions,
+            ownerName,
+            setOwnerName,
+            onSaveNode: handleSaveNode,
+            relatedRows,
+            resolveLabels: resolveDocumentRelationLabels,
+            relationshipSectionProps: sharedRelationshipSectionProps,
+            actionDisabledReason: readOnlyActionReason,
+          }}
+        />
+        <CanvasDrilldownOverlays
+          orgChartDirectReportAsideProps={{
+            open: Boolean(mapCategoryId === "org_chart" && !isMobile && desktopNodeAction === "relationship" && showAddRelationship),
+            sourceLabel: orgDirectReportSourceLabel,
+            query: relationshipSystemQuery,
+            setQuery: setRelationshipSystemQuery,
+            showOptions: showRelationshipSystemOptions,
+            setShowOptions: setShowRelationshipSystemOptions,
+            candidates: orgDirectReportCandidates,
+            selectedTargetId: relationshipTargetSystemId,
+            setSelectedTargetId: setRelationshipTargetSystemId,
+            notes: relationshipDescription,
+            setNotes: setRelationshipDescription,
+            onAdd: handleAddOrgDirectReport,
+            onCancel: () => {
+              closeAddRelationshipModal();
+              setDesktopNodeAction(null);
+            },
+          }}
+          addRelationshipAsideProps={{
+            open: Boolean(mapCategoryId !== "org_chart" && !isMobile && desktopNodeAction === "relationship" && showAddRelationship),
+            relationshipModeGrouping,
+            relationshipSourceLabel:
+              relationshipSourceNode?.title ||
+              (relationshipSourceSystem ? getElementDisplayName(relationshipSourceSystem) : "") ||
+              relationshipSourceGrouping?.heading ||
+              "",
+            relationshipSourceNodeTitle: relationshipSourceNode?.title || "",
+            relationshipSourceGroupingHeading: relationshipSourceGrouping?.heading || "",
+            allowDocumentTargets,
+            allowSystemTargets,
+            relationshipGroupingQuery,
+            setRelationshipGroupingQuery,
+            groupingRelationCandidateIdByLabel,
+            setRelationshipTargetGroupingId,
+            alreadyRelatedGroupingTargetIds,
+            showRelationshipGroupingOptions,
+            setShowRelationshipGroupingOptions,
+            groupingRelationCandidates,
+            groupingRelationCandidateLabelById,
+            relationshipDocumentQuery,
+            setRelationshipDocumentQuery,
+            documentRelationCandidateIdByLabel,
+            setRelationshipTargetDocumentId,
+            alreadyRelatedDocumentTargetIds,
+            showRelationshipDocumentOptions,
+            setShowRelationshipDocumentOptions,
+            documentRelationCandidates,
+            documentRelationCandidateLabelById,
+            relationshipSystemQuery,
+            setRelationshipSystemQuery,
+            systemRelationCandidateIdByLabel,
+            setRelationshipTargetSystemId,
+            alreadyRelatedSystemTargetIds,
+            showRelationshipSystemOptions,
+            setShowRelationshipSystemOptions,
+            systemRelationCandidates,
+            systemRelationCandidateLabelById,
+            getElementRelationshipDisplayLabel,
+            relationshipDisciplineSelection,
+            disciplineLabelByKey,
+            showRelationshipDisciplineMenu,
+            setShowRelationshipDisciplineMenu,
+            disciplineOptions,
+            setRelationshipDisciplineSelection,
+            relationshipCategory,
+            setRelationshipCategory,
+            relationshipCategoryOptions,
+            relationshipCustomType,
+            setRelationshipCustomType,
+            relationshipDescription,
+            setRelationshipDescription,
+            relationshipTargetDocumentId,
+            relationshipTargetSystemId,
+            relationshipTargetGroupingId,
+            onAdd: async () => {
+              await handleAddRelation();
+              setDesktopNodeAction(null);
+            },
+            onCancel: () => {
+              closeAddRelationshipModal();
+              setDesktopNodeAction(null);
+            },
+          }}
+          deleteDocumentAsideProps={{
+            open: Boolean(selectedNode && !isMobile && desktopNodeAction === "delete" && !!confirmDeleteNodeId),
+            onDelete: async () => {
+              const id = confirmDeleteNodeId;
+              setConfirmDeleteNodeId(null);
+              setDesktopNodeAction(null);
+              if (!id) return;
+              await handleDeleteNode(id);
+            },
+            onCancel: () => {
+              setConfirmDeleteNodeId(null);
+              setDesktopNodeAction(null);
+            },
+          }}
+          mobileDocumentPropertiesModalProps={{
+            open: Boolean(selectedNode && isMobile),
+            onClose: () => setSelectedNodeId(null),
+            selectedTypeId,
+            setSelectedTypeId,
+            addDocumentTypes,
+            getDisplayTypeName,
+            title,
+            setTitle,
+            documentNumber,
+            setDocumentNumber,
+            showDisciplineMenu,
+            setShowDisciplineMenu,
+            disciplineMenuRef,
+            disciplineSelection,
+            setDisciplineSelection,
+            disciplineOptions,
+            getDisciplineLabel: (key) => disciplineLabelByKey.get(key),
+            userGroup,
+            setUserGroup,
+            userGroupOptions,
+            ownerName,
+            setOwnerName,
+            onSaveNode: handleSaveNode,
+            relatedItems: mobileRelatedItems,
+            onDeleteRelation: handleDeleteRelation,
+          }}
+          documentStructureAsideProps={{
+            open: Boolean(isMobile || shouldShowDesktopStructurePanel),
+            isMobile,
+            outlineNodeId,
+            shouldShowDesktopStructurePanel,
+            onClose: () => {
+              setOutlineNodeId(null);
+              setOutlineCreateMode(null);
+              closeOutlineEditor();
+              setConfirmDeleteOutlineItemId(null);
+              setDesktopNodeAction(null);
+            },
+            setOutlineCreateMode,
+            closeOutlineEditor,
+            setNewHeadingTitle,
+            setNewHeadingLevel,
+            setNewHeadingParentId,
+            setNewContentText,
+            setNewContentHeadingId,
+            headingItems,
+            outlineCreateMode,
+            newHeadingTitle,
+            newHeadingLevel,
+            newHeadingParentId,
+            level1Headings,
+            level2Headings,
+            handleCreateHeading,
+            newContentHeadingId,
+            newContentText,
+            handleCreateContent,
+            outlineEditItem,
+            editHeadingTitle,
+            setEditHeadingTitle,
+            editHeadingLevel,
+            setEditHeadingLevel,
+            editHeadingParentId,
+            setEditHeadingParentId,
+            editContentHeadingId,
+            setEditContentHeadingId,
+            editContentText,
+            setEditContentText,
+            handleSaveOutlineEdit,
+            visibleOutlineItems,
+            outlineItems,
+            collapsedHeadingIds,
+            setCollapsedHeadingIds,
+            openOutlineEditor,
+            setConfirmDeleteOutlineItemId,
+          }}
+        />
+
+      </main>
+    </div>
+  );
+}
+
+export default function SystemMapCanvasClient({
+  mapId,
+  showWelcomeOnLoad = false,
+  templateEditorTemplateId = null,
+  templateEditorTemplateName = null,
+  templateEditorIsGlobal = false,
+  entrySource = "dashboard",
+}: {
+  mapId: string;
+  showWelcomeOnLoad?: boolean;
+  templateEditorTemplateId?: string | null;
+  templateEditorTemplateName?: string | null;
+  templateEditorIsGlobal?: boolean;
+  entrySource?: "dashboard" | "templates";
+}) {
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const proto = Element.prototype as Element & {
+      __systemMapReleasePointerCapturePatched?: boolean;
+      __systemMapOriginalReleasePointerCapture?: typeof Element.prototype.releasePointerCapture;
+    };
+    if (proto.__systemMapReleasePointerCapturePatched) return;
+    const original = Element.prototype.releasePointerCapture;
+    proto.__systemMapOriginalReleasePointerCapture = original;
+    Element.prototype.releasePointerCapture = function patchedReleasePointerCapture(pointerId: number) {
+      try {
+        if (typeof this.hasPointerCapture === "function" && !this.hasPointerCapture(pointerId)) {
+          return;
+        }
+        original.call(this, pointerId);
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "NotFoundError") {
+          return;
+        }
+        throw error;
+      }
+    };
+    proto.__systemMapReleasePointerCapturePatched = true;
+  }, []);
+
+  useEffect(() => {
+    const body = document.body;
+    const main = document.querySelector("body > main");
+
+    body.classList.add("system-map-route");
+    main?.classList.add("dashboardSystemMapMain");
+
+    return () => {
+      body.classList.remove("system-map-route");
+      main?.classList.remove("dashboardSystemMapMain");
+    };
+  }, []);
+
+  return (
+    <ReactFlowProvider>
+      <SystemMapCanvasInner
+        mapId={mapId}
+        showWelcomeOnLoad={showWelcomeOnLoad}
+        templateEditorTemplateId={templateEditorTemplateId}
+        templateEditorTemplateName={templateEditorTemplateName}
+        templateEditorIsGlobal={templateEditorIsGlobal}
+        entrySource={entrySource}
+      />
+    </ReactFlowProvider>
+  );
+}
+

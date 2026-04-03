@@ -1,79 +1,80 @@
 "use client";
 
-import styles from "./DashboardShell.module.css";
+import DashboardShell from "./DashboardShell";
+import shellStyles from "./DashboardShell.module.css";
+import loaderStyles from "@/components/loading/HsesLoaders.module.css";
+import { CardGridSkeleton, DetailPageSkeleton, LoadingRow, TableSkeleton } from "@/components/loading/HsesLoaders";
 
-export function DashboardPageSkeleton({ title }: { title: string }) {
+type DashboardPageSkeletonProps = {
+  title: string;
+  eyebrow?: string;
+  subtitle?: string;
+  activeNav?: "dashboard" | "templates" | "account";
+  variant?: "table" | "cards" | "detail";
+  rows?: number;
+  columns?: string;
+  showToolbar?: boolean;
+};
+
+function HeaderSummarySkeleton() {
   return (
-    <div className={styles.viewport}>
-      <div className={styles.deviceShell}>
-        <div className={styles.deviceBezel}>
-      <aside className={styles.sidebar} aria-hidden="true">
-        <div className={styles.sidebarTop}>
-          <div className={styles.accountSummaryPrimary}>
-            <div className={styles.pageSkeletonAvatar} />
-            <div className={styles.pageEyebrowSkeleton} style={{ width: "7rem" }} />
-          </div>
-          <div className={styles.tableToolbarSkeletonButton} style={{ width: "2.5rem", height: "2.5rem" }} />
-        </div>
-        <div className={styles.sidebarNav}>
-          {Array.from({ length: 6 }).map((_, index) => (
-            <div key={index} className={styles.sidebarSkeletonLink} />
-          ))}
-        </div>
-      </aside>
-
-      <section className={styles.canvas}>
-        <header className={styles.topbar} aria-hidden="true">
-          <div className={styles.greetingBlock}>
-            <div>
-            <div className={styles.pageEyebrowSkeleton} />
-            <div className={styles.pageTitleSkeleton} />
-            <div className={styles.pageSubtitleSkeleton} />
-          </div>
-          </div>
-          <div className={styles.accountSummarySkeleton} />
-        </header>
-
-        <div className={styles.body}>
-        <section className={styles.accountCard} aria-label={`${title} loading`}>
-          <div className={styles.tableToolbar}>
-            <div className={styles.tableToolbarSkeletonButton} />
-          </div>
-          <div className={styles.pageSkeletonTable}>
-            {Array.from({ length: 4 }).map((_, index) => (
-              <div key={index} className={styles.pageSkeletonRow}>
-                <div className={styles.pageSkeletonAvatar} />
-                <div className={styles.pageSkeletonRowBody}>
-                  <div className={styles.pageSkeletonLineShort} />
-                  <div className={styles.pageSkeletonLineMedium} />
-                  <div className={styles.pageSkeletonLineLong} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-        </div>
-      </section>
+    <div className={shellStyles.accountSummary} aria-hidden="true">
+      <div className={shellStyles.accountSummaryText}>
+        <div className={shellStyles.accountSummaryPrimary}>
+          <div className={loaderStyles.line} style={{ width: "6rem" }} />
+          <div className={loaderStyles.line} style={{ width: "12rem" }} />
         </div>
       </div>
     </div>
   );
 }
 
+export function DashboardPageSkeleton({
+  title,
+  eyebrow = "Investigation Tool",
+  subtitle,
+  activeNav = "dashboard",
+  variant = "table",
+  rows,
+  columns,
+  showToolbar,
+}: DashboardPageSkeletonProps) {
+  const content =
+    variant === "cards" ? (
+      <CardGridSkeleton cards={3} />
+    ) : variant === "detail" ? (
+      <DetailPageSkeleton />
+    ) : (
+      <TableSkeleton rows={rows} columns={columns} showToolbar={showToolbar} />
+    );
+
+  return (
+    <DashboardShell
+      activeNav={activeNav}
+      eyebrow={eyebrow}
+      title={title}
+      subtitle={subtitle}
+      headerRight={<HeaderSummarySkeleton />}
+    >
+      <section className={shellStyles.accountCard} aria-label={`${title} loading`}>
+        {content}
+      </section>
+    </DashboardShell>
+  );
+}
+
 export function DashboardTableLoadingState({ message }: { message: string }) {
   return (
-    <div className={styles.tableLoadingState}>
-      <div className={styles.tableLoadingBar} aria-hidden="true" />
-      <span>{message}</span>
+    <div className={shellStyles.tableLoadingState}>
+      <LoadingRow label={message} />
     </div>
   );
 }
 
 export function DashboardMobileLoadingState({ message }: { message: string }) {
   return (
-    <div className={styles.dashboardMobileState}>
-      <div className={styles.tableLoadingBar} aria-hidden="true" />
-      <span>{message}</span>
+    <div className={shellStyles.dashboardMobileState}>
+      <LoadingRow label={message} />
     </div>
   );
 }

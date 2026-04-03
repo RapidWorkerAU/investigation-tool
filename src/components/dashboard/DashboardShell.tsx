@@ -25,6 +25,13 @@ const sidebarLinks = [
   { key: "account" as const, href: "/account", label: "Edit Account", icon: "/icons/account.svg" },
 ];
 
+const DESKTOP_SIDEBAR_STATE_KEY = "investigation_tool_dashboard_sidebar_collapsed";
+
+const getInitialDesktopSidebarCollapsed = () => {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(DESKTOP_SIDEBAR_STATE_KEY) === "true";
+};
+
 export default function DashboardShell({
   activeNav = "dashboard",
   eyebrow,
@@ -39,7 +46,7 @@ export default function DashboardShell({
   const [logoutConfirmArmed, setLogoutConfirmArmed] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(false);
+  const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(getInitialDesktopSidebarCollapsed);
 
   useEffect(() => {
     const body = document.body;
@@ -65,6 +72,10 @@ export default function DashboardShell({
       document.body.style.overflow = previousOverflow;
     };
   }, [mobileMenuOpen]);
+
+  useEffect(() => {
+    window.localStorage.setItem(DESKTOP_SIDEBAR_STATE_KEY, String(desktopSidebarCollapsed));
+  }, [desktopSidebarCollapsed]);
 
   const handleLogout = async () => {
     if (!logoutConfirmArmed) {

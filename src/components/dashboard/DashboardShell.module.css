@@ -202,6 +202,11 @@
   margin-top: 4px;
 }
 
+.sidebarCollapsed .sidebarNav,
+.sidebarCollapsed .sidebarFooter {
+  justify-items: center;
+}
+
 .sidebarNav {
   display: grid;
   gap: 10px;
@@ -281,8 +286,16 @@
 }
 
 .sidebarCollapsed .sidebarLink {
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  min-height: 40px;
   justify-content: center;
+  align-items: center;
+  gap: 0;
   padding: 0;
+  border-radius: 14px;
+  justify-self: center;
 }
 
 .sidebarCollapsed .sidebarLinkLabel {
@@ -378,8 +391,9 @@
 }
 
 .toolbarControls {
-  width: 540px;
+  width: fit-content;
   max-width: 100%;
+  min-width: 0;
   margin-left: auto;
   display: grid;
   justify-items: stretch;
@@ -388,6 +402,8 @@
 
 .toolbarControls .headerButtons {
   justify-content: flex-end;
+  align-items: center;
+  flex-wrap: nowrap;
 }
 
 .accountSummary {
@@ -548,17 +564,18 @@
 
 .tableWrap {
   overflow: auto;
-  border-radius: 0;
-  background: #fbfbfc;
+  border-radius: 24px;
+  background: #ffffff;
   border: 1px solid rgba(24, 29, 39, 0.08);
+  box-shadow: 0 10px 24px rgba(24, 29, 39, 0.05);
 }
 
 .reportDataTableWrap {
-  overflow: visible;
-  border: 0;
+  overflow: auto;
   border-radius: 24px;
-  background: rgba(255, 255, 255, 0.76);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  background: #ffffff;
+  border: 1px solid rgba(24, 29, 39, 0.08);
+  box-shadow: 0 10px 24px rgba(24, 29, 39, 0.05);
 }
 
 .dashboardTableWrap {
@@ -581,12 +598,12 @@
 
 .table th,
 .table td {
-  padding: 10px 12px;
+  padding: 14px 16px;
   text-align: left;
-  border-bottom: 1px solid rgba(24, 29, 39, 0.07);
-  border-right: 1px solid rgba(24, 29, 39, 0.05);
+  border-bottom: 1px solid rgba(24, 29, 39, 0.06);
+  border-right: 0;
   font-size: 0.8rem;
-  vertical-align: middle;
+  vertical-align: top;
   overflow: hidden;
 }
 
@@ -602,24 +619,24 @@
 }
 
 .table th {
-  font-size: 0.62rem;
-  letter-spacing: 0.08em;
+  font-size: 0.68rem;
+  letter-spacing: 0;
   text-transform: none;
-  color: #7b8798;
-  background: #f1f3f5;
+  color: #ffffff;
+  background: linear-gradient(180deg, #626b79 0%, #4f5866 100%);
   white-space: normal;
   font-weight: 700;
 }
 
 .reportDataTable th {
-  padding: 12px 16px;
-  background: linear-gradient(180deg, #59626f 0%, #434d5a 100%);
-  color: #f5f8fc;
-  font-size: 0.88rem;
+  padding: 14px 18px;
+  background: linear-gradient(180deg, #626b79 0%, #4f5866 100%);
+  color: #ffffff;
+  font-size: 0.68rem;
   letter-spacing: 0;
   text-transform: none;
   font-weight: 700;
-  white-space: nowrap;
+  white-space: normal;
   border-bottom: 1px solid rgba(24, 29, 39, 0.06);
   border-right: 0;
 }
@@ -641,14 +658,14 @@
 }
 
 .table td {
-  white-space: nowrap;
-  color: #202734;
+  white-space: normal;
+  color: #243041;
   background: #ffffff;
 }
 
 .reportDataTable td {
   padding: 16px;
-  background: transparent;
+  background: #ffffff;
   border-top: 0;
   border-bottom: 1px solid rgba(24, 29, 39, 0.05);
   border-right: 0;
@@ -678,7 +695,7 @@
 }
 
 .reportDataTable tbody tr:hover td {
-  background: rgba(255, 255, 255, 0.34);
+  background: rgba(248, 244, 239, 0.64);
 }
 
 .tableStateCell {
@@ -690,7 +707,7 @@
 }
 
 .table tbody tr:hover td {
-  background: #fafbfd;
+  background: rgba(248, 244, 239, 0.64);
 }
 
 .clickableRow {
@@ -765,31 +782,31 @@
 .tableCheckbox {
   width: 14px;
   height: 14px;
-  accent-color: #4cb16e;
+  accent-color: #4b638f;
   cursor: pointer;
 }
 
 .tablePagination {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   align-items: center;
   gap: 10px;
-  padding: 14px 0 24px;
+  padding: 14px 0 0;
+  flex-wrap: wrap;
 }
 
 .tablePageButton {
-  min-width: 84px;
-  padding: 8px 12px;
-  border: 1px solid rgba(24, 29, 39, 0.16);
-  border-radius: 0;
-  background: rgba(255, 255, 255, 0.92);
-  color: #1e2a38;
+  min-width: 56px;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid rgba(24, 29, 39, 0.1);
+  border-radius: 999px;
+  background: #ffffff;
+  color: #364152;
   font-size: 0.78rem;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
-  box-shadow:
-    0 8px 18px rgba(24, 29, 39, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  box-shadow: 0 4px 14px rgba(24, 29, 39, 0.04);
 }
 
 .tablePageButton:disabled {
@@ -798,8 +815,8 @@
 }
 
 .tablePageStatus {
-  color: #6e7b8f;
-  font-size: 0.78rem;
+  color: #364152;
+  font-size: 0.84rem;
   font-weight: 600;
 }
 
@@ -1594,39 +1611,45 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 42px;
-  padding: 0 16px;
-  border-radius: 0;
-  border: 1px solid rgba(24, 29, 39, 0.12);
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 18px;
+  border-radius: 12px;
+  border: 1px solid #d7dee8;
   text-decoration: none;
   font-weight: 700;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   box-shadow:
-    0 8px 18px rgba(24, 29, 39, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 8px 18px rgba(24, 29, 39, 0.08);
   transition:
     transform 120ms ease,
     box-shadow 120ms ease,
-    filter 120ms ease;
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
 }
 
 .button {
-  background: linear-gradient(180deg, #6e9fe3 0%, #527fc4 100%);
-  border-color: #527fc4;
+  background: linear-gradient(180deg, #126f89 0%, #0d6179 100%);
+  border-color: #0d6179;
   color: #ffffff;
-  gap: 10px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 10px 22px rgba(13, 97, 121, 0.2);
 }
 
 .buttonAccent {
-  min-height: 42px;
+  min-height: 40px;
   padding: 0 18px;
-  border-radius: 0;
-  background: linear-gradient(180deg, #6e9fe3 0%, #527fc4 100%);
-  border-color: #527fc4;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #126f89 0%, #0d6179 100%);
+  border-color: #0d6179;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.28),
-    0 10px 20px rgba(82, 127, 196, 0.18);
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 10px 22px rgba(13, 97, 121, 0.2);
+  color: #ffffff;
 }
 
 .button:hover:not(:disabled),
@@ -1675,8 +1698,8 @@
 
 .buttonSecondary {
   background: #ffffff;
-  border-color: #6e9fe3;
-  color: #355a93;
+  border-color: #d7dee8;
+  color: #243041;
 }
 
 .buttonDanger {
@@ -1705,9 +1728,9 @@
 }
 
 .bulkDeleteButton:disabled {
-  background: #f3f4f6;
-  border-color: rgba(24, 29, 39, 0.08);
-  color: #9aa3b2;
+  background: #f9fafb;
+  border-color: #eceff4;
+  color: #cad0da;
   opacity: 1;
 }
 
@@ -1758,7 +1781,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 12px;
   min-width: 0;
   flex-wrap: nowrap;
 }
@@ -1873,28 +1896,34 @@
 }
 
 .actionButton {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 0;
-  border: 1px solid rgba(24, 29, 39, 0.1);
-  background: #fbfbfc;
+  border-radius: 12px;
+  border: 1px solid #dfe3ea;
+  background: #ffffff;
   box-shadow:
-    0 6px 14px rgba(24, 29, 39, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 8px 16px rgba(24, 29, 39, 0.08);
   cursor: pointer;
   flex: 0 0 auto;
+  transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
 }
 
 .actionButton:hover:not(:disabled) {
-  background: #f0f3f7;
+  transform: translateY(-1px);
+  box-shadow:
+    0 12px 22px rgba(24, 29, 39, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
 }
 
 .actionButton:disabled {
-  opacity: 0.45;
+  opacity: 0.46;
   cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
 }
 
 .actionButtonDanger {
@@ -1902,8 +1931,8 @@
 }
 
 .actionIcon {
-  width: 12px;
-  height: 12px;
+  width: 16px;
+  height: 16px;
   object-fit: contain;
 }
 
