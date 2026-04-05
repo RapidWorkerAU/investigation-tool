@@ -41,6 +41,7 @@ const calculateBowtieRiskLevel = (likelihoodRaw: string, consequenceRaw: string)
 };
 
 const squarePaletteRows = [
+  ["#F7E3E3", "#F4E7DA", "#F2F1D8", "#E2EFD5", "#D7EED8", "#D2EBDD", "#D3EAEA", "#D7E4F0", "#DFDFF1", "#E8DFF1", "#F0DFF0", "#F2DFEA", "#FFFFFF"],
   ["#EBC0C0", "#E5CFB6", "#E3E3B5", "#C7E2B0", "#B1E1B3", "#A7DEBF", "#A6DCE0", "#A7C9E3", "#B4B4E0", "#CAB4E1", "#DDB2DF", "#E2B2CF", "#DCDCDC"],
   ["#EE8F91", "#E8BD8D", "#E4E68A", "#B4E189", "#88DF8D", "#83D8AB", "#7FD2D4", "#83B3DF", "#8F8DDE", "#B18BDE", "#D883D9", "#E288C0", "#C9C9C9"],
   ["#FA6565", "#F1AF67", "#ECEF57", "#A2EA56", "#61E95F", "#5FDEA0", "#59D6D8", "#549FE6", "#6163E6", "#9E5AE5", "#DB59E2", "#EC5BAC", "#B3B3B3"],
@@ -162,7 +163,9 @@ function PaletteSwatchGrid({ selectedColor, swatchKeyPrefix, onSelect }: Palette
               <button
                 key={`${swatchKeyPrefix}-${rowIndex}-${colIndex}`}
                 type="button"
-                className={`aspect-square w-full ${cornerClassName} ${selected ? "ring-2 ring-black ring-inset" : ""}`}
+                className={`aspect-square w-full border ${cornerClassName} ${selected ? "ring-2 ring-black ring-inset" : ""} ${
+                  hex.toLowerCase() === "#ffffff" ? "border-slate-300" : "border-transparent"
+                }`}
                 style={{ backgroundColor: hex }}
                 onClick={() => onSelect(hex)}
                 title={hex}
@@ -269,7 +272,7 @@ function OutlineWeightField({ value, onChange }: { value: string; onChange: (val
 function AsideShell({ isMobile, leftAsideSlideIn, title, onClose, children }: AsideShellProps) {
   return (
     <aside
-      className={`fixed border-r border-[#0b1f33] bg-[#102a43] text-slate-100 shadow-[12px_0_30px_rgba(2,12,27,0.45)] transition-transform duration-300 ${
+      className={`canvas-left-aside fixed border-r border-[#0b1f33] bg-[#102a43] text-slate-100 shadow-[12px_0_30px_rgba(2,12,27,0.45)] transition-transform duration-300 ${
         isMobile ? "inset-0 z-[98] w-full max-w-full" : "bottom-0 left-0 top-[64px] z-[75] w-full max-w-[420px]"
       }`}
       style={{ transform: isMobile ? "translateX(0)" : leftAsideSlideIn ? "translateX(0)" : "translateX(-100%)" }}

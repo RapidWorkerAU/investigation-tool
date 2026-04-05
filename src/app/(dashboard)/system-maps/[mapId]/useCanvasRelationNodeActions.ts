@@ -407,7 +407,7 @@ export function useCanvasRelationNodeActions({
     setSelectedNodeId,
   ]);
 
-  const handleSaveNode = useCallback(async () => {
+  const handleSaveNode = useCallback(async (closeAfterSave = true) => {
     if (!canWriteMap) {
       setError("You have view access only for this map.");
       return;
@@ -445,7 +445,7 @@ export function useCanvasRelationNodeActions({
     }
     const updated = data as DocumentNodeRow;
     setNodes((prev) => prev.map((n) => (n.id === updated.id ? updated : n)));
-    setSelectedNodeId(null);
+    if (closeAfterSave) setSelectedNodeId(null);
   }, [
     canWriteMap,
     disciplineSelection,

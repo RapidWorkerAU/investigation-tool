@@ -164,6 +164,7 @@ import { CanvasDrilldownOverlays } from "./canvasDrilldownAsides";
 import { CanvasConfirmDialogs } from "./canvasDialogs";
 import { CanvasElementPropertyOverlays } from "./canvasPropertyOverlays";
 import { SystemMapWelcomeModal } from "./SystemMapWelcomeModal";
+import { CanvasHelpModal } from "./CanvasHelpModal";
 import { defaultMapCategoryId, getAllowedNodeKindsForCategory, type MapCategoryId } from "./mapCategories";
 import { useCanvasRelationNodeActions } from "./useCanvasRelationNodeActions";
 import { useCanvasElementActions } from "./useCanvasElementActions";
@@ -350,6 +351,7 @@ function SystemMapCanvasInner({
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [showWizardModal, setShowWizardModal] = useState(false);
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  const [showHelpModal, setShowHelpModal] = useState(false);
   const [wizardSaving, setWizardSaving] = useState(false);
   const [isNodeDragActive, setIsNodeDragActive] = useState(false);
   const [showTemplateMenu, setShowTemplateMenu] = useState(false);
@@ -1060,6 +1062,8 @@ function SystemMapCanvasInner({
   });
   const [showDeleteSelectionConfirm, setShowDeleteSelectionConfirm] = useState(false);
   const [leftAsideSlideIn, setLeftAsideSlideIn] = useState(false);
+  const autosavePointerLockRef = useRef(false);
+  const suppressNextPaneClearRef = useRef(false);
   const [collapsedHeadingIds, setCollapsedHeadingIds] = useState<Set<string>>(new Set());
   const [newHeadingTitle, setNewHeadingTitle] = useState("");
   const [newHeadingLevel, setNewHeadingLevel] = useState<1 | 2 | 3>(1);
@@ -4466,7 +4470,7 @@ function SystemMapCanvasInner({
     if (score <= 16) return "high";
     return "extreme";
   }, []);
-  const handleSaveBowtieElement = useCallback(async () => {
+  const handleSaveBowtieElement = useCallback(async (closeAfterSave = true) => {
     if (!canWriteMap) {
       setError("You have view access only for this map.");
       return;
@@ -4534,7 +4538,7 @@ function SystemMapCanvasInner({
       setEvidenceUploadPreviewUrl(null);
       setEvidenceUploadFile(null);
     }
-    setSelectedBowtieElementId(null);
+    if (closeAfterSave) setSelectedBowtieElementId(null);
   }, [
     canWriteMap,
     selectedBowtieElement,
@@ -4609,7 +4613,6 @@ function SystemMapCanvasInner({
       return next;
     });
   }, [closeAllLeftAsides]);
-
   const openAddRelationshipFromSource = useCallback(
     (source: { nodeId?: string | null; systemId?: string | null; groupingId?: string | null }) => {
       setRelationshipSourceNodeId(source.nodeId ?? null);
@@ -4753,6 +4756,132 @@ function SystemMapCanvasInner({
       setOutlineNodeId,
       setOutlineItems,
     });
+  const saveOpenLeftAside = useCallback(async (closeAfterSave = false) => {
+    if (selectedNodeId) {
+      await handleSaveNode(closeAfterSave);
+      return;
+    }
+    if (selectedProcessId) {
+      await handleSaveProcessHeading(closeAfterSave);
+      return;
+    }
+    if (selectedSystemId) {
+      await handleSaveSystemName(closeAfterSave);
+      return;
+    }
+    if (selectedProcessComponentId) {
+      await handleSaveProcessComponent(closeAfterSave);
+      return;
+    }
+    if (selectedPersonId) {
+      await handleSavePerson(closeAfterSave);
+      return;
+    }
+    if (selectedGroupingId) {
+      await handleSaveGroupingContainer(closeAfterSave);
+      return;
+    }
+    if (selectedStickyId) {
+      await handleSaveStickyNote(closeAfterSave);
+      return;
+    }
+    if (selectedImageId) {
+      await handleSaveImageAsset(closeAfterSave);
+      return;
+    }
+    if (selectedTextBoxId) {
+      await handleSaveTextBox(closeAfterSave);
+      return;
+    }
+    if (selectedTableId) {
+      await handleSaveTable(closeAfterSave);
+      return;
+    }
+    if (selectedFlowShapeId) {
+      await handleSaveFlowShape(closeAfterSave);
+      return;
+    }
+    if (selectedBowtieElementId) {
+      await handleSaveBowtieElement(closeAfterSave);
+    }
+  }, [
+    handleSaveBowtieElement,
+    handleSaveFlowShape,
+    handleSaveGroupingContainer,
+    handleSaveImageAsset,
+    handleSaveNode,
+    handleSavePerson,
+    handleSaveProcessComponent,
+    handleSaveProcessHeading,
+    handleSaveStickyNote,
+    handleSaveSystemName,
+    handleSaveTable,
+    handleSaveTextBox,
+    selectedBowtieElementId,
+    selectedFlowShapeId,
+    selectedGroupingId,
+    selectedImageId,
+    selectedNodeId,
+    selectedPersonId,
+    selectedProcessComponentId,
+    selectedProcessId,
+    selectedStickyId,
+    selectedSystemId,
+    selectedTableId,
+    selectedTextBoxId,
+  ]);
+  useEffect(() => {
+    const hasAnyBlueAsideOpen =
+      !!selectedNodeId ||
+      !!selectedProcessId ||
+      !!selectedSystemId ||
+      !!selectedProcessComponentId ||
+      !!selectedPersonId ||
+      !!selectedGroupingId ||
+      !!selectedStickyId ||
+      !!selectedImageId ||
+      !!selectedTextBoxId ||
+      !!selectedTableId ||
+      !!selectedFlowShapeId ||
+      !!selectedBowtieElementId;
+    if (!hasAnyBlueAsideOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+      if (target.closest(".canvas-left-aside")) return;
+      if (autosavePointerLockRef.current) return;
+      const clickedBlankPane = !!target.closest(".react-flow__pane");
+      const clickedFlowNode = target.closest(".react-flow__node");
+      const clickedSelectedTableNode =
+        !!selectedTableId &&
+        !!clickedFlowNode &&
+        parseProcessFlowId(clickedFlowNode.getAttribute("data-id") ?? "") === selectedTableId;
+      const closeAfterSave = clickedBlankPane && !clickedSelectedTableNode;
+      if (clickedBlankPane) suppressNextPaneClearRef.current = true;
+      autosavePointerLockRef.current = true;
+      void saveOpenLeftAside(closeAfterSave).finally(() => {
+        window.setTimeout(() => {
+          autosavePointerLockRef.current = false;
+        }, 0);
+      });
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [
+    saveOpenLeftAside,
+    selectedBowtieElementId,
+    selectedFlowShapeId,
+    selectedGroupingId,
+    selectedImageId,
+    selectedNodeId,
+    selectedPersonId,
+    selectedProcessComponentId,
+    selectedProcessId,
+    selectedStickyId,
+    selectedSystemId,
+    selectedTableId,
+    selectedTextBoxId,
+  ]);
   const { handleDeleteProcessElement, handleDeleteSelectedComponents } = useCanvasDeleteSelectionActions({
     canWriteMap,
     canEditElement,
@@ -4922,6 +5051,7 @@ function SystemMapCanvasInner({
         setShowMapInfoAside={setShowMapInfoAside}
         setIsEditingMapInfo={setIsEditingMapInfo}
         setError={setError}
+        onOpenHelp={() => setShowHelpModal(true)}
       />
 
       <CanvasActionButtons
@@ -5035,6 +5165,13 @@ function SystemMapCanvasInner({
           }
         }}
       />
+      <CanvasHelpModal
+        open={showHelpModal}
+        isMobile={isMobile}
+        mapCategoryId={mapCategoryId}
+        allowedNodeKinds={allowedNodeKinds}
+        onClose={() => setShowHelpModal(false)}
+      />
 
       <MapInfoAside
         isMobile={isMobile}
@@ -5133,6 +5270,10 @@ function SystemMapCanvasInner({
             onPaneClick={() => {
               scheduleHoveredNodeId(null);
               scheduleHoveredEdgeId(null);
+              if (suppressNextPaneClearRef.current) {
+                suppressNextPaneClearRef.current = false;
+                return;
+              }
               handlePaneClickClearSelection();
             }}
             onPaneContextMenu={(e) => {

@@ -22,6 +22,7 @@ type MapCanvasHeaderProps = {
   setShowMapInfoAside: (updater: (prev: boolean) => boolean) => void;
   setIsEditingMapInfo: (value: boolean) => void;
   setError: (value: string | null) => void;
+  onOpenHelp: () => void;
 };
 
 export function MapCanvasHeader({
@@ -42,6 +43,7 @@ export function MapCanvasHeader({
   setShowMapInfoAside,
   setIsEditingMapInfo,
   setError,
+  onOpenHelp,
 }: MapCanvasHeaderProps) {
   const mapCategoryHeaderLabel = (() => {
     if (isTemplateEditor) return "Create / Edit Template Canvas";
@@ -83,21 +85,37 @@ export function MapCanvasHeader({
   return (
     <header className="dashboardCanvasHeader fixed inset-x-0 top-0 z-[90] md:sticky">
       <div
-        className="dashboardCanvasHeaderInner flex flex-col items-center gap-2 md:flex-row md:items-center md:justify-between"
+        className="dashboardCanvasHeaderInner flex flex-col items-stretch gap-2 md:flex-row md:items-center md:justify-between"
         style={{ paddingLeft: "26px", paddingRight: "16px", backgroundColor: "#000000", paddingTop: "8px", paddingBottom: "8px", height: "auto", minHeight: "0" }}
       >
-        <div className="dashboardCanvasHeaderLeft flex flex-col items-center justify-center gap-2 text-center md:flex-row md:items-center md:gap-5 md:text-left">
-          <a href="/"><img src="/images/investigation-tool.png" alt="Investigation Tool" className="block h-[34px] w-auto md:h-[48px]" /></a>
-          <span
-            className="rounded-full border px-4 py-1.5 text-center text-[14px] font-semibold tracking-[0.02em] md:text-left md:text-[16px]"
-            style={{
-              color: "#e2e8f0",
-              backgroundColor: "rgba(148, 163, 184, 0.14)",
-              borderColor: "rgba(148, 163, 184, 0.26)",
-            }}
+        <div className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 md:contents">
+          <div className="dashboardCanvasHeaderLeft flex min-w-0 items-center justify-start gap-3 justify-self-start text-left md:gap-5">
+            <a href="/"><img src="/images/investigation-tool.png" alt="Investigation Tool" className="block h-[34px] w-auto md:h-[48px]" /></a>
+            <span
+              className="min-w-0 rounded-full border px-4 py-1.5 text-center text-[14px] font-semibold tracking-[0.02em] md:text-left md:text-[16px]"
+              style={{
+                color: "#e2e8f0",
+                backgroundColor: "rgba(148, 163, 184, 0.14)",
+                borderColor: "rgba(148, 163, 184, 0.26)",
+              }}
+            >
+              {mapCategoryHeaderLabel}
+            </span>
+          </div>
+          <button
+            type="button"
+            aria-label="Open canvas help"
+            title="Canvas help"
+            onClick={onOpenHelp}
+            className="flex h-8 w-8 shrink-0 justify-self-end items-center justify-center rounded-md border border-slate-600/60 bg-transparent text-white hover:bg-slate-900/50 md:hidden"
           >
-            {mapCategoryHeaderLabel}
-          </span>
+            <span
+              aria-hidden="true"
+              className="flex h-4 w-4 items-center justify-center rounded-full border-2 border-current text-[10px] font-bold leading-none text-white"
+            >
+              ?
+            </span>
+          </button>
         </div>
         <div className="dashboardCanvasHeaderActions flex w-full items-center justify-center md:w-auto md:justify-end">
           <div className="flex w-full flex-wrap items-center justify-center gap-2 overflow-hidden md:w-auto md:flex-nowrap md:justify-end">
@@ -173,6 +191,20 @@ export function MapCanvasHeader({
                 className="h-4 w-4 bg-current"
                 style={{ WebkitMaskImage: "url('/icons/info.svg')", maskImage: "url('/icons/info.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
               />
+            </button>
+            <button
+              type="button"
+              aria-label="Open canvas help"
+              title="Canvas help"
+              onClick={onOpenHelp}
+              className="hidden h-8 w-8 items-center justify-center rounded-md border border-slate-600/60 bg-transparent text-white hover:bg-slate-900/50 md:inline-flex"
+            >
+              <span
+                aria-hidden="true"
+                className="flex h-4 w-4 items-center justify-center rounded-full border-2 border-current text-[10px] font-bold leading-none text-white"
+              >
+                ?
+              </span>
             </button>
           </div>
         </div>
