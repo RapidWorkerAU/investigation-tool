@@ -9,6 +9,16 @@ export const createAnonServerClient = () =>
     auth: { persistSession: false },
   });
 
+export const createAuthedServerClient = (accessToken: string) =>
+  createClient(supabaseUrl, supabaseAnonKey, {
+    auth: { persistSession: false },
+    global: {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  });
+
 export const createServiceRoleClient = () =>
   createClient(supabaseUrl, supabaseServiceRoleKey, {
     auth: { persistSession: false },

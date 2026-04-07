@@ -1,0 +1,130 @@
+.wrap {
+  min-height: calc(100dvh - 70px);
+  display: grid;
+  place-items: center;
+  padding: 28px 24px;
+  background:
+    radial-gradient(circle at 18% 18%, rgba(31, 123, 198, 0.12), transparent 44%),
+    radial-gradient(circle at 82% 22%, rgba(143, 93, 245, 0.1), transparent 40%),
+    linear-gradient(180deg, #eff3f8 0%, #e8eef5 100%);
+}
+
+.wrapInline {
+  min-height: 420px;
+  border-radius: 0;
+  background: transparent;
+}
+
+.panel {
+  width: min(720px, 100%);
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #56667d;
+  font-weight: 700;
+}
+
+.title {
+  margin: 0;
+  color: #111827;
+  font-size: 2rem;
+  line-height: 1.04;
+  font-weight: 700;
+  text-align: center;
+}
+
+.subtitle {
+  margin: 0;
+  color: #526173;
+  font-size: 0.95rem;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.iconShell {
+  position: relative;
+  width: 82px;
+  height: 102px;
+  border: 2px solid #1f3045;
+  border-radius: 14px;
+  background: #ffffff;
+  overflow: hidden;
+  box-shadow: 0 16px 34px rgba(21, 36, 58, 0.14);
+}
+
+.iconFold {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 24px;
+  height: 24px;
+  background: linear-gradient(135deg, #d8e0ea 0%, #f7fbff 100%);
+  border-left: 2px solid #1f3045;
+  border-bottom: 2px solid #1f3045;
+}
+
+.fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(180deg, #1cc1f2 0%, #2d73e0 52%, #8b5cf6 100%);
+  transition: height 380ms ease-out;
+}
+
+.iconGlyph {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 1.25rem;
+  color: #0f1f36;
+  mix-blend-mode: multiply;
+  font-weight: 700;
+}
+
+.progressWrap {
+  width: min(560px, 100%);
+  display: grid;
+  gap: 10px;
+}
+
+.progressMeta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #4e5f78;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 700;
+}
+
+.track {
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(95, 117, 147, 0.22);
+  overflow: hidden;
+}
+
+.bar {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #1cc1f2 0%, #2d73e0 52%, #8b5cf6 100%);
+  transition: width 380ms ease-out;
+}
+
+.quip {
+  margin: 0;
+  text-align: center;
+  color: #2a3a50;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}

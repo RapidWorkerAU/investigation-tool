@@ -1652,9 +1652,22 @@
   color: #ffffff;
 }
 
+.buttonWizard {
+  min-height: 40px;
+  padding: 0 18px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #2563eb 0%, #6d28d9 52%, #db2777 100%);
+  border-color: #5b21b6;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 14px 30px rgba(79, 70, 229, 0.26);
+  color: #ffffff;
+}
+
 .button:hover:not(:disabled),
 .buttonDanger:hover:not(:disabled),
 .buttonAccent:hover:not(:disabled),
+.buttonWizard:hover:not(:disabled),
 .buttonSecondary:hover:not(:disabled),
 .tablePageButton:hover:not(:disabled),
 .actionButton:hover:not(:disabled) {
@@ -1667,6 +1680,7 @@
 .button:disabled,
 .buttonDanger:disabled,
 .buttonAccent:disabled,
+.buttonWizard:disabled,
 .buttonSecondary:disabled,
 .tablePageButton:disabled {
   opacity: 0.5;
@@ -2132,6 +2146,7 @@
 .reportLayout {
   display: grid;
   gap: 18px;
+  padding-bottom: 20px;
 }
 
 .reportBackButton {
@@ -2167,20 +2182,20 @@
 }
 
 .reportToggleBar {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 16px;
-  padding: 18px 0 8px;
+  padding: 8px 0 8px;
   overflow-x: auto;
 }
 
 .reportToggleGroup {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px;
-  border-radius: 999px;
+  gap: 0px;
+  padding: 2px;
+  border-radius: 10px;
   background: linear-gradient(180deg, #515a67 0%, #3f4956 100%);
   border: 1px solid rgba(24, 29, 39, 0.18);
   box-shadow:
@@ -2192,6 +2207,7 @@
   margin-left: auto;
   display: flex;
   align-items: center;
+  gap: 12px;
   flex: 0 0 auto;
 }
 
@@ -2238,10 +2254,10 @@
 
 .reportToggleButton {
   flex: 0 0 auto;
-  min-height: 42px;
-  padding: 0 18px;
+  min-height: 30px;
+  padding: 10px 2px;
   border: 0;
-  border-radius: 999px;
+  border-radius: 10px;
   background: transparent;
   color: rgba(255, 255, 255, 0.96);
   font-size: 0.98rem;
@@ -2447,6 +2463,175 @@
   gap: 18px;
 }
 
+.reportScopeSplitLayout {
+  display: grid;
+  grid-template-columns: 30% minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+  width: 100%;
+}
+
+.reportScopeColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  align-self: start;
+  width: 100%;
+  min-width: 0;
+}
+
+.reportScopePanel {
+  display: grid;
+  gap: 18px;
+  padding: 20px 22px;
+  background: #ffffff;
+  border: 1px solid rgba(24, 29, 39, 0.08);
+  box-shadow: none;
+  align-self: start;
+  height: fit-content;
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.reportScopePanelAccent {
+  background: #c9722c;
+  border-color: #c9722c;
+}
+
+.reportScopePanelAccent .reportScopeMetaGrid dt,
+.reportScopePanelAccent .reportScopeMetaGrid dd {
+  color: #fffaf3;
+}
+
+.reportScopeCornerAction {
+  position: absolute;
+  top: 20px;
+  right: 22px;
+  z-index: 1;
+}
+
+.reportScopeInlineIconButton {
+  padding: 0;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.reportScopeInlineIconButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.reportScopeIcon {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.reportScopePanelAccent .reportScopeIcon {
+  filter: brightness(0) invert(1);
+}
+
+.reportScopeMetaGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+  margin: 0;
+}
+
+.reportScopeMetaGrid div {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+}
+
+.reportScopeMetaGrid > div:first-child {
+  padding-right: 28px;
+}
+
+.reportScopeMetaGrid dt {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #2e3744;
+}
+
+.reportScopeMetaGrid dd {
+  margin: 0;
+  color: #1f2530;
+  font-size: 0.94rem;
+}
+
+.reportScopeStackForm {
+  display: grid;
+  gap: 16px;
+}
+
+.reportScopeReadStack {
+  display: grid;
+  gap: 16px;
+}
+
+.reportScopeReadRow {
+  display: grid;
+  gap: 6px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(24, 29, 39, 0.08);
+}
+
+.reportScopeReadRow:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.reportScopeLongDescriptionHeader {
+  display: grid;
+  gap: 6px;
+}
+
+.reportScopeLongDescriptionHeaderAccent {
+  margin: -20px -22px 0;
+  padding: 20px 22px 18px;
+  background: #c9722c;
+}
+
+.reportScopeLongDescriptionHeader h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: #181d27;
+}
+
+.reportScopeLongDescriptionHeader p {
+  margin: 0;
+  color: #586475;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.reportScopeLongDescriptionHeaderAccent h3,
+.reportScopeLongDescriptionHeaderAccent p {
+  color: #fffaf3;
+}
+
+.reportScopeLongDescriptionBox {
+  min-height: 260px;
+  padding: 18px 0 0;
+  border-top: 1px solid rgba(24, 29, 39, 0.08);
+  color: #252b36;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
 .reportScopeReadCard {
   display: grid;
   gap: 12px;
@@ -2483,7 +2668,7 @@
 
 .reportScopeReadNarrative {
   padding-top: 0;
-  min-height: 88px;
+  min-height: 0;
   white-space: pre-wrap;
 }
 
@@ -2539,7 +2724,7 @@
   display: none;
 }
 
-@media (min-width: 1081px) and (max-width: 1500px) {
+@media (min-width: 1081px) and (max-width: 2000px) {
   .topbar {
     padding: 22px 26px 18px;
     gap: 14px;
@@ -2570,7 +2755,7 @@
   .reportToggleBar {
     flex-direction: row;
     gap: 12px;
-    padding: 14px 0 6px;
+    padding: 0px;
     align-items: center;
     overflow-x: visible;
   }
@@ -2578,19 +2763,18 @@
   .reportToggleGroup {
     flex: 1 1 auto;
     min-width: 0;
-    width: 100%;
-    display: grid;
-    grid-template-columns: repeat(9, minmax(max-content, 1fr));
+    width: fit-content;
+    display: inline-flex;
     gap: 3px;
     padding: 4px;
-    border-radius: 999px;
+    border-radius: 10px;
   }
 
   .reportToggleButton {
-    width: 100%;
+    width: auto;
     min-width: 0;
     min-height: 38px;
-    padding: 0 10px;
+    padding: 10px;
     font-size: 0.74rem;
     line-height: 1.1;
     text-align: center;
@@ -2600,7 +2784,7 @@
   .reportToggleActions {
     margin-left: auto;
     flex: 0 0 auto;
-    justify-content: flex-end;
+    justify-content: flex-start;
     width: auto;
     align-self: center;
   }
@@ -3863,7 +4047,7 @@
 
   .reportToggleBarMobileSelectOnly .reportToggleActions {
     width: 100%;
-    margin-left: 0;
+    margin-left: auto;
     order: 1;
   }
 
@@ -3872,7 +4056,7 @@
   }
 
   .reportToggleGroup {
-    width: min(100%, 640px);
+    width: fit-content;
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 4px;
@@ -3881,10 +4065,10 @@
   }
 
   .reportToggleButton {
-    width: 100%;
+    width: auto%;
     min-width: 0;
     min-height: 38px;
-    padding: 0 5px;
+    padding: 0px;
     font-size: 0.64rem;
     letter-spacing: -0.015em;
     text-align: center;
@@ -3914,7 +4098,7 @@
 
   .reportToggleActions {
     width: 100%;
-    margin-left: 0;
+    margin-left: auto;
     order: 1;
   }
 
@@ -3938,9 +4122,11 @@
   }
 
   .reportScopeReadLayout,
+  .reportScopeSplitLayout,
   .reportScopeSummaryGrid,
   .reportScopeForm,
-  .reportListThreeCol {
+  .reportListThreeCol,
+  .reportScopeMetaGrid {
     grid-template-columns: 1fr;
   }
 
@@ -4247,7 +4433,7 @@
   }
 
   .reportToggleGroup {
-    width: 100%;
+    width: fit-content;
     padding: 4px;
     gap: 4px;
     border-radius: 20px;
@@ -4255,7 +4441,7 @@
 
   .reportToggleButton {
     min-height: 36px;
-    padding: 0 7px;
+    padding: 0px;
     font-size: 0.69rem;
     letter-spacing: -0.01em;
   }

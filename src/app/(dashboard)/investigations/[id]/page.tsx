@@ -7,6 +7,8 @@ import DashboardShell from "@/components/dashboard/DashboardShell";
 import styles from "@/components/dashboard/DashboardShell.module.css";
 import { DashboardPageSkeleton } from "@/components/dashboard/DashboardTableLoadingState";
 import { accessBlocksInvestigationEntry, accessRequiresSelection, fetchAccessState, type BillingAccessState } from "@/lib/access";
+import { normalizeInvestigationReportPayload } from "@/lib/investigation-report/helpers";
+import type { InvestigationReportPayload } from "@/lib/investigation-report/types";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
 
 type MapRow = {
@@ -23,12 +25,15 @@ type MapRow = {
 };
 
 type ScopeFormState = {
-  incident_long_description: string;
   incident_occurred_at: string;
   incident_location: string;
   responsible_person_name: string;
   investigation_lead_name: string;
   items_of_interest: string;
+};
+
+type ScopeMetaFormState = {
+  title: string;
 };
 
 type MemberProfileRow = {
@@ -175,6 +180,15 @@ type RecommendationReportRow = {
   created_at: string;
 };
 
+type SavedInvestigationReportRow = {
+  id: string;
+  status: "draft" | "reviewed" | "approved";
+  generated_at: string;
+  updated_at: string;
+  version_number: number;
+  ai_output_json?: InvestigationReportPayload | null;
+};
+
 type ReportTab =
   | "setup-scope"
   | "sequence"
@@ -184,7 +198,10 @@ type ReportTab =
   | "control-barrier"
   | "evidence"
   | "finding"
-  | "recommendation";
+  | "recommendation"
+  | "reports";
+
+type ReportSortKey = "generated_at" | "updated_at";
 
 type FactorFilterKey = "presence" | "classification" | "category";
 type ColumnFilterKey =
@@ -213,11 +230,12 @@ type MobileFilterSection = {
 
 const reportTabs: Array<{ id: ReportTab; label: string }> = [
   { id: "setup-scope", label: "Scope" },
+  { id: "reports", label: "Reports" },
   { id: "sequence", label: "Sequence" },
   { id: "people", label: "People" },
   { id: "factors", label: "Factors" },
-  { id: "task-condition", label: "Task/Condition" },
-  { id: "control-barrier", label: "Control/ Barrier" },
+  { id: "task-condition", label: "Task" },
+  { id: "control-barrier", label: "Controls" },
   { id: "evidence", label: "Evidence" },
   { id: "finding", label: "Finding" },
   { id: "recommendation", label: "Recommendation" },
@@ -248,6 +266,9 @@ const formatLabel = (value: string) =>
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+
+const EMPTY_LONG_DESCRIPTION_NOTE =
+  "A long description will be auto-generated for you when the first incident report is created.";
 
 const getFactorPresencePillClass = (value: string) => {
   switch (value) {
@@ -343,14 +364,20 @@ export default function InvestigationReportPage() {
   const [error, setError] = useState<string | null>(null);
   const [map, setMap] = useState<MapRow | null>(null);
   const [ownerEmail, setOwnerEmail] = useState<string | null>(null);
+  const [scopeMetaForm, setScopeMetaForm] = useState<ScopeMetaFormState>({
+    title: "",
+  });
   const [scopeForm, setScopeForm] = useState<ScopeFormState>({
-    incident_long_description: "",
     incident_occurred_at: "",
     incident_location: "",
     responsible_person_name: "",
     investigation_lead_name: "",
     items_of_interest: "",
   });
+  const [scopeMetaSaving, setScopeMetaSaving] = useState(false);
+  const [scopeMetaEditing, setScopeMetaEditing] = useState(false);
+  const [scopeMetaMessage, setScopeMetaMessage] = useState<string | null>(null);
+  const [scopeMetaMessageIsError, setScopeMetaMessageIsError] = useState(false);
   const [scopeSaving, setScopeSaving] = useState(false);
   const [scopeEditing, setScopeEditing] = useState(false);
   const [scopeMessage, setScopeMessage] = useState<string | null>(null);
@@ -363,7 +390,10 @@ export default function InvestigationReportPage() {
   const [evidenceRows, setEvidenceRows] = useState<EvidenceReportRow[]>([]);
   const [findingRows, setFindingRows] = useState<FindingReportRow[]>([]);
   const [recommendationRows, setRecommendationRows] = useState<RecommendationReportRow[]>([]);
+  const [savedReports, setSavedReports] = useState<SavedInvestigationReportRow[]>([]);
   const [activeTab, setActiveTab] = useState<ReportTab>("setup-scope");
+  const [reportSortKey, setReportSortKey] = useState<ReportSortKey>("generated_at");
+  const [reportSortDirection, setReportSortDirection] = useState<"asc" | "desc">("desc");
   const [sequenceSortDirection, setSequenceSortDirection] = useState<"asc" | "desc">("asc");
   const [factorFilters, setFactorFilters] = useState<Record<FactorFilterKey, string[] | null>>({
     presence: null,
@@ -387,6 +417,9 @@ export default function InvestigationReportPage() {
   const [factorFilterMenuPosition, setFactorFilterMenuPosition] = useState<FactorFilterMenuPosition | null>(null);
   const [mobileFilterOverlayOpen, setMobileFilterOverlayOpen] = useState(false);
   const [accessState, setAccessState] = useState<BillingAccessState | null>(null);
+  const [reportActionId, setReportActionId] = useState<string | null>(null);
+  const [pendingDeleteReportRow, setPendingDeleteReportRow] = useState<SavedInvestigationReportRow | null>(null);
+  const [showCreateVersionModal, setShowCreateVersionModal] = useState(false);
   const [tablePages, setTablePages] = useState<Record<string, number>>({
     sequence: 1,
     factors: 1,
@@ -395,6 +428,7 @@ export default function InvestigationReportPage() {
     evidence: 1,
     finding: 1,
     recommendation: 1,
+    reports: 1,
   });
   const factorFilterRef = useRef<HTMLDivElement | null>(null);
 
@@ -551,6 +585,16 @@ export default function InvestigationReportPage() {
 
   const hasActiveRecommendationActionTypeFilter = recommendationActionTypeFilter !== null;
 
+  const sortedSavedReports = useMemo(() => {
+    return [...savedReports].sort((a, b) => {
+      const left = new Date(a[reportSortKey]).getTime();
+      const right = new Date(b[reportSortKey]).getTime();
+      const compare = left - right;
+      if (compare !== 0) return reportSortDirection === "asc" ? compare : -compare;
+      return b.version_number - a.version_number;
+    });
+  }, [reportSortDirection, reportSortKey, savedReports]);
+
   const getPagedRows = <T,>(rows: T[], key: keyof typeof tablePages) => {
     const totalPages = Math.max(1, Math.ceil(rows.length / TABLE_PAGE_SIZE));
     const currentPage = Math.min(tablePages[key] ?? 1, totalPages);
@@ -561,6 +605,22 @@ export default function InvestigationReportPage() {
       totalPages,
     };
   };
+
+  const pagedReports = getPagedRows(sortedSavedReports, "reports");
+
+  const latestGeneratedLongDescription = useMemo(() => {
+    const latestReport = [...savedReports].sort((a, b) => b.version_number - a.version_number)[0];
+    if (!latestReport?.ai_output_json) return "";
+
+    try {
+      const normalizedReport = normalizeInvestigationReportPayload(
+        latestReport.ai_output_json as InvestigationReportPayload,
+      );
+      return normalizedReport.report.sections.long_description?.trim() ?? "";
+    } catch {
+      return "";
+    }
+  }, [savedReports]);
 
   const renderPagination = (key: keyof typeof tablePages, totalRows: number, currentPage: number, totalPages: number) => {
     return (
@@ -677,6 +737,13 @@ export default function InvestigationReportPage() {
       recommendation: 1,
     }));
   }, [recommendationActionTypeFilter]);
+
+  useEffect(() => {
+    setTablePages((current) => ({
+      ...current,
+      reports: 1,
+    }));
+  }, [reportSortDirection, reportSortKey, savedReports.length]);
 
   const toggleFactorFilterValue = (key: FactorFilterKey, value: string) => {
     const options = factorFilterOptions[key];
@@ -1333,6 +1400,7 @@ export default function InvestigationReportPage() {
         { data: evidenceElements, error: evidenceError },
         { data: findingElements, error: findingError },
         { data: recommendationElements, error: recommendationError },
+        { data: reportRows, error: reportsError },
       ] = await Promise.all([
         supabase
           .schema("ms")
@@ -1399,6 +1467,12 @@ export default function InvestigationReportPage() {
           .eq("map_id", params.id)
           .eq("element_type", "incident_recommendation")
           .order("created_at", { ascending: true }),
+        supabase
+          .schema("ms")
+          .from("investigation_reports")
+          .select("id,status,generated_at,updated_at,version_number,ai_output_json")
+          .eq("case_id", params.id)
+          .order("version_number", { ascending: false }),
       ]);
 
       if (mapError) {
@@ -1457,6 +1531,12 @@ export default function InvestigationReportPage() {
 
       if (recommendationError) {
         setError(recommendationError.message);
+        setLoading(false);
+        return;
+      }
+
+      if (reportsError) {
+        setError(reportsError.message);
         setLoading(false);
         return;
       }
@@ -1647,8 +1727,10 @@ export default function InvestigationReportPage() {
 
       setMap(currentMap);
       setOwnerEmail(members.find((member) => member.user_id === currentMap.owner_id)?.email ?? null);
+      setScopeMetaForm({
+        title: currentMap.title ?? "",
+      });
       setScopeForm({
-        incident_long_description: currentMap.incident_long_description ?? "",
         incident_occurred_at: currentMap.incident_occurred_at
           ? new Date(currentMap.incident_occurred_at).toISOString().slice(0, 16)
           : "",
@@ -1657,6 +1739,7 @@ export default function InvestigationReportPage() {
         investigation_lead_name: currentMap.investigation_lead_name ?? "",
         items_of_interest: currentMap.items_of_interest ?? "",
       });
+      setScopeMetaEditing(false);
       setScopeEditing(false);
       setSequenceRows(sequenceData);
       setPeopleRows(peopleData);
@@ -1666,6 +1749,7 @@ export default function InvestigationReportPage() {
       setEvidenceRows(evidenceData);
       setFindingRows(findingData);
       setRecommendationRows(recommendationData);
+      setSavedReports((reportRows ?? []) as SavedInvestigationReportRow[]);
       setLoading(false);
     };
 
@@ -1674,6 +1758,10 @@ export default function InvestigationReportPage() {
 
   const handleScopeFieldChange = (field: keyof ScopeFormState, value: string) => {
     setScopeForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const handleScopeMetaFieldChange = (field: keyof ScopeMetaFormState, value: string) => {
+    setScopeMetaForm((current) => ({ ...current, [field]: value }));
   };
 
   const canEditScope = accessState?.canEditMaps ?? true;
@@ -1692,10 +1780,16 @@ export default function InvestigationReportPage() {
     setScopeEditing(true);
   };
 
+  const handleScopeMetaEdit = () => {
+    if (!canEditScope) return;
+    setScopeMetaMessage(null);
+    setScopeMetaMessageIsError(false);
+    setScopeMetaEditing(true);
+  };
+
   const handleScopeCancel = () => {
     if (!map) return;
     setScopeForm({
-      incident_long_description: map.incident_long_description ?? "",
       incident_occurred_at: map.incident_occurred_at
         ? new Date(map.incident_occurred_at).toISOString().slice(0, 16)
         : "",
@@ -1709,15 +1803,50 @@ export default function InvestigationReportPage() {
     setScopeEditing(false);
   };
 
+  const handleScopeMetaSave = async () => {
+    if (!map || !canEditScope) return;
+
+    if (!scopeMetaEditing) {
+      handleScopeMetaEdit();
+      return;
+    }
+
+    setScopeMetaSaving(true);
+    setScopeMetaMessage(null);
+    setScopeMetaMessageIsError(false);
+
+    const payload = {
+      title: scopeMetaForm.title.trim() || map.title,
+    };
+
+    const { error: updateError } = await supabase.schema("ms").from("system_maps").update(payload).eq("id", map.id);
+
+    if (updateError) {
+      setScopeMetaMessage(updateError.message);
+      setScopeMetaMessageIsError(true);
+      setScopeMetaSaving(false);
+      return;
+    }
+
+    setMap((current) => (current ? { ...current, ...payload } : current));
+    setScopeMetaMessage("Investigation details saved.");
+    setScopeMetaEditing(false);
+    setScopeMetaSaving(false);
+  };
+
   const handleScopeSave = async () => {
     if (!map || !canEditScope) return;
+
+    if (!scopeEditing) {
+      handleScopeEdit();
+      return;
+    }
 
     setScopeSaving(true);
     setScopeMessage(null);
     setScopeMessageIsError(false);
 
     const payload = {
-      incident_long_description: scopeForm.incident_long_description.trim() || null,
       incident_occurred_at: scopeForm.incident_occurred_at ? new Date(scopeForm.incident_occurred_at).toISOString() : null,
       incident_location: scopeForm.incident_location.trim() || null,
       responsible_person_name: scopeForm.responsible_person_name.trim() || null,
@@ -1738,6 +1867,38 @@ export default function InvestigationReportPage() {
     setScopeMessage("Scope details saved.");
     setScopeEditing(false);
     setScopeSaving(false);
+  };
+
+  const hasSavedReports = savedReports.length > 0;
+
+  const handleDeleteReport = async (reportId: string) => {
+    setReportActionId(reportId);
+    const { error: deleteError } = await supabase
+      .schema("ms")
+      .from("investigation_reports")
+      .delete()
+      .eq("case_id", params.id)
+      .eq("id", reportId);
+
+    if (deleteError) {
+      setError(deleteError.message || "Unable to delete report.");
+      setReportActionId(null);
+      return;
+    }
+
+    setSavedReports((current) => current.filter((row) => row.id !== reportId));
+    setPendingDeleteReportRow(null);
+    setReportActionId(null);
+  };
+
+  const toggleReportSort = (key: ReportSortKey) => {
+    if (reportSortKey === key) {
+      setReportSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+
+    setReportSortKey(key);
+    setReportSortDirection("desc");
   };
 
   const pagedSequence = getPagedRows(sortedSequenceRows, "sequence");
@@ -1824,9 +1985,29 @@ export default function InvestigationReportPage() {
                 <div className={styles.reportToggleActions}>
                   <button
                     type="button"
+                    className={`${styles.button} ${hasSavedReports ? styles.buttonSecondary : styles.buttonWizard}`}
+                    onClick={() => router.push(`/investigations/${map.id}/generated-report`)}
+                    disabled={hasSavedReports}
+                    title="Generate Report"
+                    aria-label="Generate Report"
+                  >
+                    <Image
+                      src="/icons/generate.svg"
+                      alt=""
+                      width={16}
+                      height={16}
+                      className={hasSavedReports ? styles.buttonIconDark : styles.buttonIcon}
+                    />
+                    {hasSavedReports ? "Report Already Generated" : "Generate Report"}
+                  </button>
+                  <button
+                    type="button"
                     className={`${styles.button} ${styles.buttonAccent}`}
                     onClick={() => router.push(`/investigations/${map.id}/canvas`)}
+                    title="Open Incident Map"
+                    aria-label="Open Incident Map"
                   >
+                    <Image src="/icons/mapicon.svg" alt="" width={16} height={16} className={styles.buttonIcon} />
                     Open Incident Map
                   </button>
                 </div>
@@ -1836,162 +2017,182 @@ export default function InvestigationReportPage() {
             <div className={`${styles.accountSection} ${styles.reportSection}`}>
               {activeTab === "setup-scope" ? (
                 <div className={styles.reportLayout}>
-                  <div className={styles.reportScopeBlock}>
-                    <dl className={`${styles.reportList} ${styles.reportListThreeCol}`}>
-                      <div>
-                        <dt>Investigation name</dt>
-                        <dd>{map.title}</dd>
-                      </div>
-                      <div>
-                        <dt>Owner</dt>
-                        <dd>{ownerEmail ?? "Unknown"}</dd>
-                      </div>
-                      <div>
-                        <dt>Created</dt>
-                        <dd>{formatDate(map.created_at)}</dd>
-                      </div>
-                    </dl>
-                  </div>
-
-                  <div className={styles.reportScopeBlock}>
-                    {scopeEditing ? (
-                      <div className={styles.reportScopeForm}>
-                        <label className={styles.reportScopeField}>
-                          <span>Incident Date &amp; Time</span>
-                          <input
-                            type="datetime-local"
-                            className={styles.input}
-                            value={scopeForm.incident_occurred_at}
-                            onChange={(event) => handleScopeFieldChange("incident_occurred_at", event.target.value)}
-                          />
-                        </label>
-
-                        <label className={styles.reportScopeField}>
-                          <span>Incident Location</span>
-                          <input
-                            type="text"
-                            className={styles.input}
-                            value={scopeForm.incident_location}
-                            onChange={(event) => handleScopeFieldChange("incident_location", event.target.value)}
-                          />
-                        </label>
-
-                        <label className={styles.reportScopeField}>
-                          <span>Responsible Person Name</span>
-                          <input
-                            type="text"
-                            className={styles.input}
-                            value={scopeForm.responsible_person_name}
-                            onChange={(event) => handleScopeFieldChange("responsible_person_name", event.target.value)}
-                          />
-                        </label>
-
-                        <label className={styles.reportScopeField}>
-                          <span>Investigation Lead Name</span>
-                          <input
-                            type="text"
-                            className={styles.input}
-                            value={scopeForm.investigation_lead_name}
-                            onChange={(event) => handleScopeFieldChange("investigation_lead_name", event.target.value)}
-                          />
-                        </label>
-
-                        <label className={`${styles.reportScopeField} ${styles.reportScopeFieldFull}`}>
-                          <span>Items of Interest</span>
-                          <textarea
-                            className={`${styles.input} ${styles.reportScopeTextarea}`}
-                            value={scopeForm.items_of_interest}
-                            onChange={(event) => handleScopeFieldChange("items_of_interest", event.target.value)}
-                          />
-                        </label>
-
-                        <label className={`${styles.reportScopeField} ${styles.reportScopeFieldFull}`}>
-                          <span>Incident Long Description</span>
-                          <textarea
-                            className={`${styles.input} ${styles.reportScopeTextarea}`}
-                            value={scopeForm.incident_long_description}
-                            onChange={(event) => handleScopeFieldChange("incident_long_description", event.target.value)}
-                          />
-                        </label>
-                      </div>
-                    ) : (
-                      <div className={styles.reportScopeReadLayout}>
-                        <div className={styles.reportScopeReadCard}>
-                          <span className={styles.reportScopeReadLabel}>Incident Date &amp; Time</span>
-                          <div className={styles.reportScopeReadValue}>
-                            {scopeForm.incident_occurred_at ? formatDate(new Date(scopeForm.incident_occurred_at).toISOString()) : "-"}
+                  <div className={styles.reportScopeSplitLayout}>
+                    <div className={styles.reportScopeColumn}>
+                      <div className={`${styles.reportScopePanel} ${styles.reportScopePanelAccent}`}>
+                        <span title={scopeEditDisabledReason ?? undefined} className={styles.reportScopeCornerAction}>
+                          <button
+                            type="button"
+                            className={styles.reportScopeInlineIconButton}
+                            onClick={() => void handleScopeMetaSave()}
+                            disabled={!canEditScope || scopeMetaSaving}
+                            aria-label={scopeMetaEditing ? "Save investigation details" : "Edit investigation details"}
+                            title={scopeMetaEditing ? "Save investigation details" : "Edit investigation details"}
+                          >
+                            <Image
+                              src={scopeMetaEditing ? "/icons/save.svg" : "/icons/edit.svg"}
+                              alt=""
+                              width={18}
+                              height={18}
+                              className={styles.reportScopeIcon}
+                            />
+                          </button>
+                        </span>
+                        <dl className={styles.reportScopeMetaGrid}>
+                          <div>
+                            <dt>Investigation Name</dt>
+                            <dd>
+                              {scopeMetaEditing ? (
+                                <input
+                                  type="text"
+                                  className={styles.input}
+                                  value={scopeMetaForm.title}
+                                  onChange={(event) => handleScopeMetaFieldChange("title", event.target.value)}
+                                />
+                              ) : (
+                                scopeMetaForm.title || "-"
+                              )}
+                            </dd>
                           </div>
-                        </div>
-
-                        <div className={styles.reportScopeReadCard}>
-                          <span className={styles.reportScopeReadLabel}>Incident Location</span>
-                          <div className={styles.reportScopeReadValue}>{scopeForm.incident_location || "-"}</div>
-                        </div>
-
-                        <div className={styles.reportScopeReadCard}>
-                          <span className={styles.reportScopeReadLabel}>Responsible Person Name</span>
-                          <div className={styles.reportScopeReadValue}>{scopeForm.responsible_person_name || "-"}</div>
-                        </div>
-
-                        <div className={styles.reportScopeReadCard}>
-                          <span className={styles.reportScopeReadLabel}>Investigation Lead Name</span>
-                          <div className={styles.reportScopeReadValue}>{scopeForm.investigation_lead_name || "-"}</div>
-                        </div>
-
-                        <div className={`${styles.reportScopeReadCard} ${styles.reportScopeReadCardFull}`}>
-                          <span className={styles.reportScopeReadLabel}>Items of Interest</span>
-                          <div className={`${styles.reportScopeReadValue} ${styles.reportScopeReadNarrative}`}>
-                            {scopeForm.items_of_interest || "-"}
+                          <div>
+                            <dt>Owner</dt>
+                            <dd>{ownerEmail ?? "Unknown"}</dd>
                           </div>
-                        </div>
-
-                        <div className={`${styles.reportScopeReadCard} ${styles.reportScopeReadCardFull}`}>
-                          <span className={styles.reportScopeReadLabel}>Incident Long Description</span>
-                          <div className={`${styles.reportScopeReadValue} ${styles.reportScopeReadNarrative}`}>
-                            {scopeForm.incident_long_description || "-"}
+                          <div>
+                            <dt>Created</dt>
+                            <dd>{formatDate(map.created_at)}</dd>
                           </div>
-                        </div>
+                        </dl>
+                        {scopeMetaMessage ? (
+                          <p className={`${styles.message} ${scopeMetaMessageIsError ? styles.messageError : styles.messageSuccess}`}>
+                            {scopeMetaMessage}
+                          </p>
+                        ) : null}
                       </div>
-                    )}
 
-                    <div className={styles.reportScopeActions}>
-                      {scopeMessage ? (
-                        <p className={`${styles.message} ${scopeMessageIsError ? styles.messageError : styles.messageSuccess}`}>
-                          {scopeMessage}
-                        </p>
-                      ) : <span />}
-                      <div className={styles.reportScopeActionButtons}>
+                      <div className={styles.reportScopePanel}>
+                        <span title={scopeEditDisabledReason ?? undefined} className={styles.reportScopeCornerAction}>
+                          <button
+                            type="button"
+                            className={styles.reportScopeInlineIconButton}
+                            onClick={() => void handleScopeSave()}
+                            disabled={!canEditScope || scopeSaving}
+                            aria-label={scopeEditing ? "Save scope details" : "Edit scope details"}
+                            title={scopeEditing ? "Save scope details" : "Edit scope details"}
+                          >
+                            <Image
+                              src={scopeEditing ? "/icons/save.svg" : "/icons/edit.svg"}
+                              alt=""
+                              width={18}
+                              height={18}
+                              className={styles.reportScopeIcon}
+                            />
+                          </button>
+                        </span>
                         {scopeEditing ? (
-                          <>
-                            <button
-                              type="button"
-                              className={`${styles.button} ${styles.buttonAccent}`}
-                              onClick={handleScopeCancel}
-                              disabled={scopeSaving}
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              type="button"
-                              className={`${styles.button} ${styles.buttonAccent}`}
-                              onClick={() => void handleScopeSave()}
-                              disabled={scopeSaving}
-                            >
-                              {scopeSaving ? "Saving..." : "Save Scope"}
-                            </button>
-                          </>
+                          <div className={styles.reportScopeStackForm}>
+                            <label className={styles.reportScopeField}>
+                              <span>Incident Date &amp; Time</span>
+                              <input
+                                type="datetime-local"
+                                className={styles.input}
+                                value={scopeForm.incident_occurred_at}
+                                onChange={(event) => handleScopeFieldChange("incident_occurred_at", event.target.value)}
+                              />
+                            </label>
+
+                            <label className={styles.reportScopeField}>
+                              <span>Incident Location</span>
+                              <input
+                                type="text"
+                                className={styles.input}
+                                value={scopeForm.incident_location}
+                                onChange={(event) => handleScopeFieldChange("incident_location", event.target.value)}
+                              />
+                            </label>
+
+                            <label className={styles.reportScopeField}>
+                              <span>Responsible Person Name</span>
+                              <input
+                                type="text"
+                                className={styles.input}
+                                value={scopeForm.responsible_person_name}
+                                onChange={(event) => handleScopeFieldChange("responsible_person_name", event.target.value)}
+                              />
+                            </label>
+
+                            <label className={styles.reportScopeField}>
+                              <span>Investigation Lead Name</span>
+                              <input
+                                type="text"
+                                className={styles.input}
+                                value={scopeForm.investigation_lead_name}
+                                onChange={(event) => handleScopeFieldChange("investigation_lead_name", event.target.value)}
+                              />
+                            </label>
+
+                            <label className={styles.reportScopeField}>
+                              <span>Items of Interest</span>
+                              <textarea
+                                className={`${styles.input} ${styles.reportScopeTextarea}`}
+                                value={scopeForm.items_of_interest}
+                                onChange={(event) => handleScopeFieldChange("items_of_interest", event.target.value)}
+                              />
+                            </label>
+                          </div>
                         ) : (
-                          <span title={scopeEditDisabledReason ?? undefined}>
-                            <button
-                              type="button"
-                              className={`${styles.button} ${styles.buttonAccent}`}
-                              onClick={handleScopeEdit}
-                              disabled={!canEditScope}
-                            >
-                              Edit Scope
-                            </button>
-                          </span>
+                          <div className={styles.reportScopeReadStack}>
+                            <div className={styles.reportScopeReadRow}>
+                              <span className={styles.reportScopeReadLabel}>Incident Date &amp; Time</span>
+                              <div className={styles.reportScopeReadValue}>
+                                {scopeForm.incident_occurred_at
+                                  ? formatDate(new Date(scopeForm.incident_occurred_at).toISOString())
+                                  : "-"}
+                              </div>
+                            </div>
+
+                            <div className={styles.reportScopeReadRow}>
+                              <span className={styles.reportScopeReadLabel}>Incident Location</span>
+                              <div className={styles.reportScopeReadValue}>{scopeForm.incident_location || "-"}</div>
+                            </div>
+
+                            <div className={styles.reportScopeReadRow}>
+                              <span className={styles.reportScopeReadLabel}>Responsible Person Name</span>
+                              <div className={styles.reportScopeReadValue}>{scopeForm.responsible_person_name || "-"}</div>
+                            </div>
+
+                            <div className={styles.reportScopeReadRow}>
+                              <span className={styles.reportScopeReadLabel}>Investigation Lead Name</span>
+                              <div className={styles.reportScopeReadValue}>{scopeForm.investigation_lead_name || "-"}</div>
+                            </div>
+
+                            <div className={styles.reportScopeReadRow}>
+                              <span className={styles.reportScopeReadLabel}>Items of Interest</span>
+                              <div className={`${styles.reportScopeReadValue} ${styles.reportScopeReadNarrative}`}>
+                                {scopeForm.items_of_interest || "-"}
+                              </div>
+                            </div>
+                          </div>
                         )}
+                        {scopeMessage ? (
+                          <p className={`${styles.message} ${scopeMessageIsError ? styles.messageError : styles.messageSuccess}`}>
+                            {scopeMessage}
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div className={styles.reportScopeColumn}>
+                      <div className={styles.reportScopePanel}>
+                        <div className={`${styles.reportScopeLongDescriptionHeader} ${styles.reportScopeLongDescriptionHeaderAccent}`}>
+                          <h3>Long Description</h3>
+                          <p>
+                            Auto-populated from the most recent generated report for this investigation.
+                          </p>
+                        </div>
+                        <div className={styles.reportScopeLongDescriptionBox}>
+                          {latestGeneratedLongDescription || EMPTY_LONG_DESCRIPTION_NOTE}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -2765,6 +2966,104 @@ export default function InvestigationReportPage() {
                     pagedRecommendations.totalPages
                   )}
                 </>
+              ) : activeTab === "reports" ? (
+                <>
+                  <div className={styles.sectionHeader}>
+                    <button
+                      type="button"
+                      className={`${styles.button} ${hasSavedReports ? styles.buttonAccent : styles.buttonSecondary}`}
+                      onClick={() => setShowCreateVersionModal(true)}
+                      disabled={!hasSavedReports}
+                    >
+                      Create New Version
+                    </button>
+                  </div>
+                  {savedReports.length === 0 ? (
+                    renderMobileEmptyState("No saved reports have been generated for this investigation yet.")
+                  ) : (
+                    <div className={styles.tableWrap}>
+                      <table className={`${styles.table} ${styles.reportDataTable}`}>
+                        <thead>
+                          <tr>
+                            <th className={styles.reportHeaderLeft}>Version</th>
+                            <th className={styles.reportHeaderLeft}>Status</th>
+                            <th className={styles.reportHeaderLeft}>
+                              <button type="button" className={styles.tableSortButton} onClick={() => toggleReportSort("generated_at")}>
+                                <span>Generated</span>
+                                <span className={styles.tableSortIcon} aria-hidden="true">
+                                  {reportSortKey === "generated_at" ? (reportSortDirection === "asc" ? "↑" : "↓") : "↕"}
+                                </span>
+                              </button>
+                            </th>
+                            <th className={styles.reportHeaderLeft}>
+                              <button type="button" className={styles.tableSortButton} onClick={() => toggleReportSort("updated_at")}>
+                                <span>Updated</span>
+                                <span className={styles.tableSortIcon} aria-hidden="true">
+                                  {reportSortKey === "updated_at" ? (reportSortDirection === "asc" ? "↑" : "↓") : "↕"}
+                                </span>
+                              </button>
+                            </th>
+                            <th className={styles.reportHeaderLeft}>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {pagedReports.rows.map((row) => (
+                            <tr
+                              key={row.id}
+                              className={styles.clickableRow}
+                              onClick={() => router.push(`/investigations/${params.id}/generated-report?reportId=${row.id}`)}
+                            >
+                              <td><span className={styles.tableValue}>{`Version ${row.version_number}`}</span></td>
+                              <td>
+                                <span
+                                  className={`${styles.statusPill} ${
+                                    row.status === "approved"
+                                      ? styles.factorPillPresent
+                                      : row.status === "reviewed"
+                                        ? styles.factorPillContributing
+                                        : styles.factorPillNeutral
+                                  }`}
+                                >
+                                  {formatLabel(row.status)}
+                                </span>
+                              </td>
+                              <td><span className={styles.tableDate}>{formatDate(row.generated_at)}</span></td>
+                              <td><span className={styles.tableDate}>{formatDate(row.updated_at)}</span></td>
+                              <td>
+                                <div className={styles.headerButtons}>
+                                  <button
+                                    type="button"
+                                    className={`${styles.button} ${styles.buttonAccent}`}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      router.push(`/investigations/${params.id}/reports/${row.id}/edit`);
+                                    }}
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={`${styles.button} ${styles.buttonDanger}`}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      setPendingDeleteReportRow(row);
+                                    }}
+                                    disabled={reportActionId === row.id}
+                                  >
+                                    {reportActionId === row.id ? "Deleting..." : "Delete"}
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  {savedReports.length > 0
+                    ? renderPagination("reports", sortedSavedReports.length, pagedReports.currentPage, pagedReports.totalPages)
+                    : null}
+                </>
               ) : (
                 <div className={styles.reportCard}>
                   <h3>{reportTabs.find((tab) => tab.id === activeTab)?.label}</h3>
@@ -2775,6 +3074,109 @@ export default function InvestigationReportPage() {
           </div>
         ) : null}
       </section>
+
+      {pendingDeleteReportRow ? (
+        <div className={styles.modalBackdrop}>
+          <div className={`${styles.modalCard} ${styles.dashboardModalCard}`}>
+            <div className={styles.dashboardModalHeader}>
+              <div className={styles.dashboardModalBrand}>
+                <Image
+                  src="/images/investigation-tool.png"
+                  alt="Investigation Tool"
+                  width={40}
+                  height={40}
+                  className={styles.dashboardModalLogo}
+                />
+                <div className={styles.dashboardModalBrandCopy}>
+                  <span className={styles.dashboardModalEyebrow}>Investigation Tool</span>
+                  <h3 className={`${styles.modalTitle} ${styles.dashboardModalTitle}`}>Delete report version?</h3>
+                </div>
+              </div>
+            </div>
+            <p className={styles.modalText}>
+              You are about to permanently delete <strong>{`Version ${pendingDeleteReportRow.version_number}`}</strong>.
+            </p>
+            <div className={styles.modalListWrap}>
+              <ul className={styles.modalList}>
+                <li>The saved report content for this version</li>
+                <li>Any manual section edits saved to this version</li>
+                <li>The version entry shown in the reports register</li>
+              </ul>
+            </div>
+            <p className={styles.modalWarning}>This cannot be undone.</p>
+            <div className={styles.modalActions}>
+              <button
+                type="button"
+                className={`${styles.button} ${styles.buttonSecondary}`}
+                onClick={() => setPendingDeleteReportRow(null)}
+                disabled={reportActionId === pendingDeleteReportRow.id}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={`${styles.button} ${styles.buttonDanger}`}
+                onClick={() => void handleDeleteReport(pendingDeleteReportRow.id)}
+                disabled={reportActionId === pendingDeleteReportRow.id}
+              >
+                {reportActionId === pendingDeleteReportRow.id ? "Deleting..." : "Delete report"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showCreateVersionModal ? (
+        <div className={styles.modalBackdrop}>
+          <div className={`${styles.modalCard} ${styles.dashboardModalCard}`}>
+            <div className={styles.dashboardModalHeader}>
+              <div className={styles.dashboardModalBrand}>
+                <Image
+                  src="/images/investigation-tool.png"
+                  alt="Investigation Tool"
+                  width={40}
+                  height={40}
+                  className={styles.dashboardModalLogo}
+                />
+                <div className={styles.dashboardModalBrandCopy}>
+                  <span className={styles.dashboardModalEyebrow}>Investigation Tool</span>
+                  <h3 className={`${styles.modalTitle} ${styles.dashboardModalTitle}`}>Create new report version?</h3>
+                </div>
+              </div>
+            </div>
+            <p className={styles.modalText}>
+              This generates a fresh AI-assisted report version using the current investigation map and canvas data.
+            </p>
+            <div className={styles.modalListWrap}>
+              <ul className={styles.modalList}>
+                <li>Use this when you have added or changed nodes, evidence, findings, or other map content since the previous version.</li>
+                <li>Existing report versions will remain available in the reports register for version control and comparison.</li>
+                <li>The new AI-assisted write-up may be structured slightly differently from previous versions even when based on similar source information.</li>
+              </ul>
+            </div>
+            <p className={styles.modalWarning}>Continue only if you want to create a new saved report version.</p>
+            <div className={styles.modalActions}>
+              <button
+                type="button"
+                className={`${styles.button} ${styles.buttonSecondary}`}
+                onClick={() => setShowCreateVersionModal(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={`${styles.button} ${styles.buttonAccent}`}
+                onClick={() => {
+                  setShowCreateVersionModal(false);
+                  router.push(`/investigations/${params.id}/generated-report`);
+                }}
+              >
+                Create New Version
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </DashboardShell>
   );
 }

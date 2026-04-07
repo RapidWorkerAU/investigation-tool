@@ -5,6 +5,11 @@ type SendEmailArgs = {
   text: string;
   replyTo?: string;
   tags?: Array<{ name: string; value: string }>;
+  attachments?: Array<{
+    filename: string;
+    content: string;
+    contentType?: string;
+  }>;
 };
 
 const RESEND_API_URL = "https://api.resend.com/emails";
@@ -16,6 +21,7 @@ export async function sendResendEmail({
   text,
   replyTo,
   tags,
+  attachments,
 }: SendEmailArgs) {
   const apiKey = process.env.RESEND_API_KEY;
   const from = process.env.RESEND_FROM_EMAIL;
@@ -38,6 +44,7 @@ export async function sendResendEmail({
       text,
       reply_to: replyTo || process.env.RESEND_REPLY_TO_EMAIL || undefined,
       tags,
+      attachments,
     }),
   });
 
