@@ -197,7 +197,7 @@ const baseTopics: HelpTopic[] = [
         heading: "Investigation and methodology nodes",
         lines: [
           {
-            text: "Investigation nodes such as sequence steps, outcomes, task or condition, factors, system factors, controls or barriers, evidence, findings, and recommendations help you build a disciplined incident review instead of a loose sketch.",
+            text: "Investigation nodes such as sequence steps, outcomes, task or condition, factors, system factors, controls or barriers, evidence, response or recovery, findings, and recommendations help you build a disciplined incident review instead of a loose sketch.",
             nodePreviews: [
               "incident_sequence_step",
               "incident_outcome",
@@ -206,6 +206,7 @@ const baseTopics: HelpTopic[] = [
               "incident_system_factor",
               "incident_control_barrier",
               "incident_evidence",
+              "incident_response_recovery",
               "incident_finding",
               "incident_recommendation",
             ],
@@ -599,13 +600,14 @@ function buildNodeTypesTopic(allowedNodeKinds: NodePaletteKind[]): HelpTopic {
     "incident_system_factor",
     "incident_control_barrier",
     "incident_evidence",
+    "incident_response_recovery",
     "incident_finding",
     "incident_recommendation",
   ].filter((key) => allowed.has(key as NodePaletteKind));
 
   if (investigationPreviewKeys.length) {
     investigationLines.push({
-      text: "Investigation nodes such as sequence steps, outcomes, task or condition, factors, system factors, controls or barriers, evidence, findings, and recommendations help you build a disciplined incident review instead of a loose sketch.",
+      text: "Investigation nodes such as sequence steps, outcomes, task or condition, factors, system factors, controls or barriers, evidence, response or recovery, findings, and recommendations help you build a disciplined incident review instead of a loose sketch.",
       nodePreviews: investigationPreviewKeys,
     });
   }
@@ -812,6 +814,8 @@ export function CanvasHelpModal({
         return renderMiniDocumentTile("#4ade80", "#111827", "Barrier");
       case "incident_evidence":
         return renderMiniDocumentTile("#cbd5e1", "#111827", "Evidence");
+      case "incident_response_recovery":
+        return renderMiniDocumentTile("#ec4899", "#ffffff", "Response");
       case "incident_finding":
         return renderMiniDocumentTile("#1d4ed8", "#ffffff", "Finding");
       case "incident_recommendation":

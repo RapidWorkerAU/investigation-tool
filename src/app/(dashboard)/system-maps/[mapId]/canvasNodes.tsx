@@ -1698,19 +1698,32 @@ function PersonNode({ data }: NodeProps<Node<FlowData>>) {
       </div>
     );
   }
-  return (
-    <div className="relative flex h-full w-full flex-col items-center justify-start overflow-visible">
-      <Handle id="top" type="target" position={Position.Top} style={{ opacity: 0, pointerEvents: "none", width: 6, height: 6 }} />
-      <Handle id="top-source" type="source" position={Position.Top} style={{ opacity: 0, pointerEvents: "none", width: 6, height: 6 }} />
-      <Handle id="bottom" type="source" position={Position.Bottom} style={{ opacity: 0, pointerEvents: "none", width: 6, height: 6 }} />
-      <Handle id="bottom-target" type="target" position={Position.Bottom} style={{ opacity: 0, pointerEvents: "none", width: 6, height: 6 }} />
-      <Handle id="left" type="source" position={Position.Left} style={{ opacity: 0, pointerEvents: "none", width: 6, height: 6 }} />
-      <Handle id="right" type="source" position={Position.Right} style={{ opacity: 0, pointerEvents: "none", width: 6, height: 6 }} />
-      <Handle id="left-target" type="target" position={Position.Left} style={{ opacity: 0, pointerEvents: "none", width: 6, height: 6 }} />
-      <Handle id="right-target" type="target" position={Position.Right} style={{ opacity: 0, pointerEvents: "none", width: 6, height: 6 }} />
-      <div
-        className="flex items-center justify-center rounded-full border border-slate-300 bg-white shadow-[0_8px_20px_rgba(15,23,42,0.16)]"
-        style={{ width: personIconSize, height: personIconSize }}
+    return (
+      <div className="relative flex h-full w-full flex-col items-center justify-start overflow-visible pt-2">
+        <Handle id="top" type="target" position={Position.Top} style={{ opacity: 0, pointerEvents: "none", width: 6, height: 6 }} />
+        <Handle id="top-source" type="source" position={Position.Top} style={{ opacity: 0, pointerEvents: "none", width: 6, height: 6 }} />
+        <Handle id="bottom" type="source" position={Position.Bottom} style={{ opacity: 0, pointerEvents: "none", width: 6, height: 6 }} />
+        <Handle id="bottom-target" type="target" position={Position.Bottom} style={{ opacity: 0, pointerEvents: "none", width: 6, height: 6 }} />
+        <Handle id="left" type="source" position={Position.Left} style={{ opacity: 0, pointerEvents: "none", width: 6, height: 6 }} />
+        <Handle id="right" type="source" position={Position.Right} style={{ opacity: 0, pointerEvents: "none", width: 6, height: 6 }} />
+        <Handle id="left-target" type="target" position={Position.Left} style={{ opacity: 0, pointerEvents: "none", width: 6, height: 6 }} />
+        <Handle id="right-target" type="target" position={Position.Right} style={{ opacity: 0, pointerEvents: "none", width: 6, height: 6 }} />
+        {data.personBadge ? (
+          <div
+            className="absolute left-1/2 top-0 z-20 inline-flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full px-2 py-1 text-center text-[8px] font-semibold leading-none shadow-[0_6px_14px_rgba(15,23,42,0.18)]"
+            style={{
+              backgroundColor: data.personBadge.bg,
+              color: data.personBadge.text,
+              minWidth: `${minorGridSize * 3.5}px`,
+              maxWidth: `${minorGridSize * 6.5}px`,
+            }}
+          >
+            <span className="truncate">{data.personBadge.label}</span>
+          </div>
+        ) : null}
+        <div
+          className="flex items-center justify-center rounded-full border border-slate-300 bg-white shadow-[0_8px_20px_rgba(15,23,42,0.16)]"
+          style={{ width: personIconSize, height: personIconSize }}
       >
         <img src="/icons/account.svg" alt="" className="h-full w-full object-contain" />
       </div>
@@ -1915,12 +1928,13 @@ function getNodeInfoText(data: FlowData): string {
     case "bowtie_degradation_indicator": return "Degradation indicator node showing signs of reducing control performance.";
     case "bowtie_risk_rating": return "Risk rating node showing level based on likelihood and consequence.";
     case "incident_sequence_step": return "Incident timeline step node.";
-    case "incident_outcome": return "Incident outcome node showing resulting impact.";
+    case "incident_outcome": return "Incident outcome node showing actual, potential, or reporting outcome details.";
     case "incident_task_condition": return "Task/condition node showing work state and context.";
     case "incident_factor": return "Incident factor node showing contributors to the event.";
     case "incident_system_factor": return "System factor node showing organisational contributors.";
     case "incident_control_barrier": return "Control/barrier node showing safeguards and their effectiveness.";
     case "incident_evidence": return "Evidence node supporting findings.";
+    case "incident_response_recovery": return "Response or recovery node showing the immediate response category and description.";
     case "incident_finding": return "Finding node capturing key analysis conclusions.";
     case "incident_recommendation": return "Recommendation node for corrective or preventive actions.";
     default: return "Map node providing contextual information in this system map.";
@@ -2101,6 +2115,7 @@ function ModernIncidentNode({
   const [imageAspectRatio, setImageAspectRatio] = useState(3 / 4);
   const [imagePreviewErrored, setImagePreviewErrored] = useState(false);
   const [renderImageUrl, setRenderImageUrl] = useState<string | null>(null);
+  const hasOutcomeRiskStrip = data.entityKind === "incident_outcome" && Boolean(data.metaLabel);
 
   useEffect(() => {
     setDetailOpen(Boolean(data.incidentDetailOpen));
@@ -2240,30 +2255,95 @@ function ModernIncidentNode({
                 {data.typeName || fallbackType}
               </div>
             </div>
-            <div className="flex flex-1 flex-col px-4 pb-3 pt-3">
-              <div className="flex min-h-0 flex-1 items-start">
-                <div className="w-full max-h-[60px] overflow-y-auto pr-1 text-left text-[11px] font-medium leading-[1.35] text-slate-800">
-                  {data.description || data.title || fallbackTitle}
+            {data.entityKind === "incident_outcome" ? (
+              <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] px-4 pb-3 pt-3">
+                <div className="min-h-0 overflow-hidden">
+                  <div className="h-full w-full overflow-y-auto pr-1 text-left text-[11px] font-medium leading-[1.35] text-slate-800">
+                    {data.metaLabel ? (
+                      <div className="mb-2 flex">
+                        <span
+                          className="inline-flex min-h-[20px] w-full items-center justify-center rounded-[6px] border px-2 py-0.5 text-center text-[10px] font-semibold uppercase tracking-[0.06em] leading-none"
+                          style={{
+                            backgroundColor: data.metaLabelBg || "#e5e7eb",
+                            color: data.metaLabelText || "#111827",
+                            borderColor: data.metaLabelBorder || "transparent",
+                          }}
+                        >
+                          {data.metaLabel}
+                        </span>
+                      </div>
+                    ) : null}
+                    <div>
+                      {data.description || data.title || fallbackTitle}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-2 flex h-[28px] min-h-[28px] items-center gap-2 overflow-hidden">
+                  {tags.map((tag) => (
+                    <button
+                      key={tag.key}
+                      type="button"
+                      title={tag.label}
+                      aria-label={tag.label}
+                      className="nodrag nopan flex h-7 w-7 items-center justify-center bg-transparent p-0"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                      }}
+                    >
+                      <img src={tag.iconSrc} alt="" className="h-7 w-7 object-contain" />
+                    </button>
+                  ))}
                 </div>
               </div>
-              <div className="mt-2 flex min-h-[26px] items-center gap-2">
-                {tags.map((tag) => (
-                  <button
-                    key={tag.key}
-                    type="button"
-                    title={tag.label}
-                    aria-label={tag.label}
-                    className="nodrag nopan flex h-7 w-7 items-center justify-center bg-transparent p-0"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                    }}
-                  >
-                    <img src={tag.iconSrc} alt="" className="h-7 w-7 object-contain" />
-                  </button>
-                ))}
+            ) : data.entityKind === "incident_response_recovery" ? (
+              <div className="flex flex-1 flex-col px-4 pb-3 pt-3">
+                <div className="min-h-0 flex-1 overflow-y-auto pr-1 text-left text-[11px] font-medium leading-[1.35] text-slate-800">
+                  {data.metaLabel ? (
+                    <div className="mb-2 flex">
+                      <span
+                        className="inline-flex min-h-[20px] w-full items-center justify-center rounded-[6px] border px-2 py-0.5 text-center text-[10px] font-semibold uppercase tracking-[0.06em] leading-none"
+                        style={{
+                          backgroundColor: data.metaLabelBg || "#e5e7eb",
+                          color: data.metaLabelText || "#111827",
+                          borderColor: data.metaLabelBorder || "transparent",
+                        }}
+                      >
+                        {data.metaLabel}
+                      </span>
+                    </div>
+                  ) : null}
+                  <div>
+                    {data.description || data.title || fallbackTitle}
+                  </div>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="flex flex-1 flex-col px-4 pb-3 pt-3">
+                <div className="flex min-h-0 flex-1 items-start">
+                  <div className="w-full max-h-[60px] overflow-y-auto pr-1 text-left text-[11px] font-medium leading-[1.35] text-slate-800">
+                    {data.description || data.title || fallbackTitle}
+                  </div>
+                </div>
+                <div className="mt-2 flex min-h-[26px] items-center gap-2">
+                  {tags.map((tag) => (
+                    <button
+                      key={tag.key}
+                      type="button"
+                      title={tag.label}
+                      aria-label={tag.label}
+                      className="nodrag nopan flex h-7 w-7 items-center justify-center bg-transparent p-0"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                      }}
+                    >
+                      <img src={tag.iconSrc} alt="" className="h-7 w-7 object-contain" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           <div
             className={`absolute inset-0 flex h-full w-full flex-col overflow-hidden rounded-[18px] border border-slate-200 bg-white text-slate-900 ${isInfoAnimating ? "[backface-visibility:hidden]" : ""}`}
@@ -2434,6 +2514,10 @@ function IncidentEvidenceNode({ data, selected }: NodeProps<Node<FlowData>>) {
   return <ModernIncidentNode data={data} selected={selected} fallbackTitle="Evidence" fallbackType="Evidence" />;
 }
 
+function IncidentResponseRecoveryNode({ data, selected }: NodeProps<Node<FlowData>>) {
+  return <ModernIncidentNode data={data} selected={selected} fallbackTitle="Response / Recovery" fallbackType="Response / Recovery" />;
+}
+
 function IncidentFindingNode({ data, selected }: NodeProps<Node<FlowData>>) {
   return <ModernIncidentNode data={data} selected={selected} fallbackTitle="Finding" fallbackType="Finding" />;
 }
@@ -2475,6 +2559,7 @@ export const flowNodeTypes = {
   incidentSystemFactor: IncidentSystemFactorNode,
   incidentControlBarrier: IncidentControlBarrierNode,
   incidentEvidence: IncidentEvidenceNode,
+  incidentResponseRecovery: IncidentResponseRecoveryNode,
   incidentFinding: IncidentFindingNode,
   incidentRecommendation: IncidentRecommendationNode,
 } as const;

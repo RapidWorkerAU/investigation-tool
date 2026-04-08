@@ -1614,6 +1614,8 @@ type PersonPropertiesAsideProps = {
   isMobile: boolean;
   leftAsideSlideIn: boolean;
   mapCategoryId: MapCategoryId;
+  personTypeDraft: string;
+  setPersonTypeDraft: (value: string) => void;
   personRoleDraft: string;
   setPersonRoleDraft: (value: string) => void;
   personRoleIdDraft: string;
@@ -1650,6 +1652,8 @@ export function PersonPropertiesAside({
   isMobile,
   leftAsideSlideIn,
   mapCategoryId,
+  personTypeDraft,
+  setPersonTypeDraft,
   personRoleDraft,
   setPersonRoleDraft,
   personRoleIdDraft,
@@ -1682,6 +1686,16 @@ export function PersonPropertiesAside({
 }: PersonPropertiesAsideProps) {
   if (!open) return null;
   const isOrgChart = mapCategoryId === "org_chart";
+  const investigationPersonTypeOptions = [
+    "Injured Person",
+    "Witness",
+    "Reported Incident",
+    "Involved - Direct",
+    "Involved - Indirect",
+    "Responder",
+    "Responsible Leader",
+    "Other",
+  ] as const;
   return (
     <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title="Person Properties" onClose={onClose}>
       <div className="mt-3">
@@ -1801,6 +1815,20 @@ export function PersonPropertiesAside({
                 placeholder="Enter department"
               />
             </label>
+            <label className="text-sm text-white">Person Type
+              <select
+                className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 font-normal text-black"
+                value={personTypeDraft}
+                onChange={(e) => setPersonTypeDraft(e.target.value)}
+              >
+                <option value="">Select person type</option>
+                {investigationPersonTypeOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </label>
           </>
         )}
       </div>
@@ -1843,11 +1871,13 @@ type BowtiePropertiesAsideProps = {
     | "incident_system_factor"
     | "incident_control_barrier"
     | "incident_evidence"
+    | "incident_response_recovery"
     | "incident_finding"
     | "incident_recommendation"
     | null;
-  bowtieDraft: Record<string, string | boolean>;
-  setBowtieDraft: React.Dispatch<React.SetStateAction<Record<string, string | boolean>>>;
+  bowtieDraft: Record<string, string | boolean | string[]>;
+  setBowtieDraft: React.Dispatch<React.SetStateAction<Record<string, string | boolean | string[]>>>;
+  availableFactorPeople: Array<{ id: string; label: string }>;
   evidenceUploadPreviewUrl: string | null;
   evidenceUploadFileName: string;
   evidenceUploadFileMime: string;
@@ -1874,6 +1904,7 @@ export function BowtiePropertiesAside({
   bowtieElementType,
   bowtieDraft,
   setBowtieDraft,
+  availableFactorPeople,
   evidenceUploadPreviewUrl,
   evidenceUploadFileName,
   evidenceUploadFileMime,
@@ -1895,6 +1926,7 @@ export function BowtiePropertiesAside({
   if (!open || !bowtieElementType) return null;
   const isRiskRating = bowtieElementType === "bowtie_risk_rating";
   const isIncidentElement = bowtieElementType.startsWith("incident_");
+  const [peopleDropdownOpen, setPeopleDropdownOpen] = useState(false);
   const title = ({
     bowtie_hazard: "Hazard",
     bowtie_top_event: "Top Event",
@@ -1912,11 +1944,12 @@ export function BowtiePropertiesAside({
     incident_system_factor: "System Factor",
     incident_control_barrier: "Control / Barrier",
     incident_evidence: "Evidence",
+    incident_response_recovery: "Response / Recovery",
     incident_finding: "Finding",
     incident_recommendation: "Recommendation",
   } as const)[bowtieElementType] || "Node";
 
-  const setField = (key: string, value: string | boolean) =>
+  const setField = (key: string, value: string | boolean | string[]) =>
     setBowtieDraft((prev) => {
       const next = { ...prev, [key]: value };
       if (bowtieElementType === "bowtie_risk_rating" && (key === "likelihood" || key === "consequence")) {
@@ -1942,6 +1975,28 @@ export function BowtiePropertiesAside({
   const currentIsPdf = evidenceCurrentMediaMime.toLowerCase().includes("pdf") || currentNameLower.endsWith(".pdf");
   const uploadIsHeic = uploadNameLower.endsWith(".heic") || uploadNameLower.endsWith(".heif") || evidenceUploadFileMime.toLowerCase().includes("heic") || evidenceUploadFileMime.toLowerCase().includes("heif");
   const currentIsHeic = (currentNameLower.endsWith(".heic") || currentNameLower.endsWith(".heif") || evidenceCurrentMediaMime.toLowerCase().includes("heic") || evidenceCurrentMediaMime.toLowerCase().includes("heif")) && !String(evidenceCurrentMediaUrl || "").startsWith("blob:");
+  const selectedFactorPeople = Array.isArray(bowtieDraft.people_involved)
+    ? bowtieDraft.people_involved.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    : [];
+  const selectedFactorPeopleCount = selectedFactorPeople.length;
+  const selectedFactorPeopleLabel =
+    selectedFactorPeopleCount === 0
+      ? "Select people"
+      : selectedFactorPeopleCount === 1
+      ? "1 person selected"
+      : `${selectedFactorPeopleCount} people selected`;
+  const toggleFactorPerson = (personId: string) => {
+    setBowtieDraft((prev) => {
+      const current = Array.isArray(prev.people_involved)
+        ? prev.people_involved.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+        : [];
+      const exists = current.includes(personId);
+      return {
+        ...prev,
+        people_involved: exists ? current.filter((value) => value !== personId) : [...current, personId],
+      };
+    });
+  };
 
   return (
     <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title={`${title} Properties`} onClose={onClose}>
@@ -2136,16 +2191,82 @@ export function BowtiePropertiesAside({
         ) : null}
 
         {bowtieElementType === "incident_outcome" ? (
-          <label className="text-sm text-white">Impact Type
-            <select
-              className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 text-black"
-              value={String(bowtieDraft.impact_type ?? "")}
-              onChange={(e) => setField("impact_type", e.target.value)}
-            >
-              <option value="">Select impact type</option>
-              {["injury", "damage", "loss", "environmental_impact", "other"].map((v) => <option key={v} value={v}>{formatBowtieOptionLabel(v)}</option>)}
-            </select>
-          </label>
+          <>
+            <label className="text-sm text-white">Outcome Category
+              <select
+                className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 text-black"
+                value={String(bowtieDraft.consequence_category ?? "actual")}
+                onChange={(e) => setField("consequence_category", e.target.value)}
+              >
+                <option value="maximum_reasonable">Maximum Reasonable Outcome</option>
+                <option value="actual">Actual Outcome</option>
+                <option value="reporting">Reporting Outcome</option>
+              </select>
+            </label>
+            {String(bowtieDraft.consequence_category ?? "actual") === "reporting" ? (
+              <label className="text-sm text-white">Reporting Outcome
+                <select
+                  className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 text-black"
+                  value={String(bowtieDraft.reporting_consequence ?? "")}
+                  onChange={(e) => setField("reporting_consequence", e.target.value)}
+                >
+                  <option value="">Select reporting outcome</option>
+                  <option value="internally_reported">Internal Report</option>
+                  <option value="externally_reported">External Report</option>
+                  <option value="reported_to_regulator">Regulator Report</option>
+                  <option value="reported_elsewhere">Reported Elsewhere</option>
+                </select>
+              </label>
+            ) : (
+              <>
+                <label className="text-sm text-white">Likelihood
+                  <select
+                    className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 text-black"
+                    value={String(bowtieDraft.likelihood ?? "possible")}
+                    onChange={(e) => setField("likelihood", e.target.value)}
+                  >
+                    {["rare", "unlikely", "possible", "likely", "almost_certain"].map((v) => <option key={v} value={v}>{formatBowtieOptionLabel(v)}</option>)}
+                  </select>
+                </label>
+                <label className="text-sm text-white">Consequence
+                  <select
+                    className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 text-black"
+                    value={String(bowtieDraft.consequence ?? "moderate")}
+                    onChange={(e) => setField("consequence", e.target.value)}
+                  >
+                    {["insignificant", "minor", "moderate", "major", "severe"].map((v) => <option key={v} value={v}>{formatBowtieOptionLabel(v)}</option>)}
+                  </select>
+                </label>
+                <div className="text-sm text-white">Risk Level
+                  {(() => {
+                    const riskLevel = formatBowtieOptionLabel(
+                      calculateBowtieRiskLevel(
+                        String(bowtieDraft.likelihood ?? "possible"),
+                        String(bowtieDraft.consequence ?? "moderate")
+                      )
+                    );
+                    const riskLevelKey = calculateBowtieRiskLevel(
+                      String(bowtieDraft.likelihood ?? "possible"),
+                      String(bowtieDraft.consequence ?? "moderate")
+                    );
+                    const riskBg =
+                      riskLevelKey === "low"
+                        ? "#86efac"
+                        : riskLevelKey === "medium"
+                        ? "#fde68a"
+                        : riskLevelKey === "high"
+                        ? "#fdba74"
+                        : "#fca5a5";
+                    return (
+                      <div className="mt-1 rounded border border-slate-300 px-3 py-2 font-semibold text-black" style={{ backgroundColor: riskBg }}>
+                        {riskLevel}
+                      </div>
+                    );
+                  })()}
+                </div>
+              </>
+            )}
+          </>
         ) : null}
 
         {bowtieElementType === "incident_task_condition" ? (
@@ -2208,6 +2329,50 @@ export function BowtiePropertiesAside({
                 <option value="organisation">Organisation</option>
               </select>
             </label>
+            <div className="text-sm text-white">
+              <div>People Involved</div>
+              {availableFactorPeople.length === 0 ? (
+                <div className="mt-1 rounded border border-slate-300 bg-[#0f2942] px-3 py-2 text-sm text-slate-200">
+                  Add person nodes to complete this field
+                </div>
+              ) : (
+                <div className="relative mt-1">
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between rounded border border-slate-300 bg-white px-3 py-2 text-left text-black shadow-[0_1px_2px_rgba(15,23,42,0.06)]"
+                    onClick={() => setPeopleDropdownOpen((current) => !current)}
+                  >
+                    <span className="text-sm font-medium">{selectedFactorPeopleLabel}</span>
+                    <svg viewBox="0 0 24 24" className={`h-4 w-4 text-slate-500 transition ${peopleDropdownOpen ? "rotate-180" : ""}`} aria-hidden="true">
+                      <path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                  {peopleDropdownOpen ? (
+                    <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-20 overflow-hidden rounded border border-slate-200 bg-white shadow-[0_12px_28px_rgba(15,23,42,0.18)]">
+                      <div className="max-h-56 overflow-y-auto py-1">
+                        {availableFactorPeople.map((person) => {
+                          const checked = selectedFactorPeople.includes(person.id);
+                          return (
+                            <label
+                              key={person.id}
+                              className={`flex cursor-pointer items-start gap-3 px-3 py-2 text-sm ${checked ? "bg-sky-50 text-black" : "text-black hover:bg-slate-50"}`}
+                            >
+                              <input
+                                type="checkbox"
+                                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-sky-600"
+                                checked={checked}
+                                onChange={() => toggleFactorPerson(person.id)}
+                              />
+                              <span className="leading-5">{person.label}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              )}
+            </div>
           </>
         ) : null}
 
@@ -2393,6 +2558,22 @@ export function BowtiePropertiesAside({
               <span>Show image/PDF preview on canvas</span>
             </label>
           </>
+        ) : null}
+
+        {bowtieElementType === "incident_response_recovery" ? (
+          <label className="text-sm text-white">Category
+            <select
+              className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 text-black"
+              value={String(bowtieDraft.category ?? "")}
+              onChange={(e) => setField("category", e.target.value)}
+            >
+              <option value="">Select category</option>
+              <option value="emergency_response">Emergency Response</option>
+              <option value="medical_treatment">Medical Treatment</option>
+              <option value="scene_preservation">Scene Preservation</option>
+              <option value="make_area_safe">Make Area Safe</option>
+            </select>
+          </label>
         ) : null}
 
         {bowtieElementType === "incident_finding" ? (

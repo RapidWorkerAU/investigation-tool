@@ -63,6 +63,7 @@ const isBowtieOrInvestigationKind = (entityKind: FlowData["entityKind"]) =>
   entityKind === "incident_system_factor" ||
   entityKind === "incident_control_barrier" ||
   entityKind === "incident_evidence" ||
+  entityKind === "incident_response_recovery" ||
   entityKind === "incident_finding" ||
   entityKind === "incident_recommendation";
 

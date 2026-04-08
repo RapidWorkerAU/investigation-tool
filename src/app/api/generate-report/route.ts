@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getOpenAIClient, investigationReportModel } from "@/lib/openai/server";
+import { accessCanUseReportGeneration } from "@/lib/access";
 import { buildDraftReportText } from "@/lib/investigation-report/helpers";
 import { getUserFromAuthHeader } from "@/lib/supabase/auth";
-import { createAuthedServerClient } from "@/lib/supabase/server";
+import { createAuthedServerClient, createServiceRoleClient } from "@/lib/supabase/server";
 import type { InvestigationReportPayload, ReadinessCheck, ReportRowItem } from "@/lib/investigation-report/types";
 
 export const runtime = "nodejs";
@@ -14,6 +15,11 @@ type GenerateReportRequest = {
 
 type GenerateReportResponse = InvestigationReportPayload;
 type RowItem = ReportRowItem;
+type PreviousReportBranding = {
+  logo_storage_path?: string;
+  section_heading_color?: string;
+  table_heading_color?: string;
+};
 
 const tableRowSchema = {
   type: "array",
@@ -102,6 +108,16 @@ const generateReportSchema = {
           properties: {
             executive_summary: { type: "string" },
             long_description: { type: "string" },
+            response_and_recovery: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                summary: { type: "string" },
+                columns: { type: "array", items: { type: "string" } },
+                rows: { type: "array", items: tableRowSchema },
+              },
+              required: ["summary", "columns", "rows"],
+            },
             people_involved: {
               type: "object",
               additionalProperties: false,
@@ -212,6 +228,7 @@ const generateReportSchema = {
           required: [
             "executive_summary",
             "long_description",
+            "response_and_recovery",
             "people_involved",
             "incident_timeline",
             "task_and_conditions",
@@ -418,6 +435,10 @@ function isGenerateReportResponse(value: unknown): value is GenerateReportRespon
     typeof sections.incident_timeline.heading === "string" &&
     isStringArray(sections.incident_timeline.entries) &&
     typeof sections.task_and_conditions === "string" &&
+    isRecord(sections.response_and_recovery) &&
+    typeof sections.response_and_recovery.summary === "string" &&
+    isStringArray(sections.response_and_recovery.columns) &&
+    isRowMatrix(sections.response_and_recovery.rows) &&
     isRecord(sections.factors_and_system_factors) &&
     typeof sections.factors_and_system_factors.heading === "string" &&
     isStringArray(sections.factors_and_system_factors.columns) &&
@@ -483,6 +504,25 @@ function extractResponseDiagnostic(response: Record<string, unknown>) {
   };
 }
 
+function getPreviousReportBranding(value: unknown): PreviousReportBranding | null {
+  if (!isRecord(value) || !isRecord(value.report) || !isRecord(value.report.branding)) return null;
+
+  const branding = value.report.branding;
+  const nextBranding: PreviousReportBranding = {};
+
+  if (typeof branding.logo_storage_path === "string" && branding.logo_storage_path.trim()) {
+    nextBranding.logo_storage_path = branding.logo_storage_path.trim();
+  }
+  if (typeof branding.section_heading_color === "string" && branding.section_heading_color.trim()) {
+    nextBranding.section_heading_color = branding.section_heading_color.trim();
+  }
+  if (typeof branding.table_heading_color === "string" && branding.table_heading_color.trim()) {
+    nextBranding.table_heading_color = branding.table_heading_color.trim();
+  }
+
+  return Object.keys(nextBranding).length > 0 ? nextBranding : null;
+}
+
 export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as GenerateReportRequest | null;
   const authHeader = request.headers.get("authorization");
@@ -518,6 +558,47 @@ export async function POST(request: NextRequest) {
   }
 
   const authedSupabase = createAuthedServerClient(token);
+  const serviceSupabase = createServiceRoleClient();
+  const { data: refreshedAccessState, error: accessStateError } = await serviceSupabase.rpc("refresh_billing_profile_state", {
+    p_user_id: user.userId,
+  });
+
+  if (accessStateError) {
+    return NextResponse.json({ error: accessStateError.message }, { status: 500 });
+  }
+
+  const accessStateRow = Array.isArray(refreshedAccessState) ? refreshedAccessState[0] : refreshedAccessState;
+  if (!accessStateRow) {
+    return NextResponse.json({ error: "Access state not found." }, { status: 404 });
+  }
+
+  const accessState = {
+    userId: accessStateRow.user_id,
+    stripeCustomerId: accessStateRow.stripe_customer_id ?? null,
+    accessSelectionRequired: Boolean(accessStateRow.access_selection_required),
+    currentAccessType: accessStateRow.current_access_type ?? null,
+    currentAccessStatus: accessStateRow.current_access_status,
+    currentAccessPeriodId: accessStateRow.current_access_period_id ?? null,
+    currentStripeSubscriptionId: accessStateRow.current_stripe_subscription_id ?? null,
+    currentStripePriceId: accessStateRow.current_stripe_price_id ?? null,
+    cancellationScheduled: false,
+    currentPeriodStartsAt: accessStateRow.current_period_starts_at ?? null,
+    currentPeriodEndsAt: accessStateRow.current_period_ends_at ?? null,
+    readOnlyReason: accessStateRow.read_only_reason ?? null,
+    canCreateMaps: Boolean(accessStateRow.can_create_maps),
+    canEditMaps: Boolean(accessStateRow.can_edit_maps),
+    canExport: Boolean(accessStateRow.can_export),
+    canShareMaps: Boolean(accessStateRow.can_share_maps),
+    canDuplicateMaps: Boolean(accessStateRow.can_duplicate_maps),
+  };
+
+  if (!accessCanUseReportGeneration(accessState)) {
+    return NextResponse.json(
+      { error: "Report generation is not available on the 7 day free trial." },
+      { status: 403 },
+    );
+  }
+
   const { data: accessibleMap } = await authedSupabase
     .schema("ms")
     .from("system_maps")
@@ -592,6 +673,8 @@ export async function POST(request: NextRequest) {
         "The Long Description must not mention nodes, fields, records, source-data structure, or say that the AI is generating the text.",
         "The Long Description must not infer unsupported causation, motives, diagnoses, or conclusions.",
         "If evidence for a requested point is missing, state that the specific point is unknown at this stage rather than inventing bridging detail.",
+        "For Response And Recovery, write one short factual introduction about the immediate response or recovery actions taken after the incident and then provide a supporting table.",
+        "Use response and recovery nodes for this section, including their category and descriptive detail where available.",
         "Use person nodes only for the People Involved visual section.",
         "Use sequence nodes for incident date, time, location, and timeline entries where available.",
         "Use outcome nodes to determine impacts and whether injury did or did not occur, but only if explicitly supported.",
@@ -628,6 +711,7 @@ export async function POST(request: NextRequest) {
                       "Contents",
                       "Executive Summary",
                       "Long Description",
+                      "Response / Recovery",
                       "People Involved",
                       "Incident Timeline",
                       "Task And Conditions",
@@ -704,19 +788,32 @@ export async function POST(request: NextRequest) {
 
     const draftReportText = buildDraftReportText(parsed);
 
-    const { data: latestVersionRow } = await authedSupabase
+    const { data: previousReportRows } = await authedSupabase
       .schema("ms")
       .from("investigation_reports")
-      .select("version_number")
+      .select("version_number,ai_output_json")
       .eq("case_id", caseId)
       .order("version_number", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .limit(50);
+
+    const latestVersionRow = previousReportRows?.[0] ?? null;
 
     const nextVersionNumber =
       latestVersionRow && typeof latestVersionRow.version_number === "number"
         ? latestVersionRow.version_number + 1
         : 1;
+
+    const previousBranding =
+      previousReportRows
+        ?.map((row) => getPreviousReportBranding(row.ai_output_json))
+        .find((branding): branding is PreviousReportBranding => branding !== null) ?? null;
+
+    if (previousBranding) {
+      parsed.report.branding = {
+        ...(parsed.report.branding ?? {}),
+        ...previousBranding,
+      };
+    }
 
     const { data: savedReport, error: saveError } = await authedSupabase
       .schema("ms")

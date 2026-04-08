@@ -102,6 +102,7 @@ type UseCanvasElementActionsParams = {
   processComponentLabelDraft: string;
   setSelectedProcessComponentId: React.Dispatch<React.SetStateAction<string | null>>;
   selectedPersonId: string | null;
+  personTypeDraft: string;
   personRoleDraft: string;
   personRoleIdDraft: string;
   personDepartmentDraft: string;
@@ -270,6 +271,7 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
     setSelectedProcessComponentId,
     selectedPersonId,
     personRoleDraft,
+    personTypeDraft,
     personRoleIdDraft,
     personDepartmentDraft,
     personOccupantNameDraft,
@@ -686,7 +688,9 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
             contractor_role: false,
             proposed_role: false,
           }
-        : null,
+        : {
+            person_type: "",
+          },
       pos_x: center.x,
       pos_y: center.y,
       width: isOrgChart ? orgChartPersonWidth : personElementWidth,
@@ -1227,11 +1231,15 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
       {
         map_id: mapId,
         element_type: "incident_outcome",
-        heading: "Outcome",
+        heading: "Consequence",
         color_hex: "#ef4444",
         created_by_user_id: userId,
         element_config: {
-          impact_type: "",
+          consequence_category: "actual",
+          likelihood: "possible",
+          consequence: "moderate",
+          risk_level: "medium",
+          reporting_consequence: "",
           description: "",
         },
         pos_x: center.x,
@@ -1239,7 +1247,7 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
         width: incidentCardWidth,
         height: incidentCardHeight,
       },
-      "Unable to create outcome."
+      "Unable to create consequence."
     );
   }, [canWriteMap, setError, getCenter, addElement, mapId, userId, incidentCardWidth, incidentCardHeight]);
 
@@ -1375,6 +1383,30 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
         height: incidentCardHeight,
       },
       "Unable to create evidence."
+    );
+  }, [canWriteMap, setError, getCenter, addElement, mapId, userId, incidentCardWidth, incidentCardHeight]);
+
+  const handleAddIncidentResponseRecovery = useCallback(async () => {
+    if (!canWriteMap) return setError("You have view access only for this map.");
+    const center = getCenter();
+    if (!center) return;
+    await addElement(
+      {
+        map_id: mapId,
+        element_type: "incident_response_recovery",
+        heading: "Response / Recovery",
+        color_hex: "#ec4899",
+        created_by_user_id: userId,
+        element_config: {
+          category: "",
+          description: "",
+        },
+        pos_x: center.x,
+        pos_y: center.y,
+        width: incidentCardWidth,
+        height: incidentCardHeight,
+      },
+      "Unable to create response/recovery."
     );
   }, [canWriteMap, setError, getCenter, addElement, mapId, userId, incidentCardWidth, incidentCardHeight]);
 
@@ -1518,6 +1550,10 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
           heading: buildPersonHeading(personRoleDraft, personDepartmentDraft),
           width: personElementWidth,
           height: personElementHeight,
+          element_config: {
+            ...((currentPerson?.element_config as Record<string, unknown> | null) ?? {}),
+            person_type: personTypeDraft.trim(),
+          },
         };
     const { data, error: e } = await supabaseBrowser.schema("ms").from("canvas_elements").update(payload).eq("id", selectedPersonId).eq("map_id", mapId).select(canvasElementSelectColumns).single();
     if (e || !data) return setError(e?.message || "Unable to save person.");
@@ -1531,6 +1567,7 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
     mapCategoryId,
     buildPersonHeading,
     personRoleDraft,
+    personTypeDraft,
     personRoleIdDraft,
     personDepartmentDraft,
     personOccupantNameDraft,
@@ -1909,6 +1946,7 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
     handleAddIncidentSystemFactor,
     handleAddIncidentControlBarrier,
     handleAddIncidentEvidence,
+    handleAddIncidentResponseRecovery,
     handleAddIncidentFinding,
     handleAddIncidentRecommendation,
     handleSaveProcessHeading,

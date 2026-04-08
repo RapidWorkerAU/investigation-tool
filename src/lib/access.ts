@@ -51,6 +51,13 @@ export function accessBlocksInvestigationEntry(state: BillingAccessState | null 
   return state.currentAccessType === "trial_7d" && accessIsReadOnlyRestricted(state);
 }
 
+export function accessCanUseReportGeneration(state: BillingAccessState | null | undefined) {
+  if (!state) return false;
+  if (accessRequiresSelection(state)) return false;
+  if (accessBlocksInvestigationEntry(state)) return false;
+  return state.currentAccessStatus === "active" && state.canExport;
+}
+
 export function isExpiredTrialAccess(state: BillingAccessState | null | undefined) {
   if (!state) return false;
   return state.currentAccessType === "trial_7d" && state.currentAccessStatus === "expired";

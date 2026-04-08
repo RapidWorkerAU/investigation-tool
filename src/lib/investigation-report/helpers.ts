@@ -3,6 +3,7 @@ import type { InvestigationReportPayload } from "@/lib/investigation-report/type
 const pdfSectionVisibilityDefaults = {
   executive_summary: true,
   long_description: true,
+  response_and_recovery: true,
   task_and_conditions: true,
   incident_outcomes: true,
   people_involved: true,
@@ -21,6 +22,7 @@ export function buildDraftReportText(report: InvestigationReportPayload) {
   return [
     report.report.sections.executive_summary,
     report.report.sections.long_description,
+    report.report.sections.response_and_recovery.summary,
     report.report.sections.task_and_conditions,
     report.report.sections.incident_outcomes,
     report.report.sections.incident_findings.summary,
@@ -63,6 +65,11 @@ export function normalizeInvestigationReportPayload(report: InvestigationReportP
       },
       sections: {
         ...report.report.sections,
+        response_and_recovery: {
+          summary: report.report.sections.response_and_recovery?.summary ?? "",
+          columns: report.report.sections.response_and_recovery?.columns ?? [],
+          rows: report.report.sections.response_and_recovery?.rows ?? [],
+        },
         evidence: {
           ...report.report.sections.evidence,
           items: report.report.sections.evidence.items.map((item) => ({

@@ -65,6 +65,7 @@ type CanvasActionButtonsProps = {
   handleAddIncidentSystemFactor: () => void;
   handleAddIncidentControlBarrier: () => void;
   handleAddIncidentEvidence: () => void;
+  handleAddIncidentResponseRecovery: () => void;
   handleAddIncidentFinding: () => void;
   handleAddIncidentRecommendation: () => void;
   allowedNodeKinds: NodePaletteKind[];
@@ -151,6 +152,7 @@ export function CanvasActionButtons({
   handleAddIncidentSystemFactor,
   handleAddIncidentControlBarrier,
   handleAddIncidentEvidence,
+  handleAddIncidentResponseRecovery,
   handleAddIncidentFinding,
   handleAddIncidentRecommendation,
   allowedNodeKinds,
@@ -237,6 +239,14 @@ export function CanvasActionButtons({
     }
     if (allowed.has("incident_evidence")) {
       addItems.push({ key: "incident_evidence", label: "Evidence", group: "investigation", onClick: handleAddIncidentEvidence });
+    }
+    if (allowed.has("incident_response_recovery")) {
+      addItems.push({
+        key: "incident_response_recovery",
+        label: "Response / Recovery",
+        group: "investigation",
+        onClick: handleAddIncidentResponseRecovery,
+      });
     }
     if (allowed.has("incident_finding")) {
       addItems.push({ key: "incident_finding", label: "Finding", group: "investigation", onClick: handleAddIncidentFinding });
@@ -361,6 +371,8 @@ export function CanvasActionButtons({
         return renderMiniDocumentTile("#4ade80", "#111827", "Barrier");
       case "incident_evidence":
         return renderMiniDocumentTile("#cbd5e1", "#111827", "Evidence");
+      case "incident_response_recovery":
+        return renderMiniDocumentTile("#ec4899", "#ffffff", "Response");
       case "incident_finding":
         return renderMiniDocumentTile("#1d4ed8", "#ffffff", "Finding");
       case "incident_recommendation":
@@ -447,6 +459,11 @@ export function CanvasActionButtons({
 
   const floatingButtonClass =
     "group flex h-[56px] w-[56px] items-center justify-center rounded-2xl border border-slate-200 bg-white text-black shadow-[0_10px_24px_rgba(15,23,42,0.14)] transition-all duration-150 hover:-translate-y-0.5 hover:bg-[#102a43] hover:text-white hover:shadow-[0_14px_28px_rgba(15,23,42,0.22)]";
+  const mobileLockButtonClass = `group flex h-[56px] w-[56px] items-center justify-center rounded-2xl border shadow-[0_10px_24px_rgba(15,23,42,0.14)] transition-all duration-150 ${
+    canvasInteractionLocked
+      ? "border-[#102a43] bg-[#102a43] text-white"
+      : "border-slate-200 bg-white text-black"
+  }`;
 
   const renderTemplateMenu = () => {
     if (!showTemplateMenu || !canSaveTemplate) return null;
@@ -585,11 +602,17 @@ export function CanvasActionButtons({
                 style={{ WebkitMaskImage: "url('/icons/back.svg')", maskImage: "url('/icons/back.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
               />
             </Link>
-            <button type="button" aria-label="Map information" title="Map information" className={floatingButtonClass} onClick={onToggleMapInfo}>
+            <button
+              type="button"
+              aria-label="Reset zoom"
+              title="Reset zoom"
+              onClick={() => rf?.setViewport({ x: 0, y: 0, zoom: 1 }, { duration: 300 })}
+              className={floatingButtonClass}
+            >
               <span
                 aria-hidden="true"
                 className="h-6 w-6 bg-current"
-                style={{ WebkitMaskImage: "url('/icons/info.svg')", maskImage: "url('/icons/info.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
+                style={{ WebkitMaskImage: "url('/icons/resetzoom.svg')", maskImage: "url('/icons/resetzoom.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
               />
             </button>
             <span title={!canWriteMap && !canCreateSticky ? addDisabledReason : "Add component"}>
@@ -608,19 +631,21 @@ export function CanvasActionButtons({
                 />
               </button>
             </span>
-            <button
-              type="button"
-              aria-label="Reset zoom"
-              title="Reset zoom"
-              onClick={() => rf?.setViewport({ x: 0, y: 0, zoom: 1 }, { duration: 300 })}
-              className={floatingButtonClass}
-            >
-              <span
-                aria-hidden="true"
-                className="h-6 w-6 bg-current"
-                style={{ WebkitMaskImage: "url('/icons/resetzoom.svg')", maskImage: "url('/icons/resetzoom.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
-              />
-            </button>
+            <span title={canvasInteractionLocked ? "Unlock canvas movement" : "Lock canvas movement"}>
+              <button
+                type="button"
+                aria-label={canvasInteractionLocked ? "Unlock canvas movement" : "Lock canvas movement"}
+                title={undefined}
+                onClick={onToggleCanvasInteractionLock}
+                className={mobileLockButtonClass}
+              >
+                <span
+                  aria-hidden="true"
+                  className="h-6 w-6 bg-current"
+                  style={{ WebkitMaskImage: "url('/icons/lock.svg')", maskImage: "url('/icons/lock.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
+                />
+              </button>
+            </span>
             <span title={canUseWizard ? "Open wizard" : wizardDisabledReason}>
               <button
                 type="button"

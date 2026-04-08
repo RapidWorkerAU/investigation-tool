@@ -92,6 +92,39 @@ const formatBowtieConfigLabel = (value: string) =>
 
 const formatIncidentOptionLabel = (value: string) => formatBowtieConfigLabel(value.trim());
 
+const calculateIncidentRiskLevel = (likelihoodRaw: string, consequenceRaw: string) => {
+  const likelihoodScoreByKey: Record<string, number> = {
+    rare: 1,
+    unlikely: 2,
+    possible: 3,
+    likely: 4,
+    almost_certain: 5,
+  };
+  const consequenceScoreByKey: Record<string, number> = {
+    insignificant: 1,
+    minor: 2,
+    moderate: 3,
+    major: 4,
+    severe: 5,
+  };
+  const likelihood = likelihoodScoreByKey[likelihoodRaw] ?? 3;
+  const consequence = consequenceScoreByKey[consequenceRaw] ?? 3;
+  const score = likelihood * consequence;
+  if (score <= 4) return "low";
+  if (score <= 9) return "medium";
+  if (score <= 16) return "high";
+  return "extreme";
+};
+
+const incidentRiskBgByLevel = (riskLevel: string) => {
+  const normalized = riskLevel.trim().toLowerCase();
+  if (normalized === "low") return "#86efac";
+  if (normalized === "medium") return "#fde68a";
+  if (normalized === "high") return "#fdba74";
+  if (normalized === "extreme") return "#fca5a5";
+  return "#e5e7eb";
+};
+
 const methodologyDefaultLabelByType: Partial<Record<CanvasElementRow["element_type"], string>> = {
   bowtie_hazard: "Hazard",
   bowtie_top_event: "Top Event",
@@ -108,16 +141,18 @@ const methodologyDefaultLabelByType: Partial<Record<CanvasElementRow["element_ty
   incident_system_factor: "System Factor",
   incident_control_barrier: "Control / Barrier",
   incident_evidence: "Evidence",
+  incident_response_recovery: "Response / Recovery",
   incident_finding: "Finding",
   incident_recommendation: "Recommendation",
 };
 
 const getMethodologyNodeText = (element: CanvasElementRow) => {
   const defaultLabel = methodologyDefaultLabelByType[element.element_type] ?? "Node";
+  const legacyDefaultLabel = element.element_type === "incident_outcome" ? "Outcome" : defaultLabel;
   const config = (element.element_config as Record<string, unknown> | null) ?? {};
   const heading = String(element.heading ?? "").trim();
   const description = String(config.description ?? "").trim();
-  if (heading && heading !== defaultLabel) return heading;
+  if (heading && heading !== defaultLabel && heading !== legacyDefaultLabel) return heading;
   return description || heading || defaultLabel;
 };
 
@@ -959,6 +994,30 @@ export const buildPrimaryElementFlowNode = (params: {
     const personWidth = mapCategoryId === "org_chart" ? orgChartPersonWidth : personElementWidth;
     const personHeight = mapCategoryId === "org_chart" ? orgChartPersonHeight : personElementHeight;
     const orgConfig = mapCategoryId === "org_chart" ? parseOrgChartPersonConfig(el.element_config) : null;
+    const personConfig = !orgConfig ? (((el.element_config as Record<string, unknown> | null) ?? {})) : null;
+    const personTypeLabel = !orgConfig && typeof personConfig?.person_type === "string" ? personConfig.person_type.trim() : "";
+    const personBadge = (() => {
+      switch (personTypeLabel) {
+        case "Injured Person":
+          return { label: personTypeLabel, bg: "#b42318", text: "#ffffff" };
+        case "Witness":
+          return { label: personTypeLabel, bg: "#2563eb", text: "#ffffff" };
+        case "Reported Incident":
+          return { label: personTypeLabel, bg: "#7c3aed", text: "#ffffff" };
+        case "Involved - Direct":
+          return { label: personTypeLabel, bg: "#0f766e", text: "#ffffff" };
+        case "Involved - Indirect":
+          return { label: personTypeLabel, bg: "#0ea5a4", text: "#ffffff" };
+        case "Responder":
+          return { label: personTypeLabel, bg: "#f59e0b", text: "#111827" };
+        case "Responsible Leader":
+          return { label: personTypeLabel, bg: "#1d4ed8", text: "#ffffff" };
+        case "Other":
+          return { label: personTypeLabel, bg: "#64748b", text: "#ffffff" };
+        default:
+          return null;
+      }
+    })();
     const actingName = orgConfig?.acting_name || "";
     const occupantName = orgConfig?.occupant_name || "";
     const hasActing = actingName.length > 0;
@@ -1026,6 +1085,7 @@ export const buildPrimaryElementFlowNode = (params: {
               directReportCount: resolvedDirectReportCount,
             }
           : undefined,
+        personBadge: !orgConfig && personBadge ? personBadge : undefined,
       },
     };
   }
@@ -1499,22 +1559,66 @@ export const buildSecondaryElementFlowNode = (params: {
   }
   if (el.element_type === "incident_outcome") {
     const cfg = (el.element_config as Record<string, unknown> | null) ?? {};
-    const impactType = String(cfg.impact_type ?? "").trim();
-    const impactLabel = impactType
-      ? `${impactType
-          .split("_")
-          .map((part) => (part ? part.charAt(0).toUpperCase() + part.slice(1) : ""))
-          .join(" ")} Impact`
-      : "";
-    const incidentTags = impactType
-      ? compactIncidentTags([
-          buildIncidentTag("impact", impactType, {
-            iconSrc: incidentIconByValue(impactType),
-            label: impactLabel,
-            pillBg: incidentPillBgByValue(impactType),
-          }),
-        ])
-      : [];
+    const consequenceCategory = String(cfg.consequence_category ?? "actual").trim().toLowerCase() || "actual";
+    const likelihood = String(cfg.likelihood ?? "possible").trim().toLowerCase();
+    const consequence = String(cfg.consequence ?? "moderate").trim().toLowerCase();
+    const reportingConsequence = String(cfg.reporting_consequence ?? "").trim().toLowerCase();
+    const outcomeHeaderLabel =
+      consequenceCategory === "maximum_reasonable"
+        ? "Potential Outcome"
+        : consequenceCategory === "actual"
+        ? "Actual Outcome"
+        : consequenceCategory === "reporting"
+        ? reportingConsequence === "externally_reported"
+          ? "External Report"
+          : reportingConsequence === "internally_reported"
+          ? "Internal Report"
+          : reportingConsequence === "reported_to_regulator"
+          ? "Regulator Report"
+          : reportingConsequence === "reported_elsewhere"
+          ? "Report Elsewhere"
+          : "Incident Outcome"
+        : "Incident Outcome";
+    const riskLevel =
+      consequenceCategory === "reporting"
+        ? ""
+        : String(cfg.risk_level ?? calculateIncidentRiskLevel(likelihood, consequence)).trim().toLowerCase();
+    const riskLevelLabel = riskLevel ? formatIncidentOptionLabel(riskLevel) : "";
+    const reportingLabel = reportingConsequence ? formatIncidentOptionLabel(reportingConsequence) : "";
+    const incidentTags =
+      consequenceCategory === "reporting"
+        ? compactIncidentTags([
+            reportingConsequence
+              ? buildIncidentTag("reporting_consequence", "other", {
+                  iconSrc: "/icons/comments.svg",
+                  label: reportingLabel,
+                  pillBg: "#dbeafe",
+                  pillText: "#111827",
+                })
+              : null,
+          ])
+        : compactIncidentTags([
+            buildIncidentTag("likelihood", "timestamp", {
+              iconSrc: "/icons/time.svg",
+              label: `Likelihood: ${formatIncidentOptionLabel(likelihood)}`,
+              pillBg: "#dbeafe",
+              pillText: "#111827",
+            }),
+            buildIncidentTag("consequence", "damage", {
+              iconSrc: "/icons/damage.svg",
+              label: `Consequence: ${formatIncidentOptionLabel(consequence)}`,
+              pillBg: "#fecdd3",
+              pillText: "#111827",
+            }),
+            riskLevel
+              ? buildIncidentTag("risk_level", "other", {
+                  iconSrc: "/icons/other.svg",
+                  label: `Risk Rating: ${riskLevelLabel}`,
+                  pillBg: incidentRiskBgByLevel(riskLevel),
+                  pillText: "#111827",
+                })
+              : null,
+          ]);
     const detailOpen = Boolean(cfg.incident_detail_open);
     return {
       id: flowId,
@@ -1539,10 +1643,13 @@ export const buildSecondaryElementFlowNode = (params: {
       },
       data: {
         entityKind: "incident_outcome",
-        typeName: "Outcome",
+        typeName: outcomeHeaderLabel,
         title: "Outcome",
         description: getMethodologyNodeText(el),
-        metaLabel: impactLabel || undefined,
+        metaLabel: consequenceCategory === "reporting" ? undefined : riskLevelLabel || undefined,
+        metaLabelBg: consequenceCategory === "reporting" ? "#dbeafe" : incidentRiskBgByLevel(riskLevel),
+        metaLabelText: "#111827",
+        metaLabelBorder: "transparent",
         userGroup: "",
         disciplineKeys: [],
         bannerBg: "#ef4444",
@@ -1631,7 +1738,18 @@ export const buildSecondaryElementFlowNode = (params: {
           .map((part) => (part ? part.charAt(0).toUpperCase() + part.slice(1) : ""))
           .join(" ")})`
       : "";
+    const peopleInvolvedCount = Array.isArray(cfg.people_involved)
+      ? cfg.people_involved.filter((value): value is string => typeof value === "string" && value.trim().length > 0).length
+      : 0;
     const incidentTags = compactIncidentTags([
+      peopleInvolvedCount > 0
+        ? buildIncidentTag("people_involved", "people", {
+            iconSrc: "/icons/account.svg",
+            label: `${peopleInvolvedCount} ${peopleInvolvedCount === 1 ? "Person" : "People"} Involved`,
+            pillBg: "#bfdbfe",
+            pillText: "#111827",
+          })
+        : null,
       buildIncidentTag("influence_type", influenceTypeRaw, {
         iconSrc: incidentIconByValue(influenceTypeRaw),
         label: formatIncidentOptionLabel(influenceTypeRaw),
@@ -1913,6 +2031,45 @@ export const buildSecondaryElementFlowNode = (params: {
       },
     };
   }
+  if (el.element_type === "incident_response_recovery") {
+    const cfg = (el.element_config as Record<string, unknown> | null) ?? {};
+    const categoryRaw = String(cfg.category ?? "").trim();
+    return {
+      id: flowId,
+      type: "incidentResponseRecovery",
+      position: { x: el.pos_x, y: el.pos_y },
+      zIndex: 30,
+      selected: isMarked,
+      draggable: canEditThis,
+      selectable: canWriteMap,
+      style: {
+        width: Math.max(incidentCardWidth, el.width || incidentCardWidth),
+        height: Math.max(incidentExpandedHeight, el.height || incidentExpandedHeight),
+        borderRadius: 0,
+        border: "none",
+        background: "transparent",
+        boxShadow: isMarked ? "0 0 0 2px rgba(15,23,42,0.9)" : "none",
+        padding: 0,
+        overflow: "visible",
+      },
+      data: {
+        entityKind: "incident_response_recovery",
+        typeName: "Response / Recovery",
+        title: "Response / Recovery",
+        description: getMethodologyNodeText(el),
+        metaLabel: categoryRaw ? formatIncidentOptionLabel(categoryRaw) : undefined,
+        metaLabelBg: "#fbcfe8",
+        metaLabelText: "#831843",
+        metaLabelBorder: "transparent",
+        userGroup: "",
+        disciplineKeys: [],
+        bannerBg: "#ec4899",
+        bannerText: "#ffffff",
+        isLandscape: true,
+        isUnconfigured: false,
+      },
+    };
+  }
   if (el.element_type === "incident_finding") {
     const cfg = (el.element_config as Record<string, unknown> | null) ?? {};
     const description = getMethodologyNodeText(el);
@@ -1921,6 +2078,7 @@ export const buildSecondaryElementFlowNode = (params: {
       : 1;
     const descriptionHeight = Math.max(minorGridSize, lineCount * 14 + 10);
     const autoHeight = minorGridSize * 2 + descriptionHeight + 8;
+    const minimumFindingHeight = minorGridSize * 6;
     return {
       id: flowId,
       type: "incidentFinding",
@@ -1931,7 +2089,7 @@ export const buildSecondaryElementFlowNode = (params: {
       selectable: canWriteMap,
       style: {
         width: Math.max(incidentCardWidth, el.width || incidentCardWidth),
-        height: Math.max(autoHeight, el.height || autoHeight),
+        height: Math.max(minimumFindingHeight, autoHeight, el.height || autoHeight),
         borderRadius: 0,
         border: "none",
         background: "transparent",

@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import DashboardShell from "@/components/dashboard/DashboardShell";
 import styles from "@/components/dashboard/DashboardShell.module.css";
 import { DashboardPageSkeleton } from "@/components/dashboard/DashboardTableLoadingState";
-import { accessBlocksInvestigationEntry, accessRequiresSelection, fetchAccessState, type BillingAccessState } from "@/lib/access";
+import { accessBlocksInvestigationEntry, accessCanUseReportGeneration, accessRequiresSelection, fetchAccessState, type BillingAccessState } from "@/lib/access";
 import { normalizeInvestigationReportPayload } from "@/lib/investigation-report/helpers";
 import type { InvestigationReportPayload } from "@/lib/investigation-report/types";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
@@ -61,6 +61,25 @@ type SequenceReportRow = {
   sortTime: number;
   pos_x: number;
   pos_y: number;
+  created_at: string;
+};
+
+type OutcomeElementRow = {
+  id: string;
+  heading: string;
+  element_config: Record<string, unknown> | null;
+  created_at: string;
+};
+
+type OutcomeReportRow = {
+  id: string;
+  title: string;
+  description: string;
+  outcome_category: string;
+  likelihood: string;
+  consequence: string;
+  risk_level: string;
+  reporting_outcome: string;
   created_at: string;
 };
 
@@ -180,6 +199,21 @@ type RecommendationReportRow = {
   created_at: string;
 };
 
+type RecoveryElementRow = {
+  id: string;
+  heading: string;
+  element_config: Record<string, unknown> | null;
+  created_at: string;
+};
+
+type RecoveryReportRow = {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  created_at: string;
+};
+
 type SavedInvestigationReportRow = {
   id: string;
   status: "draft" | "reviewed" | "approved";
@@ -192,9 +226,11 @@ type SavedInvestigationReportRow = {
 type ReportTab =
   | "setup-scope"
   | "sequence"
+  | "outcomes"
   | "people"
   | "factors"
   | "task-condition"
+  | "recovery"
   | "control-barrier"
   | "evidence"
   | "finding"
@@ -232,9 +268,11 @@ const reportTabs: Array<{ id: ReportTab; label: string }> = [
   { id: "setup-scope", label: "Scope" },
   { id: "reports", label: "Reports" },
   { id: "sequence", label: "Sequence" },
+  { id: "outcomes", label: "Outcomes" },
   { id: "people", label: "People" },
   { id: "factors", label: "Factors" },
   { id: "task-condition", label: "Task" },
+  { id: "recovery", label: "Recovery" },
   { id: "control-barrier", label: "Controls" },
   { id: "evidence", label: "Evidence" },
   { id: "finding", label: "Finding" },
@@ -383,9 +421,11 @@ export default function InvestigationReportPage() {
   const [scopeMessage, setScopeMessage] = useState<string | null>(null);
   const [scopeMessageIsError, setScopeMessageIsError] = useState(false);
   const [sequenceRows, setSequenceRows] = useState<SequenceReportRow[]>([]);
+  const [outcomeRows, setOutcomeRows] = useState<OutcomeReportRow[]>([]);
   const [peopleRows, setPeopleRows] = useState<PeopleReportRow[]>([]);
   const [factorRows, setFactorRows] = useState<FactorReportRow[]>([]);
   const [taskConditionRows, setTaskConditionRows] = useState<TaskConditionReportRow[]>([]);
+  const [recoveryRows, setRecoveryRows] = useState<RecoveryReportRow[]>([]);
   const [controlBarrierRows, setControlBarrierRows] = useState<ControlBarrierReportRow[]>([]);
   const [evidenceRows, setEvidenceRows] = useState<EvidenceReportRow[]>([]);
   const [findingRows, setFindingRows] = useState<FindingReportRow[]>([]);
@@ -420,10 +460,15 @@ export default function InvestigationReportPage() {
   const [reportActionId, setReportActionId] = useState<string | null>(null);
   const [pendingDeleteReportRow, setPendingDeleteReportRow] = useState<SavedInvestigationReportRow | null>(null);
   const [showCreateVersionModal, setShowCreateVersionModal] = useState(false);
+  const [selectedReportIds, setSelectedReportIds] = useState<string[]>([]);
+  const [showBulkDeleteReportsModal, setShowBulkDeleteReportsModal] = useState(false);
+  const [bulkDeletingReports, setBulkDeletingReports] = useState(false);
   const [tablePages, setTablePages] = useState<Record<string, number>>({
     sequence: 1,
+    outcomes: 1,
     factors: 1,
     "task-condition": 1,
+    recovery: 1,
     "control-barrier": 1,
     evidence: 1,
     finding: 1,
@@ -607,6 +652,11 @@ export default function InvestigationReportPage() {
   };
 
   const pagedReports = getPagedRows(sortedSavedReports, "reports");
+  const selectedSavedReports = useMemo(
+    () => sortedSavedReports.filter((row) => selectedReportIds.includes(row.id)),
+    [selectedReportIds, sortedSavedReports]
+  );
+  const allReportsSelected = sortedSavedReports.length > 0 && selectedSavedReports.length === sortedSavedReports.length;
 
   const latestGeneratedLongDescription = useMemo(() => {
     const latestReport = [...savedReports].sort((a, b) => b.version_number - a.version_number)[0];
@@ -1393,9 +1443,11 @@ export default function InvestigationReportPage() {
         { data: mapRow, error: mapError },
         { data: memberRows, error: memberError },
         { data: sequenceElements, error: sequenceError },
+        { data: outcomeElements, error: outcomeError },
         { data: personElements, error: peopleError },
         { data: factorElements, error: factorError },
         { data: taskConditionElements, error: taskConditionError },
+        { data: recoveryElements, error: recoveryError },
         { data: controlBarrierElements, error: controlBarrierError },
         { data: evidenceElements, error: evidenceError },
         { data: findingElements, error: findingError },
@@ -1423,6 +1475,13 @@ export default function InvestigationReportPage() {
           .from("canvas_elements")
           .select("id,heading,element_config,created_at")
           .eq("map_id", params.id)
+          .eq("element_type", "incident_outcome")
+          .order("created_at", { ascending: true }),
+        supabase
+          .schema("ms")
+          .from("canvas_elements")
+          .select("id,heading,element_config,created_at")
+          .eq("map_id", params.id)
           .eq("element_type", "person")
           .order("created_at", { ascending: true }),
         supabase
@@ -1438,6 +1497,13 @@ export default function InvestigationReportPage() {
           .select("id,heading,element_config,created_at")
           .eq("map_id", params.id)
           .eq("element_type", "incident_task_condition")
+          .order("created_at", { ascending: true }),
+        supabase
+          .schema("ms")
+          .from("canvas_elements")
+          .select("id,heading,element_config,created_at")
+          .eq("map_id", params.id)
+          .eq("element_type", "incident_response_recovery")
           .order("created_at", { ascending: true }),
         supabase
           .schema("ms")
@@ -1493,6 +1559,12 @@ export default function InvestigationReportPage() {
         return;
       }
 
+      if (outcomeError) {
+        setError(outcomeError.message);
+        setLoading(false);
+        return;
+      }
+
       if (peopleError) {
         setError(peopleError.message);
         setLoading(false);
@@ -1507,6 +1579,12 @@ export default function InvestigationReportPage() {
 
       if (taskConditionError) {
         setError(taskConditionError.message);
+        setLoading(false);
+        return;
+      }
+
+      if (recoveryError) {
+        setError(recoveryError.message);
         setLoading(false);
         return;
       }
@@ -1569,6 +1647,21 @@ export default function InvestigationReportPage() {
           if (a.pos_y !== b.pos_y) return a.pos_y - b.pos_y;
           return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
         });
+
+      const outcomeData: OutcomeReportRow[] = ((outcomeElements ?? []) as OutcomeElementRow[]).map((row) => {
+        const config = row.element_config ?? {};
+        return {
+          id: row.id,
+          title: String(row.heading ?? "").trim() || "Outcome",
+          description: String(config.description ?? "").trim(),
+          outcome_category: formatLabel(String(config.consequence_category ?? "actual").trim()),
+          likelihood: formatLabel(String(config.likelihood ?? "").trim()),
+          consequence: formatLabel(String(config.consequence ?? "").trim()),
+          risk_level: formatLabel(String(config.risk_level ?? "").trim()),
+          reporting_outcome: formatLabel(String(config.reporting_consequence ?? "").trim()),
+          created_at: row.created_at,
+        };
+      });
 
       const peopleData = ((personElements ?? []) as PersonElementRow[]).map((row) => {
         const config = row.element_config ?? {};
@@ -1637,6 +1730,17 @@ export default function InvestigationReportPage() {
           };
         }
       );
+
+      const recoveryData: RecoveryReportRow[] = ((recoveryElements ?? []) as RecoveryElementRow[]).map((row) => {
+        const config = row.element_config ?? {};
+        return {
+          id: row.id,
+          title: String(row.heading ?? "").trim() || "Recovery",
+          description: String(config.description ?? "").trim(),
+          category: formatLabel(String(config.category ?? "").trim()),
+          created_at: row.created_at,
+        };
+      });
 
       const controlBarrierData: ControlBarrierReportRow[] = (
         (controlBarrierElements ?? []) as ControlBarrierElementRow[]
@@ -1742,9 +1846,11 @@ export default function InvestigationReportPage() {
       setScopeMetaEditing(false);
       setScopeEditing(false);
       setSequenceRows(sequenceData);
+      setOutcomeRows(outcomeData);
       setPeopleRows(peopleData);
       setFactorRows(factorData);
       setTaskConditionRows(taskConditionData);
+      setRecoveryRows(recoveryData);
       setControlBarrierRows(controlBarrierData);
       setEvidenceRows(evidenceData);
       setFindingRows(findingData);
@@ -1870,6 +1976,22 @@ export default function InvestigationReportPage() {
   };
 
   const hasSavedReports = savedReports.length > 0;
+  const reportGenerationDisabledReason =
+    accessState && !accessCanUseReportGeneration(accessState)
+      ? "Report generation is not available on the 7 day free trial."
+      : null;
+  const canUseReportGeneration = reportGenerationDisabledReason === null;
+
+  const handleGenerateReportAction = () => {
+    if (!canUseReportGeneration) return;
+
+    if (hasSavedReports) {
+      setShowCreateVersionModal(true);
+      return;
+    }
+
+    router.push(`/investigations/${params.id}/generated-report`);
+  };
 
   const handleDeleteReport = async (reportId: string) => {
     setReportActionId(reportId);
@@ -1887,8 +2009,40 @@ export default function InvestigationReportPage() {
     }
 
     setSavedReports((current) => current.filter((row) => row.id !== reportId));
+    setSelectedReportIds((current) => current.filter((id) => id !== reportId));
     setPendingDeleteReportRow(null);
     setReportActionId(null);
+  };
+
+  const toggleSelectedReport = (reportId: string) => {
+    setSelectedReportIds((current) =>
+      current.includes(reportId) ? current.filter((id) => id !== reportId) : [...current, reportId]
+    );
+  };
+
+  const handleBulkDeleteReports = async () => {
+    if (!selectedSavedReports.length) return;
+
+    setBulkDeletingReports(true);
+    const selectedIds = selectedSavedReports.map((row) => row.id);
+    const { error: deleteError } = await supabase
+      .schema("ms")
+      .from("investigation_reports")
+      .delete()
+      .eq("case_id", params.id)
+      .in("id", selectedIds);
+
+    if (deleteError) {
+      setError(deleteError.message || "Unable to bulk delete reports.");
+      setBulkDeletingReports(false);
+      return;
+    }
+
+    const deletedIds = new Set(selectedIds);
+    setSavedReports((current) => current.filter((row) => !deletedIds.has(row.id)));
+    setSelectedReportIds([]);
+    setShowBulkDeleteReportsModal(false);
+    setBulkDeletingReports(false);
   };
 
   const toggleReportSort = (key: ReportSortKey) => {
@@ -1902,8 +2056,10 @@ export default function InvestigationReportPage() {
   };
 
   const pagedSequence = getPagedRows(sortedSequenceRows, "sequence");
+  const pagedOutcomes = getPagedRows(outcomeRows, "outcomes");
   const pagedFactors = getPagedRows(sortedFactorRows, "factors");
   const pagedTaskConditions = getPagedRows(filteredTaskConditionRows, "task-condition");
+  const pagedRecovery = getPagedRows(recoveryRows, "recovery");
   const pagedControlBarriers = getPagedRows(filteredControlBarrierRows, "control-barrier");
   const pagedEvidence = getPagedRows(filteredEvidenceRows, "evidence");
   const pagedFindings = getPagedRows(filteredFindingRows, "finding");
@@ -1983,23 +2139,25 @@ export default function InvestigationReportPage() {
               </div>
               {!loading && !error && map ? (
                 <div className={styles.reportToggleActions}>
-                  <button
-                    type="button"
-                    className={`${styles.button} ${hasSavedReports ? styles.buttonSecondary : styles.buttonWizard}`}
-                    onClick={() => router.push(`/investigations/${map.id}/generated-report`)}
-                    disabled={hasSavedReports}
-                    title="Generate Report"
-                    aria-label="Generate Report"
-                  >
-                    <Image
-                      src="/icons/generate.svg"
-                      alt=""
-                      width={16}
-                      height={16}
-                      className={hasSavedReports ? styles.buttonIconDark : styles.buttonIcon}
-                    />
-                    {hasSavedReports ? "Report Already Generated" : "Generate Report"}
-                  </button>
+                  <span title={reportGenerationDisabledReason || "Generate Report"}>
+                    <button
+                      type="button"
+                      className={`${styles.button} ${hasSavedReports ? styles.buttonSecondary : styles.buttonWizard}`}
+                      onClick={handleGenerateReportAction}
+                      title={reportGenerationDisabledReason || "Generate Report"}
+                      aria-label={reportGenerationDisabledReason || "Generate Report"}
+                      disabled={!canUseReportGeneration}
+                    >
+                      <Image
+                        src="/icons/generate.svg"
+                        alt=""
+                        width={16}
+                        height={16}
+                        className={hasSavedReports ? styles.buttonIconDark : styles.buttonIcon}
+                      />
+                      {hasSavedReports ? "Report Already Generated" : "Generate Report"}
+                    </button>
+                  </span>
                   <button
                     type="button"
                     className={`${styles.button} ${styles.buttonAccent}`}
@@ -2305,6 +2463,107 @@ export default function InvestigationReportPage() {
                   </div>
                   {renderPagination("sequence", sortedSequenceRows.length, pagedSequence.currentPage, pagedSequence.totalPages)}
                 </>
+              ) : activeTab === "outcomes" ? (
+                <>
+                  <div className={`${styles.tableWrap} ${styles.reportDataTableWrap}`}>
+                    <table className={`${styles.table} ${styles.reportDataTable}`}>
+                      <colgroup>
+                        <col style={{ width: "8%" }} />
+                        <col style={{ width: "18%" }} />
+                        <col style={{ width: "24%" }} />
+                        <col style={{ width: "14%" }} />
+                        <col style={{ width: "12%" }} />
+                        <col style={{ width: "12%" }} />
+                        <col style={{ width: "12%" }} />
+                      </colgroup>
+                      <thead>
+                        <tr>
+                          <th className={`${styles.reportNumberHeader} ${styles.reportHeaderCenter}`}>No.</th>
+                          <th>Outcome</th>
+                          <th>Description</th>
+                          <th>Category</th>
+                          <th>Likelihood</th>
+                          <th>Consequence</th>
+                          <th>Risk Level</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {outcomeRows.length === 0 ? (
+                          renderTableEmptyRow(7, getEmptyTableMessage("outcomes"))
+                        ) : (
+                          pagedOutcomes.rows.map((row, index) => (
+                            <tr key={row.id}>
+                              <td className={`${styles.reportNumberCell} ${styles.reportCellCenter}`}>
+                                <span className={styles.tableValue}>
+                                  {(pagedOutcomes.currentPage - 1) * TABLE_PAGE_SIZE + index + 1}
+                                </span>
+                              </td>
+                              <td><span className={styles.tableWrapText}>{row.title}</span></td>
+                              <td><span className={styles.tableWrapText}>{row.description || "-"}</span></td>
+                              <td><span className={styles.tableClamp}>{row.outcome_category || "-"}</span></td>
+                              <td className={styles.reportCellCenter}>
+                                <span className={`${styles.statusPill} ${styles.factorPillNeutral}`}>{row.likelihood || "-"}</span>
+                              </td>
+                              <td className={styles.reportCellCenter}>
+                                <span className={`${styles.statusPill} ${styles.factorPillNeutral}`}>{row.consequence || "-"}</span>
+                              </td>
+                              <td className={styles.reportCellCenter}>
+                                <span className={`${styles.statusPill} ${styles.factorPillNeutral}`}>{row.risk_level || "-"}</span>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className={styles.reportMobileList}>
+                    {outcomeRows.length === 0
+                      ? renderMobileEmptyState(getEmptyTableMessage("outcomes"))
+                      : pagedOutcomes.rows.map((row, index) => (
+                          <article key={row.id} className={styles.reportMobileCard}>
+                            <div className={styles.reportMobileCardTop}>
+                              <div className={styles.reportMobileCardBadgeWrap}>
+                                <span className={styles.reportMobileCardBadge} aria-hidden="true">
+                                  {(pagedOutcomes.currentPage - 1) * TABLE_PAGE_SIZE + index + 1}
+                                </span>
+                              </div>
+                              <span className={styles.reportMobileCardMetaPill}>
+                                {row.outcome_category || "Outcome"}
+                              </span>
+                            </div>
+                            <div className={styles.reportMobileCardHeader}>
+                              <div className={styles.reportMobileTitleBlock}>
+                                <strong>{row.title}</strong>
+                              </div>
+                            </div>
+                            <div className={styles.reportMobileCardBody}>
+                              <p className={styles.reportMobileCardDescription}>{row.description || "-"}</p>
+                            </div>
+                            <div className={styles.reportMobileCardFooter}>
+                              <div className={styles.reportMobileCardFooterMeta}>
+                                <span className={styles.reportMobileLabel}>Likelihood</span>
+                                <span className={styles.reportMobileValue}>{row.likelihood || "-"}</span>
+                              </div>
+                              <div className={styles.reportMobileCardFooterMeta}>
+                                <span className={styles.reportMobileLabel}>Consequence</span>
+                                <span className={styles.reportMobileValue}>{row.consequence || "-"}</span>
+                              </div>
+                              <div className={styles.reportMobileCardFooterMeta}>
+                                <span className={styles.reportMobileLabel}>Risk Level</span>
+                                <span className={styles.reportMobileValue}>{row.risk_level || "-"}</span>
+                              </div>
+                              {row.reporting_outcome ? (
+                                <div className={`${styles.reportMobileCardFooterMeta} ${styles.reportMobileCardFooterMetaFull}`}>
+                                  <span className={styles.reportMobileLabel}>Reporting Outcome</span>
+                                  <span className={styles.reportMobileValue}>{row.reporting_outcome}</span>
+                                </div>
+                              ) : null}
+                            </div>
+                          </article>
+                        ))}
+                  </div>
+                  {renderPagination("outcomes", outcomeRows.length, pagedOutcomes.currentPage, pagedOutcomes.totalPages)}
+                </>
               ) : activeTab === "people" ? (
                 <div className={styles.reportPeopleGrid}>
                   {peopleRows.length === 0 ? (
@@ -2352,15 +2611,17 @@ export default function InvestigationReportPage() {
                   <div className={`${styles.tableWrap} ${styles.reportDataTableWrap}`}>
                     <table className={`${styles.table} ${styles.reportDataTable}`}>
                       <colgroup>
+                        <col style={{ width: "8%" }} />
                         <col style={{ width: "10%" }} />
-                        <col style={{ width: "27%" }} />
-                        <col style={{ width: "25%" }} />
-                        <col style={{ width: "12%" }} />
+                        <col style={{ width: "24%" }} />
+                        <col style={{ width: "22%" }} />
+                        <col style={{ width: "10%" }} />
                         <col style={{ width: "16%" }} />
                         <col style={{ width: "10%" }} />
                       </colgroup>
                       <thead>
                       <tr>
+                        <th className={`${styles.reportNumberHeader} ${styles.reportHeaderCenter}`}>No.</th>
                         <th className={styles.reportHeaderCenter}>Type</th>
                         <th>Title</th>
                         <th>Description</th>
@@ -2371,10 +2632,15 @@ export default function InvestigationReportPage() {
                       </thead>
                       <tbody>
                       {sortedFactorRows.length === 0 ? (
-                        renderTableEmptyRow(6, getEmptyTableMessage("factors"))
+                        renderTableEmptyRow(7, getEmptyTableMessage("factors"))
                       ) : (
-                        pagedFactors.rows.map((row) => (
+                        pagedFactors.rows.map((row, index) => (
                           <tr key={row.id}>
+                            <td className={`${styles.reportNumberCell} ${styles.reportCellCenter}`}>
+                              <span className={styles.tableValue}>
+                                {(pagedFactors.currentPage - 1) * TABLE_PAGE_SIZE + index + 1}
+                              </span>
+                            </td>
                             <td className={styles.reportCellCenter}><span className={styles.tableClamp}>{row.type}</span></td>
                             <td><span className={styles.tableWrapText}>{row.title}</span></td>
                             <td><span className={styles.tableWrapText}>{row.description || "-"}</span></td>
@@ -2462,13 +2728,15 @@ export default function InvestigationReportPage() {
                   <div className={`${styles.tableWrap} ${styles.reportDataTableWrap}`}>
                     <table className={`${styles.table} ${styles.reportDataTable}`}>
                       <colgroup>
-                        <col style={{ width: "19%" }} />
-                        <col style={{ width: "28%" }} />
+                        <col style={{ width: "8%" }} />
                         <col style={{ width: "17%" }} />
+                        <col style={{ width: "25%" }} />
+                        <col style={{ width: "15%" }} />
                         <col style={{ width: "35%" }} />
                       </colgroup>
                       <thead>
                       <tr>
+                        <th className={`${styles.reportNumberHeader} ${styles.reportHeaderCenter}`}>No.</th>
                         <th>Task/Condition</th>
                         <th>Description</th>
                         <th className={styles.reportHeaderCenter}>{renderFactorFilterHeader("taskState", "State")}</th>
@@ -2477,10 +2745,15 @@ export default function InvestigationReportPage() {
                       </thead>
                       <tbody>
                       {filteredTaskConditionRows.length === 0 ? (
-                        renderTableEmptyRow(4, getEmptyTableMessage("task and condition items"))
+                        renderTableEmptyRow(5, getEmptyTableMessage("task and condition items"))
                       ) : (
-                        pagedTaskConditions.rows.map((row) => (
+                        pagedTaskConditions.rows.map((row, index) => (
                           <tr key={row.id}>
+                            <td className={`${styles.reportNumberCell} ${styles.reportCellCenter}`}>
+                              <span className={styles.tableValue}>
+                                {(pagedTaskConditions.currentPage - 1) * TABLE_PAGE_SIZE + index + 1}
+                              </span>
+                            </td>
                             <td><span className={styles.tableWrapText}>{row.title}</span></td>
                             <td><span className={styles.tableWrapText}>{row.description || "-"}</span></td>
                             <td className={styles.reportCellCenter}>
@@ -2534,6 +2807,72 @@ export default function InvestigationReportPage() {
                     pagedTaskConditions.totalPages
                   )}
                 </>
+              ) : activeTab === "recovery" ? (
+                <>
+                  <div className={`${styles.tableWrap} ${styles.reportDataTableWrap}`}>
+                    <table className={`${styles.table} ${styles.reportDataTable}`}>
+                      <colgroup>
+                        <col style={{ width: "8%" }} />
+                        <col style={{ width: "24%" }} />
+                        <col style={{ width: "46%" }} />
+                        <col style={{ width: "22%" }} />
+                      </colgroup>
+                      <thead>
+                        <tr>
+                          <th className={`${styles.reportNumberHeader} ${styles.reportHeaderCenter}`}>No.</th>
+                          <th>Recovery</th>
+                          <th>Description</th>
+                          <th>Category</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {recoveryRows.length === 0 ? (
+                          renderTableEmptyRow(4, getEmptyTableMessage("recovery items"))
+                        ) : (
+                          pagedRecovery.rows.map((row, index) => (
+                            <tr key={row.id}>
+                              <td className={`${styles.reportNumberCell} ${styles.reportCellCenter}`}>
+                                <span className={styles.tableValue}>
+                                  {(pagedRecovery.currentPage - 1) * TABLE_PAGE_SIZE + index + 1}
+                                </span>
+                              </td>
+                              <td><span className={styles.tableWrapText}>{row.title}</span></td>
+                              <td><span className={styles.tableWrapText}>{row.description || "-"}</span></td>
+                              <td className={styles.reportCellCenter}>
+                                <span className={`${styles.statusPill} ${styles.factorPillNeutral}`}>{row.category || "-"}</span>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className={styles.reportMobileList}>
+                    {recoveryRows.length === 0
+                      ? renderMobileEmptyState(getEmptyTableMessage("recovery items"))
+                      : pagedRecovery.rows.map((row, index) => (
+                          <article key={row.id} className={styles.reportMobileCard}>
+                            <div className={styles.reportMobileCardTop}>
+                              <div className={styles.reportMobileCardBadgeWrap}>
+                                <span className={styles.reportMobileCardBadge} aria-hidden="true">
+                                  {(pagedRecovery.currentPage - 1) * TABLE_PAGE_SIZE + index + 1}
+                                </span>
+                              </div>
+                              <span className={styles.reportMobileCardMetaPill}>{row.category || "Recovery"}</span>
+                            </div>
+                            <div className={styles.reportMobileCardHeader}>
+                              <div className={styles.reportMobileTitleBlock}>
+                                <strong>{row.title}</strong>
+                              </div>
+                            </div>
+                            <div className={styles.reportMobileCardBody}>
+                              <p className={styles.reportMobileCardDescription}>{row.description || "-"}</p>
+                            </div>
+                          </article>
+                        ))}
+                  </div>
+                  {renderPagination("recovery", recoveryRows.length, pagedRecovery.currentPage, pagedRecovery.totalPages)}
+                </>
               ) : activeTab === "control-barrier" ? (
                 <>
                   {renderMobileFiltersButton()}
@@ -2558,15 +2897,17 @@ export default function InvestigationReportPage() {
                   <div className={`${styles.tableWrap} ${styles.reportDataTableWrap}`}>
                     <table className={`${styles.table} ${styles.reportDataTable}`}>
                       <colgroup>
-                        <col style={{ width: "18%" }} />
-                        <col style={{ width: "26%" }} />
-                        <col style={{ width: "14%" }} />
-                        <col style={{ width: "14%" }} />
+                        <col style={{ width: "8%" }} />
+                        <col style={{ width: "16%" }} />
+                        <col style={{ width: "24%" }} />
+                        <col style={{ width: "12%" }} />
+                        <col style={{ width: "12%" }} />
                         <col style={{ width: "12%" }} />
                         <col style={{ width: "16%" }} />
                       </colgroup>
                       <thead>
                       <tr>
+                        <th className={`${styles.reportNumberHeader} ${styles.reportHeaderCenter}`}>No.</th>
                         <th>Control/Barrier</th>
                         <th>Description</th>
                         <th>{renderFactorFilterHeader("barrierState", "Barrier State")}</th>
@@ -2577,10 +2918,15 @@ export default function InvestigationReportPage() {
                       </thead>
                       <tbody>
                       {filteredControlBarrierRows.length === 0 ? (
-                        renderTableEmptyRow(6, getEmptyTableMessage("control and barrier items"))
+                        renderTableEmptyRow(7, getEmptyTableMessage("control and barrier items"))
                       ) : (
-                        pagedControlBarriers.rows.map((row) => (
+                        pagedControlBarriers.rows.map((row, index) => (
                           <tr key={row.id}>
+                            <td className={`${styles.reportNumberCell} ${styles.reportCellCenter}`}>
+                              <span className={styles.tableValue}>
+                                {(pagedControlBarriers.currentPage - 1) * TABLE_PAGE_SIZE + index + 1}
+                              </span>
+                            </td>
                             <td><span className={styles.tableWrapText}>{row.title}</span></td>
                             <td><span className={styles.tableWrapText}>{row.description || "-"}</span></td>
                             <td>
@@ -2674,14 +3020,16 @@ export default function InvestigationReportPage() {
                   <div className={`${styles.tableWrap} ${styles.reportDataTableWrap}`}>
                     <table className={`${styles.table} ${styles.reportDataTable}`}>
                       <colgroup>
-                        <col style={{ width: "20%" }} />
-                        <col style={{ width: "28%" }} />
-                        <col style={{ width: "14%" }} />
+                        <col style={{ width: "8%" }} />
+                        <col style={{ width: "18%" }} />
+                        <col style={{ width: "24%" }} />
+                        <col style={{ width: "12%" }} />
                         <col style={{ width: "18%" }} />
                         <col style={{ width: "20%" }} />
                       </colgroup>
                       <thead>
                       <tr>
+                        <th className={`${styles.reportNumberHeader} ${styles.reportHeaderCenter}`}>No.</th>
                         <th>Evidence</th>
                         <th>Description</th>
                         <th>{renderFactorFilterHeader("evidenceType", "Type")}</th>
@@ -2691,10 +3039,15 @@ export default function InvestigationReportPage() {
                       </thead>
                       <tbody>
                       {filteredEvidenceRows.length === 0 ? (
-                        renderTableEmptyRow(5, getEmptyTableMessage("evidence items"))
+                        renderTableEmptyRow(6, getEmptyTableMessage("evidence items"))
                       ) : (
-                        pagedEvidence.rows.map((row) => (
+                        pagedEvidence.rows.map((row, index) => (
                           <tr key={row.id}>
+                            <td className={`${styles.reportNumberCell} ${styles.reportCellCenter}`}>
+                              <span className={styles.tableValue}>
+                                {(pagedEvidence.currentPage - 1) * TABLE_PAGE_SIZE + index + 1}
+                              </span>
+                            </td>
                             <td><span className={styles.tableWrapText}>{row.title}</span></td>
                             <td><span className={styles.tableWrapText}>{row.description || "-"}</span></td>
                             <td><span className={styles.tableClamp}>{row.evidence_type || "-"}</span></td>
@@ -2968,97 +3321,208 @@ export default function InvestigationReportPage() {
                 </>
               ) : activeTab === "reports" ? (
                 <>
-                  <div className={styles.sectionHeader}>
-                    <button
-                      type="button"
-                      className={`${styles.button} ${hasSavedReports ? styles.buttonAccent : styles.buttonSecondary}`}
-                      onClick={() => setShowCreateVersionModal(true)}
-                      disabled={!hasSavedReports}
-                    >
-                      Create New Version
-                    </button>
-                  </div>
+                  {savedReports.length > 0 ? (
+                    <div className={styles.tableToolbar}>
+                      <span title={!selectedSavedReports.length ? "Select one or more report versions to bulk delete." : undefined}>
+                        <button
+                          type="button"
+                          className={`${styles.button} ${styles.buttonDanger} ${styles.bulkDeleteButton}`}
+                          disabled={!selectedSavedReports.length || bulkDeletingReports}
+                          onClick={() => setShowBulkDeleteReportsModal(true)}
+                        >
+                          <Image src="/icons/delete.svg" alt="" width={16} height={16} className={styles.buttonIconDanger} />
+                          Bulk Delete
+                        </button>
+                      </span>
+                    </div>
+                  ) : null}
                   {savedReports.length === 0 ? (
                     renderMobileEmptyState("No saved reports have been generated for this investigation yet.")
                   ) : (
-                    <div className={styles.tableWrap}>
-                      <table className={`${styles.table} ${styles.reportDataTable}`}>
-                        <thead>
-                          <tr>
-                            <th className={styles.reportHeaderLeft}>Version</th>
-                            <th className={styles.reportHeaderLeft}>Status</th>
-                            <th className={styles.reportHeaderLeft}>
-                              <button type="button" className={styles.tableSortButton} onClick={() => toggleReportSort("generated_at")}>
-                                <span>Generated</span>
-                                <span className={styles.tableSortIcon} aria-hidden="true">
-                                  {reportSortKey === "generated_at" ? (reportSortDirection === "asc" ? "↑" : "↓") : "↕"}
+                    <>
+                      <div className={`${styles.tableWrap} ${styles.reportDataTableWrap}`}>
+                        <table className={`${styles.table} ${styles.reportDataTable}`}>
+                          <colgroup>
+                            <col style={{ width: "8%" }} />
+                            <col style={{ width: "8%" }} />
+                            <col style={{ width: "12%" }} />
+                            <col style={{ width: "16%" }} />
+                            <col style={{ width: "18%" }} />
+                            <col style={{ width: "18%" }} />
+                            <col style={{ width: "20%" }} />
+                          </colgroup>
+                          <thead>
+                            <tr>
+                              <th className={styles.reportHeaderCenter}>
+                                <input
+                                  className={styles.tableCheckbox}
+                                  type="checkbox"
+                                  checked={allReportsSelected}
+                                  onChange={() =>
+                                    setSelectedReportIds(allReportsSelected ? [] : sortedSavedReports.map((row) => row.id))
+                                  }
+                                  aria-label="Select all report versions"
+                                />
+                              </th>
+                              <th className={`${styles.reportNumberHeader} ${styles.reportHeaderCenter}`}>No.</th>
+                              <th className={styles.reportHeaderLeft}>Version</th>
+                              <th className={styles.reportHeaderLeft}>Status</th>
+                              <th className={styles.reportHeaderLeft}>
+                                <button type="button" className={styles.tableSortButton} onClick={() => toggleReportSort("generated_at")}>
+                                  <span>Generated</span>
+                                  <span className={styles.tableSortIcon} aria-hidden="true">
+                                    {reportSortKey === "generated_at" ? (reportSortDirection === "asc" ? "↑" : "↓") : "↕"}
+                                  </span>
+                                </button>
+                              </th>
+                              <th className={styles.reportHeaderLeft}>
+                                <button type="button" className={styles.tableSortButton} onClick={() => toggleReportSort("updated_at")}>
+                                  <span>Updated</span>
+                                  <span className={styles.tableSortIcon} aria-hidden="true">
+                                    {reportSortKey === "updated_at" ? (reportSortDirection === "asc" ? "↑" : "↓") : "↕"}
+                                  </span>
+                                </button>
+                              </th>
+                              <th className={styles.reportHeaderCenter}>Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {pagedReports.rows.map((row, index) => (
+                              <tr
+                                key={row.id}
+                                className={styles.clickableRow}
+                                onClick={() => router.push(`/investigations/${params.id}/generated-report?reportId=${row.id}`)}
+                              >
+                                <td className={styles.reportCellCenter} onClick={(event) => event.stopPropagation()}>
+                                  <input
+                                    className={styles.tableCheckbox}
+                                    type="checkbox"
+                                    checked={selectedReportIds.includes(row.id)}
+                                    onChange={() => toggleSelectedReport(row.id)}
+                                    aria-label={`Select report version ${row.version_number}`}
+                                  />
+                                </td>
+                                <td className={`${styles.reportNumberCell} ${styles.reportCellCenter}`}>
+                                  <span className={styles.tableValue}>
+                                    {(pagedReports.currentPage - 1) * TABLE_PAGE_SIZE + index + 1}
+                                  </span>
+                                </td>
+                                <td><span className={styles.tableValue}>{`Version ${row.version_number}`}</span></td>
+                                <td>
+                                  <span
+                                    className={`${styles.statusPill} ${
+                                      row.status === "approved"
+                                        ? styles.factorPillPresent
+                                        : row.status === "reviewed"
+                                          ? styles.factorPillContributing
+                                          : styles.factorPillNeutral
+                                    }`}
+                                  >
+                                    {formatLabel(row.status)}
+                                  </span>
+                                </td>
+                                <td><span className={styles.tableDate}>{formatDate(row.generated_at)}</span></td>
+                                <td><span className={styles.tableDate}>{formatDate(row.updated_at)}</span></td>
+                                <td className={styles.reportCellCenter}>
+                                  <div className={styles.reportTableActions}>
+                                    <button
+                                      type="button"
+                                      className={`${styles.button} ${styles.buttonAccent}`}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        router.push(`/investigations/${params.id}/reports/${row.id}/edit`);
+                                      }}
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className={`${styles.button} ${styles.buttonDanger}`}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        setPendingDeleteReportRow(row);
+                                      }}
+                                      disabled={reportActionId === row.id || bulkDeletingReports}
+                                    >
+                                      {reportActionId === row.id ? "Deleting..." : "Delete"}
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className={styles.reportMobileList}>
+                        {pagedReports.rows.map((row, index) => (
+                          <article key={row.id} className={styles.reportMobileCard}>
+                            <div className={styles.reportMobileCardTop}>
+                              <div className={styles.reportMobileCardBadgeWrap}>
+                                <span className={styles.reportMobileCardBadge} aria-hidden="true">
+                                  {(pagedReports.currentPage - 1) * TABLE_PAGE_SIZE + index + 1}
                                 </span>
-                              </button>
-                            </th>
-                            <th className={styles.reportHeaderLeft}>
-                              <button type="button" className={styles.tableSortButton} onClick={() => toggleReportSort("updated_at")}>
-                                <span>Updated</span>
-                                <span className={styles.tableSortIcon} aria-hidden="true">
-                                  {reportSortKey === "updated_at" ? (reportSortDirection === "asc" ? "↑" : "↓") : "↕"}
-                                </span>
-                              </button>
-                            </th>
-                            <th className={styles.reportHeaderLeft}>Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {pagedReports.rows.map((row) => (
-                            <tr
-                              key={row.id}
-                              className={styles.clickableRow}
-                              onClick={() => router.push(`/investigations/${params.id}/generated-report?reportId=${row.id}`)}
-                            >
-                              <td><span className={styles.tableValue}>{`Version ${row.version_number}`}</span></td>
-                              <td>
-                                <span
-                                  className={`${styles.statusPill} ${
-                                    row.status === "approved"
-                                      ? styles.factorPillPresent
-                                      : row.status === "reviewed"
-                                        ? styles.factorPillContributing
-                                        : styles.factorPillNeutral
-                                  }`}
-                                >
-                                  {formatLabel(row.status)}
-                                </span>
-                              </td>
-                              <td><span className={styles.tableDate}>{formatDate(row.generated_at)}</span></td>
-                              <td><span className={styles.tableDate}>{formatDate(row.updated_at)}</span></td>
-                              <td>
-                                <div className={styles.headerButtons}>
+                              </div>
+                              <span
+                                className={`${styles.reportMobileCardMetaPill} ${
+                                  row.status === "approved"
+                                    ? styles.factorPillPresent
+                                    : row.status === "reviewed"
+                                      ? styles.factorPillContributing
+                                      : styles.factorPillNeutral
+                                } ${styles.reportMobileCardMetaPillStatus}`}
+                              >
+                                {formatLabel(row.status)}
+                              </span>
+                            </div>
+                            <div className={styles.reportMobileCardHeader}>
+                              <div className={styles.reportMobileTitleBlock}>
+                                <strong>{`Version ${row.version_number}`}</strong>
+                                <span>{`Generated ${formatDate(row.generated_at)}`}</span>
+                              </div>
+                            </div>
+                            <div className={styles.reportMobileGrid}>
+                              <div className={styles.reportMobileItem}>
+                                <span className={styles.reportMobileLabel}>Updated</span>
+                                <span className={styles.reportMobileValue}>{formatDate(row.updated_at)}</span>
+                              </div>
+                              <div className={styles.reportMobileItem}>
+                                <span className={styles.reportMobileLabel}>Selected</span>
+                                <label className={styles.reportMobilePillWrap}>
+                                  <input
+                                    className={styles.tableCheckbox}
+                                    type="checkbox"
+                                    checked={selectedReportIds.includes(row.id)}
+                                    onChange={() => toggleSelectedReport(row.id)}
+                                    aria-label={`Select report version ${row.version_number}`}
+                                  />
+                                </label>
+                              </div>
+                            </div>
+                            <div className={styles.reportMobileCardFooter}>
+                              <div className={`${styles.reportMobileCardFooterMeta} ${styles.reportMobileCardFooterMetaFull}`}>
+                                <div className={styles.reportTableActions}>
                                   <button
                                     type="button"
                                     className={`${styles.button} ${styles.buttonAccent}`}
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      router.push(`/investigations/${params.id}/reports/${row.id}/edit`);
-                                    }}
+                                    onClick={() => router.push(`/investigations/${params.id}/reports/${row.id}/edit`)}
                                   >
                                     Edit
                                   </button>
                                   <button
                                     type="button"
                                     className={`${styles.button} ${styles.buttonDanger}`}
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      setPendingDeleteReportRow(row);
-                                    }}
-                                    disabled={reportActionId === row.id}
+                                    onClick={() => setPendingDeleteReportRow(row)}
+                                    disabled={reportActionId === row.id || bulkDeletingReports}
                                   >
                                     {reportActionId === row.id ? "Deleting..." : "Delete"}
                                   </button>
                                 </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                              </div>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    </>
                   )}
                   {savedReports.length > 0
                     ? renderPagination("reports", sortedSavedReports.length, pagedReports.currentPage, pagedReports.totalPages)
@@ -3145,16 +3609,16 @@ export default function InvestigationReportPage() {
               </div>
             </div>
             <p className={styles.modalText}>
-              This generates a fresh AI-assisted report version using the current investigation map and canvas data.
+              A saved report already exists for this investigation. You can create a new version from the current map and investigation data, or go to the Reports tab to review the existing version first.
             </p>
             <div className={styles.modalListWrap}>
               <ul className={styles.modalList}>
-                <li>Use this when you have added or changed nodes, evidence, findings, or other map content since the previous version.</li>
-                <li>Existing report versions will remain available in the reports register for version control and comparison.</li>
-                <li>The new AI-assisted write-up may be structured slightly differently from previous versions even when based on similar source information.</li>
+                <li>Create a new version when you have added nodes or updated investigation details and want a refreshed AI-assisted report.</li>
+                <li>Older report versions remain saved, so previous content is still available for version control, comparison, and audit trail purposes.</li>
+                <li>The Reports tab lets you open and compare existing saved versions before deciding whether to generate another one.</li>
               </ul>
             </div>
-            <p className={styles.modalWarning}>Continue only if you want to create a new saved report version.</p>
+            <p className={styles.modalWarning}>Choose the next step for this investigation report.</p>
             <div className={styles.modalActions}>
               <button
                 type="button"
@@ -3162,6 +3626,16 @@ export default function InvestigationReportPage() {
                 onClick={() => setShowCreateVersionModal(false)}
               >
                 Cancel
+              </button>
+              <button
+                type="button"
+                className={`${styles.button} ${styles.buttonSecondary}`}
+                onClick={() => {
+                  setShowCreateVersionModal(false);
+                  setActiveTab("reports");
+                }}
+              >
+                Visit Reports Tab
               </button>
               <button
                 type="button"
@@ -3177,8 +3651,57 @@ export default function InvestigationReportPage() {
           </div>
         </div>
       ) : null}
+
+      {showBulkDeleteReportsModal ? (
+        <div className={styles.modalBackdrop}>
+          <div className={`${styles.modalCard} ${styles.dashboardModalCard}`}>
+            <div className={styles.dashboardModalHeader}>
+              <div className={styles.dashboardModalBrand}>
+                <Image
+                  src="/images/investigation-tool.png"
+                  alt="Investigation Tool"
+                  width={40}
+                  height={40}
+                  className={styles.dashboardModalLogo}
+                />
+                <div className={styles.dashboardModalBrandCopy}>
+                  <span className={styles.dashboardModalEyebrow}>Investigation Tool</span>
+                  <h3 className={`${styles.modalTitle} ${styles.dashboardModalTitle}`}>Delete selected report versions?</h3>
+                </div>
+              </div>
+            </div>
+            <p className={styles.modalText}>
+              This will permanently delete {selectedSavedReports.length} saved report version{selectedSavedReports.length === 1 ? "" : "s"} from this investigation.
+            </p>
+            <div className={styles.modalListWrap}>
+              <ul className={styles.modalList}>
+                <li>Each selected version will be removed from the reports register.</li>
+                <li>Any manual edits saved inside those versions will also be deleted.</li>
+                <li>This action cannot be undone after deletion completes.</li>
+              </ul>
+            </div>
+            <p className={styles.modalWarning}>Only continue if you are sure these saved versions are no longer needed.</p>
+            <div className={styles.modalActions}>
+              <button
+                type="button"
+                className={`${styles.button} ${styles.buttonSecondary}`}
+                onClick={() => setShowBulkDeleteReportsModal(false)}
+                disabled={bulkDeletingReports}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={`${styles.button} ${styles.buttonDanger}`}
+                onClick={() => void handleBulkDeleteReports()}
+                disabled={bulkDeletingReports}
+              >
+                {bulkDeletingReports ? "Deleting..." : "Delete Selected"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </DashboardShell>
   );
 }
-
-

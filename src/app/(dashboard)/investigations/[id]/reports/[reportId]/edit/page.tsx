@@ -7,7 +7,7 @@ import DashboardShell from "@/components/dashboard/DashboardShell";
 import shellStyles from "@/components/dashboard/DashboardShell.module.css";
 import editStyles from "../EditReportPage.module.css";
 import { ReportProgressLoadingView } from "@/components/loading/ReportProgressLoadingView";
-import { accessBlocksInvestigationEntry, accessRequiresSelection, fetchAccessState } from "@/lib/access";
+import { accessBlocksInvestigationEntry, accessCanUseReportGeneration, accessRequiresSelection, fetchAccessState } from "@/lib/access";
 import {
   buildDraftReportText,
   normalizeInvestigationReportPayload,
@@ -64,6 +64,7 @@ type SectionId =
   | "executive_summary"
   | "document_branding"
   | "long_description"
+  | "response_and_recovery"
   | "task_and_conditions"
   | "incident_outcomes"
   | "people_involved"
@@ -108,8 +109,15 @@ const sectionDefinitions: SectionDefinition[] = [
     canHideInPdf: true,
   },
   {
+    id: "response_and_recovery",
+    label: "Response / Recovery",
+    description: "Edit the response and recovery introduction and review the non-editable response/recovery table below it.",
+    mode: "editable_text",
+    canHideInPdf: true,
+  },
+  {
     id: "task_and_conditions",
-    label: "Task And Conditions",
+    label: "Task & Conditions",
     description: "Task context and conditions that existed at the time of the incident.",
     mode: "editable_text",
     canHideInPdf: true,
@@ -137,7 +145,7 @@ const sectionDefinitions: SectionDefinition[] = [
   },
   {
     id: "factors_and_system_factors",
-    label: "Factors And System Factors",
+    label: "Factors & System Factors",
     description: "Read-only node-backed table used in the report.",
     mode: "read_only",
     canHideInPdf: true,
@@ -151,7 +159,7 @@ const sectionDefinitions: SectionDefinition[] = [
   },
   {
     id: "controls_and_barriers",
-    label: "Controls And Barriers",
+    label: "Controls & Barriers",
     description: "Read-only node-backed table used in the report.",
     mode: "read_only",
     canHideInPdf: true,
@@ -208,6 +216,8 @@ function getSectionValue(report: InvestigationSavedReportPayload, sectionId: Sec
       return report.report.sections.executive_summary;
     case "long_description":
       return report.report.sections.long_description;
+    case "response_and_recovery":
+      return report.report.sections.response_and_recovery.summary;
     case "task_and_conditions":
       return report.report.sections.task_and_conditions;
     case "incident_outcomes":
@@ -241,6 +251,20 @@ function setSectionValue(
         report: {
           ...report.report,
           sections: { ...report.report.sections, long_description: value },
+        },
+      };
+    case "response_and_recovery":
+      return {
+        ...report,
+        report: {
+          ...report.report,
+          sections: {
+            ...report.report.sections,
+            response_and_recovery: {
+              ...report.report.sections.response_and_recovery,
+              summary: value,
+            },
+          },
         },
       };
     case "task_and_conditions":
@@ -394,6 +418,64 @@ function normalizeHexColor(value: string, fallback: string) {
   return fallback;
 }
 
+const defaultSectionHeadingColor = "#22344d";
+const defaultTableHeadingColor = "#7c8793";
+
+type ReportBrandingState = {
+  logo_storage_path?: string;
+  section_heading_color?: string;
+  table_heading_color?: string;
+};
+
+function isRecordLike(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function extractReportBranding(value: unknown): ReportBrandingState | null {
+  if (!isRecordLike(value) || !isRecordLike(value.report) || !isRecordLike(value.report.branding)) return null;
+
+  const branding = value.report.branding;
+  const next: ReportBrandingState = {};
+
+  if (typeof branding.logo_storage_path === "string" && branding.logo_storage_path.trim()) {
+    next.logo_storage_path = branding.logo_storage_path.trim();
+  }
+
+  if (typeof branding.section_heading_color === "string" && branding.section_heading_color.trim()) {
+    next.section_heading_color = branding.section_heading_color.trim();
+  }
+
+  if (typeof branding.table_heading_color === "string" && branding.table_heading_color.trim()) {
+    next.table_heading_color = branding.table_heading_color.trim();
+  }
+
+  return Object.keys(next).length > 0 ? next : null;
+}
+
+function applyReportBrandingFallback(
+  report: InvestigationSavedReportPayload,
+  fallbackBranding: ReportBrandingState | null,
+): InvestigationSavedReportPayload {
+  if (!fallbackBranding) return report;
+
+  const currentBranding = extractReportBranding(report);
+  const mergedBranding: ReportBrandingState = {
+    ...fallbackBranding,
+    ...(currentBranding ?? {}),
+  };
+
+  return {
+    ...report,
+    report: {
+      ...report.report,
+      branding: {
+        ...(report.report.branding ?? {}),
+        ...mergedBranding,
+      },
+    },
+  };
+}
+
 function autosizePreliminaryFactTextarea(textarea: HTMLTextAreaElement) {
   const computedStyle = window.getComputedStyle(textarea);
   const lineHeight = Number.parseFloat(computedStyle.lineHeight) || 20;
@@ -531,32 +613,61 @@ function ReadOnlyTable({
   renderCell?: (value: string, rowIndex: number, cellIndex: number) => ReactNode;
 }) {
   return (
-    <div className={shellStyles.tableWrap}>
-      <table className={`${shellStyles.table} ${shellStyles.reportDataTable}`}>
-        <thead>
-          <tr>
-            {columns.map((column) => (
-              <th key={column}>{column}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length === 0 ? (
-            <tr><td colSpan={columns.length}>No saved rows available for this section.</td></tr>
-          ) : (
-            rows.map((row, rowIndex) => (
-              <tr key={`${columns.join("-")}-${rowIndex}`}>
+    <>
+      <div className={`${shellStyles.tableWrap} ${editStyles.readOnlyTableDesktop}`}>
+        <table className={`${shellStyles.table} ${shellStyles.reportDataTable}`}>
+          <thead>
+            <tr>
+              {columns.map((column) => (
+                <th key={column}>{column}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr><td colSpan={columns.length}>No saved rows available for this section.</td></tr>
+            ) : (
+              rows.map((row, rowIndex) => (
+                <tr key={`${columns.join("-")}-${rowIndex}`}>
+                  {columns.map((column, cellIndex) => (
+                    <td key={`${column}-${cellIndex}`}>
+                      {renderCell ? renderCell(row[cellIndex] || "-", rowIndex, cellIndex) : row[cellIndex] || "-"}
+                    </td>
+                  ))}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className={editStyles.readOnlyMobileCards}>
+        {rows.length === 0 ? (
+          <div className={shellStyles.reportMobileEmptyState}>No saved rows available for this section.</div>
+        ) : (
+          rows.map((row, rowIndex) => (
+            <article key={`${columns.join("-")}-mobile-${rowIndex}`} className={shellStyles.reportMobileCard}>
+              <div className={shellStyles.reportMobileCardHeader}>
+                <strong>{`Row ${rowIndex + 1}`}</strong>
+              </div>
+              <div className={editStyles.readOnlyMobileFieldList}>
                 {columns.map((column, cellIndex) => (
-                  <td key={`${column}-${cellIndex}`}>
-                    {renderCell ? renderCell(row[cellIndex] || "-", rowIndex, cellIndex) : row[cellIndex] || "-"}
-                  </td>
+                  <div
+                    key={`${column}-mobile-${cellIndex}`}
+                    className={`${shellStyles.reportMobileCardFooterMeta} ${shellStyles.reportMobileCardFooterMetaFull}`}
+                  >
+                    <span className={shellStyles.reportMobileLabel}>{column}</span>
+                    <span className={shellStyles.reportMobileValue}>
+                      {renderCell ? renderCell(row[cellIndex] || "-", rowIndex, cellIndex) : row[cellIndex] || "-"}
+                    </span>
+                  </div>
                 ))}
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
-    </div>
+              </div>
+            </article>
+          ))
+        )}
+      </div>
+    </>
   );
 }
 
@@ -577,6 +688,7 @@ export default function EditInvestigationReportPage() {
     document_branding: true,
     executive_summary: false,
     long_description: false,
+    response_and_recovery: false,
     task_and_conditions: false,
     incident_outcomes: false,
     people_involved: false,
@@ -597,6 +709,10 @@ export default function EditInvestigationReportPage() {
   const [evidencePreviewLayouts, setEvidencePreviewLayouts] = useState<Record<string, EvidencePreviewLayout[]>>({});
   const [brandingLogoUrl, setBrandingLogoUrl] = useState<string | null>(null);
   const [brandingUploading, setBrandingUploading] = useState(false);
+  const [brandingResetFlash, setBrandingResetFlash] = useState(false);
+  const editorScrollTopRef = useRef(0);
+  const shouldRestoreEditorScrollRef = useRef(false);
+  const brandingResetTimeoutRef = useRef<number | null>(null);
   const [signedUrlsReady, setSignedUrlsReady] = useState(false);
   const [pdfLayoutsReady, setPdfLayoutsReady] = useState(false);
   const [imageLayoutsReady, setImageLayoutsReady] = useState(false);
@@ -665,6 +781,13 @@ export default function EditInvestigationReportPage() {
       ),
     [report],
   );
+  const normalizedResponseRecoveryTable = useMemo(
+    () => ({
+      columns: report?.report.sections.response_and_recovery.columns ?? [],
+      rows: report?.report.sections.response_and_recovery.rows ?? [],
+    }),
+    [report],
+  );
   const normalizedRecommendationsTable = useMemo(
     () =>
       normalizeRecommendationsTable(
@@ -679,6 +802,10 @@ export default function EditInvestigationReportPage() {
     const dirtyChecks: Array<[SectionId, boolean]> = [
       ["executive_summary", report.report.sections.executive_summary !== lastSavedReport.report.sections.executive_summary],
       ["long_description", report.report.sections.long_description !== lastSavedReport.report.sections.long_description],
+      [
+        "response_and_recovery",
+        report.report.sections.response_and_recovery.summary !== lastSavedReport.report.sections.response_and_recovery.summary,
+      ],
       ["task_and_conditions", report.report.sections.task_and_conditions !== lastSavedReport.report.sections.task_and_conditions],
       ["incident_outcomes", report.report.sections.incident_outcomes !== lastSavedReport.report.sections.incident_outcomes],
       [
@@ -778,7 +905,23 @@ export default function EditInvestigationReportPage() {
   }, [message]);
 
   useEffect(() => {
+    return () => {
+      if (brandingResetTimeoutRef.current !== null) {
+        window.clearTimeout(brandingResetTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     setVisitedSections((current) => (current[activeSectionId] ? current : { ...current, [activeSectionId]: true }));
+  }, [activeSectionId]);
+
+  useLayoutEffect(() => {
+    const editorNode = editorCardRef.current;
+    if (!editorNode || !shouldRestoreEditorScrollRef.current) return;
+
+    editorNode.scrollTop = editorScrollTopRef.current;
+    shouldRestoreEditorScrollRef.current = false;
   }, [activeSectionId]);
 
   useLayoutEffect(() => {
@@ -866,6 +1009,10 @@ export default function EditInvestigationReportPage() {
         router.push("/subscribe");
         return;
       }
+      if (!accessCanUseReportGeneration(accessState)) {
+        router.push("/subscribe");
+        return;
+      }
       if (accessBlocksInvestigationEntry(accessState)) {
         router.push("/dashboard?mapAccess=blocked");
         return;
@@ -907,8 +1054,28 @@ export default function EditInvestigationReportPage() {
 
       setMap(mapRow as MapRow);
       setElements((elementRows ?? []) as CanvasElementRow[]);
+
+      const { data: previousReportRows } = await supabase
+        .schema("ms")
+        .from("investigation_reports")
+        .select("version_number,ai_output_json")
+        .eq("case_id", params.id)
+        .lt("version_number", reportRow.version_number)
+        .order("version_number", { ascending: false })
+        .limit(50);
+
+      const fallbackBranding =
+        previousReportRows
+          ?.map((row) => extractReportBranding(row.ai_output_json))
+          .find((branding): branding is ReportBrandingState => branding !== null) ?? null;
+
+      const reportWithBrandingFallback = applyReportBrandingFallback(
+        (reportRow.ai_output_json ?? {}) as InvestigationSavedReportPayload,
+        fallbackBranding,
+      );
+
       const normalizedReport = {
-        ...normalizeInvestigationReportPayload((reportRow.ai_output_json ?? {}) as InvestigationSavedReportPayload),
+        ...normalizeInvestigationReportPayload(reportWithBrandingFallback),
         saved_report: {
           id: reportRow.id,
           status: reportRow.status as InvestigationReportStatus,
@@ -1138,6 +1305,12 @@ export default function EditInvestigationReportPage() {
   };
 
   const handleSectionSelect = (sectionId: SectionId) => {
+    const editorNode = editorCardRef.current;
+    if (editorNode) {
+      editorScrollTopRef.current = editorNode.scrollTop;
+      shouldRestoreEditorScrollRef.current = true;
+    }
+
     setActiveSectionId(sectionId);
     setVisitedSections((current) => (current[sectionId] ? current : { ...current, [sectionId]: true }));
   };
@@ -1184,7 +1357,10 @@ export default function EditInvestigationReportPage() {
   const handleBrandingColorChange = (target: "section_heading_color" | "table_heading_color", value: string) => {
     setReport((current) => {
       if (!current) return current;
-      const nextColor = normalizeHexColor(value, target === "section_heading_color" ? "#22344d" : "#7c8793");
+      const nextColor = normalizeHexColor(
+        value,
+        target === "section_heading_color" ? defaultSectionHeadingColor : defaultTableHeadingColor,
+      );
 
       return {
         ...current,
@@ -1197,6 +1373,35 @@ export default function EditInvestigationReportPage() {
         },
       };
     });
+  };
+
+  const handleResetBranding = () => {
+    setReport((current) => {
+      if (!current) return current;
+
+      return {
+        ...current,
+        report: {
+          ...current.report,
+          branding: {
+            ...(current.report.branding ?? {}),
+            logo_storage_path: "",
+            section_heading_color: defaultSectionHeadingColor,
+            table_heading_color: defaultTableHeadingColor,
+          },
+        },
+      };
+    });
+    setBrandingLogoUrl(null);
+    setError(null);
+    if (brandingResetTimeoutRef.current !== null) {
+      window.clearTimeout(brandingResetTimeoutRef.current);
+    }
+    setBrandingResetFlash(true);
+    brandingResetTimeoutRef.current = window.setTimeout(() => {
+      setBrandingResetFlash(false);
+      brandingResetTimeoutRef.current = null;
+    }, 2000);
   };
 
   const handleBrandingLogoUpload = async (file: File | null) => {
@@ -1233,8 +1438,14 @@ export default function EditInvestigationReportPage() {
           branding: {
             ...(current.report.branding ?? {}),
             logo_storage_path: filePath,
-            section_heading_color: normalizeHexColor(current.report.branding?.section_heading_color ?? "", "#22344d"),
-            table_heading_color: normalizeHexColor(current.report.branding?.table_heading_color ?? "", "#7c8793"),
+            section_heading_color: normalizeHexColor(
+              current.report.branding?.section_heading_color ?? "",
+              defaultSectionHeadingColor,
+            ),
+            table_heading_color: normalizeHexColor(
+              current.report.branding?.table_heading_color ?? "",
+              defaultTableHeadingColor,
+            ),
           },
         },
       };
@@ -1483,6 +1694,17 @@ export default function EditInvestigationReportPage() {
             />
           </div>
         );
+      case "response_and_recovery":
+        return (
+          <div className={editStyles.previewStack}>
+            {note}
+            <ReadOnlyTable
+              columns={normalizedResponseRecoveryTable.columns}
+              rows={normalizedResponseRecoveryTable.rows}
+              renderCell={(value) => (value ? value : "-")}
+            />
+          </div>
+        );
       case "incident_findings":
         return (
           <div className={editStyles.previewStack}>
@@ -1657,8 +1879,14 @@ export default function EditInvestigationReportPage() {
   const renderBrandingSection = () => {
     if (!report) return null;
 
-    const sectionHeadingColor = normalizeHexColor(report.report.branding?.section_heading_color ?? "", "#22344d");
-    const tableHeadingColor = normalizeHexColor(report.report.branding?.table_heading_color ?? "", "#7c8793");
+    const sectionHeadingColor = normalizeHexColor(
+      report.report.branding?.section_heading_color ?? "",
+      defaultSectionHeadingColor,
+    );
+    const tableHeadingColor = normalizeHexColor(
+      report.report.branding?.table_heading_color ?? "",
+      defaultTableHeadingColor,
+    );
 
     return (
       <div className={editStyles.previewStack}>
@@ -1670,16 +1898,18 @@ export default function EditInvestigationReportPage() {
           <div className={editStyles.brandingCard}>
             <h3 className={editStyles.brandingCardTitle}>Logo</h3>
             <p className={editStyles.helperText}>Upload a PNG, JPG, or SVG logo for the report cover and contents pages.</p>
-            <label className={editStyles.brandingUploadButton}>
-              <input
-                type="file"
-                accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml"
-                className={editStyles.brandingFileInput}
-                onChange={(event) => void handleBrandingLogoUpload(event.target.files?.[0] ?? null)}
-                disabled={brandingUploading}
-              />
-              {brandingUploading ? "Uploading..." : "Upload Logo"}
-            </label>
+            <div className={editStyles.previewToolbar}>
+              <label className={editStyles.brandingUploadButton}>
+                <input
+                  type="file"
+                  accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml"
+                  className={editStyles.brandingFileInput}
+                  onChange={(event) => void handleBrandingLogoUpload(event.target.files?.[0] ?? null)}
+                  disabled={brandingUploading}
+                />
+                {brandingUploading ? "Uploading..." : "Upload Logo"}
+              </label>
+            </div>
             {brandingLogoUrl ? (
               <div className={editStyles.brandingLogoPreviewWrap}>
                 <img src={brandingLogoUrl} alt="Document logo preview" className={editStyles.brandingLogoPreview} />
@@ -1730,6 +1960,16 @@ export default function EditInvestigationReportPage() {
               </div>
             </div>
           </div>
+          <div className={editStyles.brandingResetRow}>
+            <button
+              type="button"
+              className={`${shellStyles.button} ${brandingResetFlash ? editStyles.brandingResetButtonSuccess : shellStyles.buttonSecondary}`}
+              onClick={handleResetBranding}
+              disabled={brandingUploading || brandingResetFlash}
+            >
+              {brandingResetFlash ? "RESET SUCCESSFUL" : "Reset Branding"}
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -1750,19 +1990,53 @@ export default function EditInvestigationReportPage() {
         <div className={editStyles.preliminaryFactsBlock}>
           <h3 className={editStyles.editorTitle}>{report.report.front_page.facts_uncertain_heading}</h3>
           {report.facts_uncertain.length > 0 ? (
-            <div className={editStyles.preliminaryFactsTableWrap}>
-              <table className={editStyles.preliminaryFactsTable}>
-                <thead>
-                  <tr>
-                    <th>Uncertain Fact</th>
-                    <th>Notes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {report.facts_uncertain.map((item, index) => (
-                    <tr key={`uncertain-${index}`}>
-                      <td>{item}</td>
-                      <td>
+            <>
+              <div className={`${editStyles.preliminaryFactsTableWrap} ${editStyles.readOnlyTableDesktop}`}>
+                <table className={editStyles.preliminaryFactsTable}>
+                  <thead>
+                    <tr>
+                      <th>Uncertain Fact</th>
+                      <th>Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {report.facts_uncertain.map((item, index) => (
+                      <tr key={`uncertain-${index}`}>
+                        <td>{item}</td>
+                        <td>
+                          <textarea
+                            className={editStyles.preliminaryFactNoteInput}
+                            value={uncertainNotes[index] ?? ""}
+                            rows={1}
+                            onChange={(event) => {
+                              autosizePreliminaryFactTextarea(event.target);
+                              handlePreliminaryFactNoteChange("uncertain_notes", index, event.target.value);
+                            }}
+                            onInput={(event) => autosizePreliminaryFactTextarea(event.currentTarget)}
+                            ref={(node) => {
+                              if (node) autosizePreliminaryFactTextarea(node);
+                            }}
+                            placeholder="Add what is currently known or why this remains uncertain"
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className={editStyles.readOnlyMobileCards}>
+                {report.facts_uncertain.map((item, index) => (
+                  <article key={`uncertain-mobile-${index}`} className={shellStyles.reportMobileCard}>
+                    <div className={shellStyles.reportMobileCardHeader}>
+                      <strong>{`Uncertain Fact ${index + 1}`}</strong>
+                    </div>
+                    <div className={editStyles.readOnlyMobileFieldList}>
+                      <div className={`${shellStyles.reportMobileCardFooterMeta} ${shellStyles.reportMobileCardFooterMetaFull}`}>
+                        <span className={shellStyles.reportMobileLabel}>Uncertain Fact</span>
+                        <span className={shellStyles.reportMobileValue}>{item}</span>
+                      </div>
+                      <div className={`${shellStyles.reportMobileCardFooterMeta} ${shellStyles.reportMobileCardFooterMetaFull}`}>
+                        <span className={shellStyles.reportMobileLabel}>Notes</span>
                         <textarea
                           className={editStyles.preliminaryFactNoteInput}
                           value={uncertainNotes[index] ?? ""}
@@ -1777,12 +2051,12 @@ export default function EditInvestigationReportPage() {
                           }}
                           placeholder="Add what is currently known or why this remains uncertain"
                         />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </>
           ) : (
             <p className={editStyles.helperText}>No uncertain facts recorded for this report.</p>
           )}
@@ -1791,19 +2065,53 @@ export default function EditInvestigationReportPage() {
         <div className={editStyles.preliminaryFactsBlock}>
           <h3 className={editStyles.editorTitle}>{report.report.front_page.missing_information_heading}</h3>
           {report.missing_information.length > 0 ? (
-            <div className={editStyles.preliminaryFactsTableWrap}>
-              <table className={editStyles.preliminaryFactsTable}>
-                <thead>
-                  <tr>
-                    <th>Missing Information</th>
-                    <th>Notes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {report.missing_information.map((item, index) => (
-                    <tr key={`missing-${index}`}>
-                      <td>{item}</td>
-                      <td>
+            <>
+              <div className={`${editStyles.preliminaryFactsTableWrap} ${editStyles.readOnlyTableDesktop}`}>
+                <table className={editStyles.preliminaryFactsTable}>
+                  <thead>
+                    <tr>
+                      <th>Missing Information</th>
+                      <th>Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {report.missing_information.map((item, index) => (
+                      <tr key={`missing-${index}`}>
+                        <td>{item}</td>
+                        <td>
+                          <textarea
+                            className={editStyles.preliminaryFactNoteInput}
+                            value={missingInformationNotes[index] ?? ""}
+                            rows={1}
+                            onChange={(event) => {
+                              autosizePreliminaryFactTextarea(event.target);
+                              handlePreliminaryFactNoteChange("missing_information_notes", index, event.target.value);
+                            }}
+                            onInput={(event) => autosizePreliminaryFactTextarea(event.currentTarget)}
+                            ref={(node) => {
+                              if (node) autosizePreliminaryFactTextarea(node);
+                            }}
+                            placeholder="Add what is missing or what is needed to close the gap"
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className={editStyles.readOnlyMobileCards}>
+                {report.missing_information.map((item, index) => (
+                  <article key={`missing-mobile-${index}`} className={shellStyles.reportMobileCard}>
+                    <div className={shellStyles.reportMobileCardHeader}>
+                      <strong>{`Missing Information ${index + 1}`}</strong>
+                    </div>
+                    <div className={editStyles.readOnlyMobileFieldList}>
+                      <div className={`${shellStyles.reportMobileCardFooterMeta} ${shellStyles.reportMobileCardFooterMetaFull}`}>
+                        <span className={shellStyles.reportMobileLabel}>Missing Information</span>
+                        <span className={shellStyles.reportMobileValue}>{item}</span>
+                      </div>
+                      <div className={`${shellStyles.reportMobileCardFooterMeta} ${shellStyles.reportMobileCardFooterMetaFull}`}>
+                        <span className={shellStyles.reportMobileLabel}>Notes</span>
                         <textarea
                           className={editStyles.preliminaryFactNoteInput}
                           value={missingInformationNotes[index] ?? ""}
@@ -1818,12 +2126,12 @@ export default function EditInvestigationReportPage() {
                           }}
                           placeholder="Add what is missing or what is needed to close the gap"
                         />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </>
           ) : (
             <p className={editStyles.helperText}>No missing information items recorded for this report.</p>
           )}
@@ -1867,7 +2175,7 @@ export default function EditInvestigationReportPage() {
     return (
       <DashboardShell activeNav="dashboard" eyebrow="Investigation Tool" title="Edit Report" subtitle="Saved report editor.">
         <section className={shellStyles.accountCard}>
-          <div className={shellStyles.accountSection}>
+          <div className={`${shellStyles.accountSection} ${editStyles.reportEditorSection}`}>
             <p className={`${shellStyles.message} ${shellStyles.messageError}`}>{error || "Saved report not found."}</p>
           </div>
         </section>
@@ -1894,7 +2202,7 @@ export default function EditInvestigationReportPage() {
       }
     >
       <section className={`${shellStyles.accountCard} ${editStyles.reportEditorShell}`}>
-        <div className={shellStyles.accountSection}>
+        <div className={`${shellStyles.accountSection} ${editStyles.reportEditorSection}`}>
           <div className={editStyles.mobileSelectWrap}>
             <label className={shellStyles.reportMobileSelectLabel} htmlFor="report-section-select">
               Section
@@ -1973,6 +2281,7 @@ export default function EditInvestigationReportPage() {
                       disabled={saving}
                     >
                       <Image src="/icons/save.svg" alt="" width={16} height={16} className={editStyles.actionButtonIcon} />
+                      <span className={editStyles.mobileActionLabel}>Save</span>
                     </button>
                     <button
                       type="button"
@@ -2018,7 +2327,7 @@ export default function EditInvestigationReportPage() {
                   <p className={editStyles.helperText}>
                     Paragraph breaks are preserved in the saved report and carried into the PDF output where applicable.
                   </p>
-                  {activeSection.id === "incident_findings" || activeSection.id === "recommendations"
+                  {activeSection.id === "response_and_recovery" || activeSection.id === "incident_findings" || activeSection.id === "recommendations"
                     ? renderReadOnlySection()
                     : null}
                 </>

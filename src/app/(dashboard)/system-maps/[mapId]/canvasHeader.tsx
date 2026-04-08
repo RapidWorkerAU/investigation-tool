@@ -102,20 +102,43 @@ export function MapCanvasHeader({
               {mapCategoryHeaderLabel}
             </span>
           </div>
-          <button
-            type="button"
-            aria-label="Open canvas help"
-            title="Canvas help"
-            onClick={onOpenHelp}
-            className="flex h-8 w-8 shrink-0 justify-self-end items-center justify-center rounded-md border border-slate-600/60 bg-transparent text-white hover:bg-slate-900/50 md:hidden"
-          >
-            <span
-              aria-hidden="true"
-              className="flex h-4 w-4 items-center justify-center rounded-full border-2 border-current text-[10px] font-bold leading-none text-white"
+          <div className="flex shrink-0 justify-self-end items-center gap-2 md:hidden">
+            <button
+              ref={mapInfoButtonRef}
+              type="button"
+              aria-label="Open map information"
+              title="Map information"
+              className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-600/60 bg-transparent text-white hover:bg-slate-900/50"
+              onClick={() => {
+                closeAllLeftAsides();
+                setShowMapInfoAside((prev) => {
+                  const next = !prev;
+                  if (next) setIsEditingMapInfo(false);
+                  return next;
+                });
+              }}
             >
-              ?
-            </span>
-          </button>
+              <span
+                aria-hidden="true"
+                className="h-4 w-4 bg-current"
+                style={{ WebkitMaskImage: "url('/icons/info.svg')", maskImage: "url('/icons/info.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
+              />
+            </button>
+            <button
+              type="button"
+              aria-label="Open canvas help"
+              title="Canvas help"
+              onClick={onOpenHelp}
+              className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-600/60 bg-transparent text-white hover:bg-slate-900/50"
+            >
+              <span
+                aria-hidden="true"
+                className="flex h-4 w-4 items-center justify-center rounded-full border-2 border-current text-[10px] font-bold leading-none text-white"
+              >
+                ?
+              </span>
+            </button>
+          </div>
         </div>
         <div className="dashboardCanvasHeaderActions flex w-full items-center justify-center md:w-auto md:justify-end">
           <div className="flex w-full flex-wrap items-center justify-center gap-2 overflow-hidden md:w-auto md:flex-nowrap md:justify-end">

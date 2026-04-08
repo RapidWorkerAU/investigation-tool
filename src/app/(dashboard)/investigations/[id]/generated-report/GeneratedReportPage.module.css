@@ -77,9 +77,29 @@
   padding: 0;
 }
 
+.controlButtonImage {
+  width: 18px;
+  height: 18px;
+}
+
+.controlButtonSvg {
+  width: 18px;
+  height: 18px;
+  display: block;
+  color: #ffffff;
+  flex: 0 0 auto;
+}
+
 .controlButtonIcon {
-  object-fit: contain;
-  filter: brightness(0) invert(1);
+  display: block;
+  background: currentColor;
+  color: #ffffff;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
 }
 
 .controlButtonIconSmall {
@@ -90,6 +110,21 @@
 .controlButtonIconPrint {
   width: 24px;
   height: 24px;
+}
+
+.controlButtonIconEdit {
+  -webkit-mask-image: url("/icons/edit.svg");
+  mask-image: url("/icons/edit.svg");
+}
+
+.controlButtonIconSave {
+  -webkit-mask-image: url("/icons/save.svg");
+  mask-image: url("/icons/save.svg");
+}
+
+.controlButtonIconPrinter {
+  -webkit-mask-image: url("/icons/printer.svg");
+  mask-image: url("/icons/printer.svg");
 }
 
 .emailActionWrap {
@@ -128,6 +163,14 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.2),
     0 8px 18px rgba(24, 29, 39, 0.08);
   transition: box-shadow 120ms ease, border-color 120ms ease, transform 120ms ease;
+}
+
+.emailExpandShellSent {
+  border-color: #2f8f5b;
+  background: #e9f8ef;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    0 8px 18px rgba(47, 143, 91, 0.14);
 }
 
 .emailExpandShell:hover {
@@ -208,6 +251,11 @@
 .emailInputInline::placeholder {
   color: #9aa5b5;
   font-size: 0.76rem;
+}
+
+.emailInputInlineSent {
+  color: #206943;
+  font-weight: 700;
 }
 
 .emailInlineIconButton {
@@ -936,6 +984,37 @@
 }
 
 @media (max-width: 900px) {
+  .reportControlsSection {
+    padding: 20px 0 !important;
+  }
+
+  .pdfViewerShell {
+    margin-top: 0;
+  }
+
+  .reportControlsRow {
+    margin: -8px 0 0 !important;
+    padding-bottom: 0 !important;
+  }
+
+  .reportActionButtons {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    align-items: stretch !important;
+    width: 100%;
+  }
+
+  .reportActionButtons > .emailActionWrap,
+  .reportActionButtons > .statusSelect {
+    grid-column: 1 / -1;
+  }
+
+  .controlIconButton {
+    width: 100% !important;
+    min-width: 0;
+  }
+
   .emailActionWrap {
     margin-right: 0;
     width: 100%;
@@ -1054,6 +1133,21 @@
 
   .timelineMarkerWrap {
     display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .reportControlsSection {
+    padding: 20px 0 !important;
+  }
+
+  .reportControlsRow {
+    margin: -8px 0 0 !important;
+    padding-bottom: 0 !important;
+  }
+
+  .pdfViewerShell {
+    margin-top: 0;
   }
 }
 

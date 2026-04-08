@@ -694,6 +694,14 @@
   text-align: center !important;
 }
 
+.reportTableActions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .reportDataTable tbody tr:hover td {
   background: rgba(248, 244, 239, 0.64);
 }
@@ -2182,10 +2190,11 @@
 }
 
 .reportToggleBar {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: flex-start;
   gap: 16px;
+  width: 100%;
   padding: 8px 0 8px;
   overflow-x: auto;
 }
@@ -2761,9 +2770,9 @@
   }
 
   .reportToggleGroup {
-    flex: 1 1 auto;
-    min-width: 0;
-    width: fit-content;
+    flex: 0 0 auto;
+    min-width: max-content;
+    width: auto;
     display: inline-flex;
     gap: 3px;
     padding: 4px;
@@ -4100,6 +4109,8 @@
     width: 100%;
     margin-left: auto;
     order: 1;
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .reportToggleActions .button {

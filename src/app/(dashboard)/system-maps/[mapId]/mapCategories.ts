@@ -24,6 +24,7 @@ export type NodePaletteKind =
   | "incident_system_factor"
   | "incident_control_barrier"
   | "incident_evidence"
+  | "incident_response_recovery"
   | "incident_finding"
   | "incident_recommendation"
   | "bowtie_hazard"
@@ -97,6 +98,7 @@ export const mapCategoryConfigs: Record<MapCategoryId, MapCategoryConfig> = {
       "incident_system_factor",
       "incident_control_barrier",
       "incident_evidence",
+      "incident_response_recovery",
       "incident_finding",
       "incident_recommendation",
     ],

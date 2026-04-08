@@ -2,6 +2,10 @@
   margin-top: -14px;
 }
 
+.reportEditorSection {
+  padding: 28px;
+}
+
 .layout {
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
@@ -382,6 +386,23 @@
   display: none;
 }
 
+.mobileActionLabel {
+  display: none;
+}
+
+.readOnlyTableDesktop {
+  display: block;
+}
+
+.readOnlyMobileCards {
+  display: none;
+}
+
+.readOnlyMobileFieldList {
+  display: grid;
+  gap: 12px;
+}
+
 .unsavedChangesText {
   margin: 10px 0 5px;
   color: #b42318;
@@ -447,6 +468,7 @@
 .generateActionButton {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   padding: 0 16px;
   border-color: #5b21b6;
@@ -526,6 +548,25 @@
 .brandingColorRow {
   display: grid;
   gap: 6px;
+}
+
+.brandingResetRow {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 6px;
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+.brandingResetButtonSuccess {
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid #15803d;
+  background: #16a34a;
+  color: #ffffff;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 700;
 }
 
 .brandingColorLabel {
@@ -685,6 +726,10 @@
 }
 
 @media (max-width: 900px) {
+  .reportEditorSection {
+    padding: 0 !important;
+  }
+
   .layout {
     display: grid;
     grid-template-columns: 1fr;
@@ -697,6 +742,8 @@
   .mobileSelectWrap {
     display: grid;
     gap: 6px;
+    margin-top: 20px;
+    margin-bottom: 15px;
   }
 
   .editorHeader {
@@ -711,11 +758,40 @@
 
   .topActionsCluster {
     justify-items: start;
+    width: 100%;
   }
 
   .topActionsButtons {
+    flex-direction: column;
     justify-content: flex-start;
-    justify-self: start;
+    justify-self: stretch;
+    width: 100%;
+  }
+
+  .iconActionButton,
+  .generateActionButton {
+    width: 100%;
+  }
+
+  .iconActionButton {
+    justify-content: center;
+    gap: 8px;
+    padding: 0 14px;
+  }
+
+  .mobileActionLabel {
+    display: inline;
+    font-size: 0.9rem;
+    font-weight: 700;
+  }
+
+  .readOnlyTableDesktop {
+    display: none;
+  }
+
+  .readOnlyMobileCards {
+    display: grid;
+    gap: 14px;
   }
 
   .timelineRow {
@@ -740,6 +816,10 @@
 }
 
 @media (max-width: 640px) {
+  .reportEditorSection {
+    padding: 0 !important;
+  }
+
   .evidenceGrid {
     grid-template-columns: 1fr;
   }

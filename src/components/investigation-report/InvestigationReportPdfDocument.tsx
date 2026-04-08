@@ -44,7 +44,7 @@ type ContentEntry = {
 };
 
 type PdfReportPayload = {
-  saved_report: { status: "draft" | "reviewed" | "approved"; generated_at: string };
+  saved_report: { status: "draft" | "reviewed" | "approved"; generated_at: string; version_number: number };
   facts_uncertain: string[];
   missing_information: string[];
   report: {
@@ -56,6 +56,7 @@ type PdfReportPayload = {
     section_visibility?: Partial<Record<
       | "executive_summary"
       | "long_description"
+      | "response_and_recovery"
       | "task_and_conditions"
       | "incident_outcomes"
       | "people_involved"
@@ -80,6 +81,7 @@ type PdfReportPayload = {
     sections: {
       executive_summary: string;
       long_description: string;
+      response_and_recovery: { summary: string; columns: string[]; rows: string[][] };
       people_involved: { heading: string; note: string };
       incident_timeline: { heading: string; entries: string[] };
       task_and_conditions: string;
@@ -118,6 +120,7 @@ export type InvestigationReportPdfDocumentProps = {
   factorsTable: TableData;
   predisposingFactorsTable: TableData;
   controlsTable: TableData;
+  responseRecoveryTable: TableData;
   recommendationsTable: TableData;
   evidenceEntries: EvidenceEntry[];
 };
@@ -294,8 +297,30 @@ const styles = StyleSheet.create({
     color: "#5b6169",
   },
   contentsHeader: {
-    minHeight: 44,
-    alignItems: "flex-end",
+    minHeight: 72,
+    alignItems: "flex-start",
+  },
+  contentsLogo: {
+    width: 72,
+    height: 72,
+    objectFit: "contain",
+  },
+  pageWithHeader: {
+    paddingTop: 90,
+  },
+  repeatingHeader: {
+    position: "absolute",
+    top: 28,
+    left: 34,
+    right: 34,
+    minHeight: 72,
+    alignItems: "flex-start",
+    justifyContent: "flex-start",
+  },
+  repeatingHeaderLogo: {
+    width: 72,
+    height: 72,
+    objectFit: "contain",
   },
   contentsTitle: {
     marginTop: 24,
@@ -436,6 +461,32 @@ const styles = StyleSheet.create({
     textAlign: "center",
     color: "#43526a",
     lineHeight: 1,
+  },
+  checkboxCellWrap: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  checkboxBox: {
+    width: 12,
+    height: 12,
+    borderWidth: 1.25,
+    borderColor: "#7c8793",
+    borderRadius: 2,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ffffff",
+  },
+  checkboxBoxChecked: {
+    backgroundColor: "#1f4a8a",
+    borderColor: "#1f4a8a",
+  },
+  checkboxTick: {
+    color: "#ffffff",
+    fontSize: 9,
+    lineHeight: 1,
+    fontWeight: 700,
+    marginTop: -1,
   },
   primaryCell: {
     gap: 2,
@@ -825,6 +876,7 @@ function PdfTable({
                 );
               }
               if (checkboxColumns.includes(index)) {
+                const isChecked = rawValue.trim().toLowerCase() === "true";
                 return (
                   <View
                     key={`${column}-${index}`}
@@ -839,7 +891,11 @@ function PdfTable({
                       },
                     ]}
                   >
-                    <Text style={styles.checkboxCellText}>{rawValue || "\u2610"}</Text>
+                    <View style={styles.checkboxCellWrap}>
+                      <View style={isChecked ? [styles.checkboxBox, styles.checkboxBoxChecked] : styles.checkboxBox}>
+                        {isChecked ? <Text style={styles.checkboxTick}>✓</Text> : null}
+                      </View>
+                    </View>
                   </View>
                 );
               }
@@ -875,6 +931,7 @@ export default function InvestigationReportPdfDocument({
   factorsTable,
   predisposingFactorsTable,
   controlsTable,
+  responseRecoveryTable,
   recommendationsTable,
   evidenceEntries,
 }: InvestigationReportPdfDocumentProps) {
@@ -908,6 +965,7 @@ export default function InvestigationReportPdfDocument({
     sectionId:
       | "executive_summary"
       | "long_description"
+      | "response_and_recovery"
       | "task_and_conditions"
       | "incident_outcomes"
       | "people_involved"
@@ -934,7 +992,7 @@ export default function InvestigationReportPdfDocument({
             <Text style={styles.coverTitle}>{report.report.cover_page.incident_name || map?.title || "-"}</Text>
             <Text style={styles.coverLocation}>{map?.incident_location || "-"}</Text>
           </View>
-          <Text style={styles.coverVersion}>Report Version: {toTitleCaseLabel(report.saved_report.status)}</Text>
+          <Text style={styles.coverVersion}>Report Version: {report.saved_report.version_number}</Text>
         </View>
         <View style={styles.coverMeta}>
           <View style={styles.coverMetaCard}>
@@ -951,7 +1009,7 @@ export default function InvestigationReportPdfDocument({
 
       <Page size="A4" style={styles.page}>
         <View style={styles.contentsHeader}>
-          {logoUrl ? <Image src={logoUrl} style={{ width: 36, height: 36, objectFit: "contain" }} /> : null}
+          {logoUrl ? <Image src={logoUrl} style={styles.contentsLogo} /> : null}
         </View>
         <Text style={styles.contentsTitle}>Report Contents</Text>
         {contentEntries.map((entry) => (
@@ -964,7 +1022,10 @@ export default function InvestigationReportPdfDocument({
         {renderFooter()}
       </Page>
 
-      <Page size="A4" style={styles.page} wrap>
+      <Page size="A4" style={[styles.page, styles.pageWithHeader]} wrap>
+        <View style={styles.repeatingHeader} fixed>
+          {logoUrl ? <Image src={logoUrl} style={styles.repeatingHeaderLogo} /> : null}
+        </View>
         {isPdfSectionVisible("executive_summary") ? <View style={styles.section}>
           <View wrap={false}>
             <Text style={[styles.sectionTitle, { backgroundColor: sectionHeadingColor, color: sectionHeadingTextColor }]}>Executive Summary</Text>
@@ -978,6 +1039,25 @@ export default function InvestigationReportPdfDocument({
             {renderParagraphBlocks(report.report.sections.long_description)}
           </View>
         </View> : null}
+
+        {isPdfSectionVisible("response_and_recovery") ? (
+          <>
+            {renderSectionHeader(
+              "Response / Recovery",
+              report.report.sections.response_and_recovery.summary.trim() || "-",
+              sectionHeadingColor,
+              sectionHeadingTextColor,
+            )}
+            <PdfTable
+              columns={responseRecoveryTable.columns}
+              rows={responseRecoveryTable.rows}
+              cellWidths={responseRecoveryTable.columns.length === 3 ? ["24%", "22%", "54%"] : responseRecoveryTable.columns.map(() => `${100 / Math.max(1, responseRecoveryTable.columns.length)}%`)}
+              tableHeadingColor={tableHeadingColor}
+              tableHeadingTextColor={tableHeadingTextColor}
+            />
+            <View style={styles.sectionSpacing} />
+          </>
+        ) : null}
 
         {isPdfSectionVisible("people_involved") ? <View style={styles.section}>
           <View wrap={false}>
@@ -1122,7 +1202,7 @@ export default function InvestigationReportPdfDocument({
           columns={[...recommendationsTable.columns, "Approved"]}
           rows={recommendationsTable.rows.map((row, index) => [
             ...row,
-            report.report.sections.recommendations.endorsed?.[index] ? "\u2611" : "\u2610",
+            report.report.sections.recommendations.endorsed?.[index] ? "true" : "false",
           ])}
           cellWidths={["18%", "28%", "14%", "16%", "11%", "13%"]}
           tableHeadingColor={tableHeadingColor}
@@ -1136,7 +1216,7 @@ export default function InvestigationReportPdfDocument({
           </View>
           <View style={styles.signatureGrid}>
             {report.report.sections.recommendations.approval_fields.map((field, index) => (
-              <View key={field} style={styles.signatureField}>
+              <View key={`${field}-${index}`} style={styles.signatureField}>
                 <Text style={styles.signatureValue}>{report.report.sections.recommendation_sign_off_prefills?.[index] || ""}</Text>
                 <View style={styles.signatureLine} />
                 <Text style={styles.signatureLabel}>{field}</Text>
@@ -1182,7 +1262,7 @@ export default function InvestigationReportPdfDocument({
           <View wrap={false}>
             <View style={styles.signatureGrid}>
               {report.report.sections.investigation_sign_off.fields.map((field, index) => (
-                <View key={field} style={styles.signatureField}>
+                <View key={`${field}-${index}`} style={styles.signatureField}>
                   <Text style={styles.signatureValue}>
                     {report.report.sections.investigation_sign_off.prefills?.[index] || getSignoffDisplayValue(field, map)}
                   </Text>
@@ -1197,7 +1277,10 @@ export default function InvestigationReportPdfDocument({
         {renderFooter()}
       </Page>
 
-      {isPdfSectionVisible("preliminary_facts") ? <Page size="A4" style={styles.page}>
+      {isPdfSectionVisible("preliminary_facts") ? <Page size="A4" style={[styles.page, styles.pageWithHeader]}>
+        <View style={styles.repeatingHeader} fixed>
+          {logoUrl ? <Image src={logoUrl} style={styles.repeatingHeaderLogo} /> : null}
+        </View>
         <View style={styles.section}>
           {renderSectionHeader(
             "Preliminary Facts",

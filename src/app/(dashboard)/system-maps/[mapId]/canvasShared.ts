@@ -87,6 +87,7 @@ export type CanvasElementRow = {
     | "incident_system_factor"
     | "incident_control_barrier"
     | "incident_evidence"
+    | "incident_response_recovery"
     | "incident_finding"
     | "incident_recommendation";
   heading: string;
@@ -158,6 +159,7 @@ export type FlowData = {
     | "incident_system_factor"
     | "incident_control_barrier"
     | "incident_evidence"
+    | "incident_response_recovery"
     | "incident_finding"
     | "incident_recommendation";
   typeName: string;
@@ -259,6 +261,11 @@ export type FlowData = {
     statusBg: string | null;
     statusText: string | null;
     directReportCount: number;
+  };
+  personBadge?: {
+    label: string;
+    bg: string;
+    text: string;
   };
 };
 export type DisciplineKey = "health" | "safety" | "environment" | "security" | "communities" | "training";
@@ -702,6 +709,7 @@ export const getElementRelationshipTypeLabel = (elementType: CanvasElementRow["e
   if (elementType === "incident_system_factor") return "System Factor";
   if (elementType === "incident_control_barrier") return "Control / Barrier";
   if (elementType === "incident_evidence") return "Evidence";
+  if (elementType === "incident_response_recovery") return "Response / Recovery";
   if (elementType === "incident_finding") return "Finding";
   if (elementType === "incident_recommendation") return "Recommendation";
   return "Component";

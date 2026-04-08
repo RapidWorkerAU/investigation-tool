@@ -31,6 +31,7 @@ export type InvestigationReportPayload = {
     section_visibility?: Partial<Record<
       | "executive_summary"
       | "long_description"
+      | "response_and_recovery"
       | "task_and_conditions"
       | "incident_outcomes"
       | "people_involved"
@@ -60,6 +61,11 @@ export type InvestigationReportPayload = {
     sections: {
       executive_summary: string;
       long_description: string;
+      response_and_recovery: {
+        summary: string;
+        columns: string[];
+        rows: ReportRowItem[];
+      };
       people_involved: {
         heading: string;
         render_mode: "person_node_visuals";

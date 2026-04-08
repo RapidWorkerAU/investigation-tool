@@ -220,15 +220,17 @@ const methodologyDefaultLabelByType: Record<string, string> = {
   incident_system_factor: "System Factor",
   incident_control_barrier: "Control / Barrier",
   incident_evidence: "Evidence",
+  incident_response_recovery: "Response / Recovery",
   incident_finding: "Finding",
   incident_recommendation: "Recommendation",
 };
 
 const getMethodologyDisplayText = (elementType: string, headingRaw: string | null | undefined, descriptionRaw: string | null | undefined) => {
   const defaultLabel = methodologyDefaultLabelByType[elementType] ?? "Node";
+  const legacyDefaultLabel = elementType === "incident_outcome" ? "Outcome" : defaultLabel;
   const heading = String(headingRaw ?? "").trim();
   const description = String(descriptionRaw ?? "").trim();
-  if (heading && heading !== defaultLabel) return heading;
+  if (heading && heading !== defaultLabel && heading !== legacyDefaultLabel) return heading;
   return description || heading || defaultLabel;
 };
 
@@ -250,24 +252,30 @@ type CanvasElementUpdatePayload = {
   fields: Partial<Pick<CanvasElementRow, "heading" | "element_config" | "pos_x" | "pos_y" | "width" | "height">>;
 };
 
+type BowtieDraftState = Record<string, string | boolean | string[]>;
+
 const stepGroupHeadingByWizardStep: Record<SystemMapWizardCommitPayload["step"], string> = {
   sequence: "Sequence",
+  outcome: "Outcomes",
   people: "People",
   "task-condition": "Task / Condition",
   factors: "Factors",
   "control-barrier": "Controls / Barriers",
   evidence: "Evidence",
+  "response-recovery": "Response / Recovery",
   finding: "Findings",
   recommendation: "Recommendations",
 };
 
 const stepElementTypesByWizardStep: Record<SystemMapWizardCommitPayload["step"], string[]> = {
   sequence: ["incident_sequence_step"],
+  outcome: ["incident_outcome"],
   people: ["person"],
   "task-condition": ["incident_task_condition"],
   factors: ["incident_factor", "incident_system_factor"],
   "control-barrier": ["incident_control_barrier"],
   evidence: ["incident_evidence"],
+  "response-recovery": ["incident_response_recovery"],
   finding: ["incident_finding"],
   recommendation: ["incident_recommendation"],
 };
@@ -931,6 +939,7 @@ function SystemMapCanvasInner({
   const [processOutlineWidthDraft, setProcessOutlineWidthDraft] = useState("1");
   const [processComponentLabelDraft, setProcessComponentLabelDraft] = useState("");
   const [systemNameDraft, setSystemNameDraft] = useState("");
+  const [personTypeDraft, setPersonTypeDraft] = useState("");
   const [personRoleDraft, setPersonRoleDraft] = useState("");
   const [personRoleIdDraft, setPersonRoleIdDraft] = useState("");
   const [personDepartmentDraft, setPersonDepartmentDraft] = useState("");
@@ -985,7 +994,7 @@ function SystemMapCanvasInner({
   const [flowShapeDirectionDraft, setFlowShapeDirectionDraft] = useState<"left" | "right">("right");
   const [flowShapeRotationDraft, setFlowShapeRotationDraft] = useState<0 | 90 | 180 | 270>(0);
   const hydratedFlowShapeDraftIdRef = useRef<string | null>(null);
-  const [bowtieDraft, setBowtieDraft] = useState<Record<string, string | boolean>>({});
+  const [bowtieDraft, setBowtieDraft] = useState<BowtieDraftState>({});
   const [imageUrlsByElementId, setImageUrlsByElementId] = useState<Record<string, string>>({});
   const [evidenceUploadFile, setEvidenceUploadFile] = useState<File | null>(null);
   const [evidenceUploadPreviewUrl, setEvidenceUploadPreviewUrl] = useState<string | null>(null);
@@ -2343,6 +2352,24 @@ function SystemMapCanvasInner({
         : null,
     [selectedBowtieElementId, elements]
   );
+  const availableFactorPeople = useMemo(
+    () =>
+      elements
+        .filter((element) => element.element_type === "person")
+        .map((element) => {
+          const labels = parsePersonLabels(element.heading);
+          const role = labels.role.trim();
+          const department = labels.department.trim();
+          const roleLabel = role && role !== "Role Name" ? role : "Person";
+          const departmentLabel = department && department !== "Department" ? department : "";
+          return {
+            id: element.id,
+            label: departmentLabel ? `${roleLabel} • ${departmentLabel}` : roleLabel,
+          };
+        })
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [elements]
+  );
 
   const headingItems = useMemo(
     () => outlineItems.filter((i) => i.kind === "heading"),
@@ -2875,6 +2902,8 @@ function SystemMapCanvasInner({
       return;
     }
     const labels = parsePersonLabels(selectedPerson.heading);
+    const cfg = (selectedPerson.element_config as Record<string, unknown> | null) ?? {};
+    setPersonTypeDraft(typeof cfg.person_type === "string" ? String(cfg.person_type).trim() : "");
     setPersonRoleDraft(labels.role);
     setPersonRoleIdDraft("");
     setPersonDepartmentDraft(labels.department);
@@ -3119,14 +3148,14 @@ function SystemMapCanvasInner({
       } else {
         const updated = data as unknown as CanvasElementRow;
         setElements((prev) => prev.map((el) => (el.id === updated.id ? updated : el)));
-        setBowtieDraft((prev) => (selectedBowtieElementId === updated.id ? (updated.element_config as Record<string, string | boolean> | null) ?? prev : prev));
+        setBowtieDraft((prev) => (selectedBowtieElementId === updated.id ? (updated.element_config as BowtieDraftState | null) ?? prev : prev));
       }
     }
     setEvidenceMediaOverlay(null);
   }, [evidenceMediaOverlay, elements, mapId, canvasElementSelectColumns, setError, setElements, selectedBowtieElementId]);
   useEffect(() => {
     if (!selectedBowtieElement) return;
-    const currentConfig = (selectedBowtieElement.element_config as Record<string, string | boolean> | null) ?? {};
+    const currentConfig = (selectedBowtieElement.element_config as BowtieDraftState | null) ?? {};
     setBowtieDraft({
       ...currentConfig,
       ...(selectedBowtieElement.element_type !== "bowtie_risk_rating"
@@ -3201,7 +3230,7 @@ function SystemMapCanvasInner({
     }
     const updated = data as unknown as CanvasElementRow;
     setElements((prev) => prev.map((el) => (el.id === updated.id ? updated : el)));
-    setBowtieDraft((updated.element_config as Record<string, string | boolean> | null) ?? {});
+    setBowtieDraft((updated.element_config as BowtieDraftState | null) ?? {});
     setImageUrlsByElementId((prev) => {
       const next = { ...prev };
       delete next[selectedBowtieElement.id];
@@ -3593,6 +3622,7 @@ function SystemMapCanvasInner({
     handleAddIncidentSystemFactor,
     handleAddIncidentControlBarrier,
     handleAddIncidentEvidence,
+    handleAddIncidentResponseRecovery,
     handleAddIncidentFinding,
     handleAddIncidentRecommendation,
     handleSaveProcessHeading,
@@ -3701,6 +3731,7 @@ function SystemMapCanvasInner({
     processComponentLabelDraft,
     setSelectedProcessComponentId,
     selectedPersonId,
+    personTypeDraft,
     personRoleDraft,
     personRoleIdDraft,
     personDepartmentDraft,
@@ -4003,13 +4034,13 @@ function SystemMapCanvasInner({
       const isFilled = (value: string) => value.trim().length > 0;
 
       if (payload.step === "sequence") {
-        const items = payload.items.filter((item) => isFilled(item.heading) || isFilled(item.description) || isFilled(item.timestamp) || isFilled(item.location));
+        const items = payload.items.filter((item) => isFilled(item.description) || isFilled(item.timestamp) || isFilled(item.location));
         await createGroupAndInsert("sequence", stepGroupHeadingByWizardStep.sequence, incidentCardWidth, incidentCardHeight, (origin, index) => {
           const item = items[index];
           return {
             map_id: mapId,
             element_type: "incident_sequence_step",
-            heading: item.heading.trim() || `Sequence Step ${index + 1}`,
+            heading: "Sequence Step",
             color_hex: "#bfdbfe",
             created_by_user_id: userId,
             element_config: {
@@ -4017,6 +4048,66 @@ function SystemMapCanvasInner({
               timestamp: item.timestamp.trim(),
               location: item.location.trim(),
             },
+            pos_x: origin.x,
+            pos_y: origin.y,
+            width: incidentCardWidth,
+            height: incidentCardHeight,
+          };
+        }, items.length);
+        return;
+      }
+
+      if (payload.step === "outcome") {
+        const items = payload.items.filter(
+          (item) =>
+            isFilled(item.description) ||
+            (item.outcomeCategory === "reporting"
+              ? isFilled(item.reportingOutcome)
+              : item.outcomeCategory !== "actual" || item.likelihood !== "possible" || item.consequence !== "moderate")
+        );
+        await createGroupAndInsert("outcome", stepGroupHeadingByWizardStep.outcome, incidentCardWidth, incidentCardHeight, (origin, index) => {
+          const item = items[index];
+          const elementConfig =
+            item.outcomeCategory === "reporting"
+              ? {
+                  description: item.description.trim(),
+                  consequence_category: item.outcomeCategory,
+                  reporting_consequence: item.reportingOutcome,
+                }
+              : {
+                  description: item.description.trim(),
+                  consequence_category: item.outcomeCategory,
+                  likelihood: item.likelihood,
+                  consequence: item.consequence,
+                  risk_level: (() => {
+                    const likelihoodScoreByKey: Record<string, number> = {
+                      rare: 1,
+                      unlikely: 2,
+                      possible: 3,
+                      likely: 4,
+                      almost_certain: 5,
+                    };
+                    const consequenceScoreByKey: Record<string, number> = {
+                      insignificant: 1,
+                      minor: 2,
+                      moderate: 3,
+                      major: 4,
+                      severe: 5,
+                    };
+                    const score = (likelihoodScoreByKey[item.likelihood] ?? 3) * (consequenceScoreByKey[item.consequence] ?? 3);
+                    if (score <= 4) return "low";
+                    if (score <= 9) return "medium";
+                    if (score <= 16) return "high";
+                    return "extreme";
+                  })(),
+                };
+          return {
+            map_id: mapId,
+            element_type: "incident_outcome",
+            heading: "Outcome",
+            color_hex: "#fca5a5",
+            created_by_user_id: userId,
+            element_config: elementConfig,
             pos_x: origin.x,
             pos_y: origin.y,
             width: incidentCardWidth,
@@ -4059,13 +4150,13 @@ function SystemMapCanvasInner({
       }
 
       if (payload.step === "task-condition") {
-        const items = payload.items.filter((item) => isFilled(item.heading) || isFilled(item.description) || isFilled(item.environmentalContext));
+        const items = payload.items.filter((item) => isFilled(item.description) || isFilled(item.environmentalContext));
         await createGroupAndInsert("task-condition", stepGroupHeadingByWizardStep["task-condition"], incidentCardWidth, incidentCardHeight, (origin, index) => {
           const item = items[index];
           return {
             map_id: mapId,
             element_type: "incident_task_condition",
-            heading: item.heading.trim() || `Task / Condition ${index + 1}`,
+            heading: "Task / Condition",
             color_hex: "#fb923c",
             created_by_user_id: userId,
             element_config: {
@@ -4083,14 +4174,14 @@ function SystemMapCanvasInner({
       }
 
       if (payload.step === "factors") {
-        const items = payload.items.filter((item) => isFilled(item.heading) || isFilled(item.description) || isFilled(item.category));
+        const items = payload.items.filter((item) => isFilled(item.description) || isFilled(item.category));
         await createGroupAndInsert("factors", stepGroupHeadingByWizardStep.factors, incidentCardWidth, incidentCardHeight, (origin, index) => {
           const item = items[index];
           if (item.kind === "incident_system_factor") {
             return {
               map_id: mapId,
               element_type: "incident_system_factor",
-              heading: item.heading.trim() || `System Factor ${index + 1}`,
+              heading: "System Factor",
               color_hex: "#a78bfa",
               created_by_user_id: userId,
               element_config: {
@@ -4107,7 +4198,7 @@ function SystemMapCanvasInner({
           return {
             map_id: mapId,
             element_type: "incident_factor",
-            heading: item.heading.trim() || `Factor ${index + 1}`,
+            heading: "Factor",
             color_hex: "#fde047",
             created_by_user_id: userId,
             element_config: {
@@ -4126,13 +4217,13 @@ function SystemMapCanvasInner({
       }
 
       if (payload.step === "control-barrier") {
-        const items = payload.items.filter((item) => isFilled(item.heading) || isFilled(item.description) || isFilled(item.controlType) || isFilled(item.ownerText));
+        const items = payload.items.filter((item) => isFilled(item.description) || isFilled(item.controlType) || isFilled(item.ownerText));
         await createGroupAndInsert("control-barrier", stepGroupHeadingByWizardStep["control-barrier"], incidentCardWidth, incidentCardHeight, (origin, index) => {
           const item = items[index];
           return {
             map_id: mapId,
             element_type: "incident_control_barrier",
-            heading: item.heading.trim() || `Control / Barrier ${index + 1}`,
+            heading: "Control / Barrier",
             color_hex: "#4ade80",
             created_by_user_id: userId,
             element_config: {
@@ -4154,13 +4245,13 @@ function SystemMapCanvasInner({
       }
 
       if (payload.step === "evidence") {
-        const items = payload.items.filter((item) => isFilled(item.heading) || isFilled(item.description) || isFilled(item.evidenceType) || isFilled(item.source));
+        const items = payload.items.filter((item) => isFilled(item.description) || isFilled(item.evidenceType) || isFilled(item.source));
         await createGroupAndInsert("evidence", stepGroupHeadingByWizardStep.evidence, incidentCardWidth, incidentCardHeight, (origin, index) => {
           const item = items[index];
           return {
             map_id: mapId,
             element_type: "incident_evidence",
-            heading: item.heading.trim() || `Evidence ${index + 1}`,
+            heading: "Evidence",
             color_hex: "#cbd5e1",
             created_by_user_id: userId,
             element_config: {
@@ -4182,14 +4273,37 @@ function SystemMapCanvasInner({
         return;
       }
 
+      if (payload.step === "response-recovery") {
+        const items = payload.items.filter((item) => isFilled(item.description) || isFilled(item.category));
+        await createGroupAndInsert("response-recovery", stepGroupHeadingByWizardStep["response-recovery"], incidentCardWidth, incidentCardHeight, (origin, index) => {
+          const item = items[index];
+          return {
+            map_id: mapId,
+            element_type: "incident_response_recovery",
+            heading: "Response / Recovery",
+            color_hex: "#67e8f9",
+            created_by_user_id: userId,
+            element_config: {
+              category: item.category,
+              description: item.description.trim(),
+            },
+            pos_x: origin.x,
+            pos_y: origin.y,
+            width: incidentCardWidth,
+            height: incidentCardHeight,
+          };
+        }, items.length);
+        return;
+      }
+
       if (payload.step === "finding") {
-        const items = payload.items.filter((item) => isFilled(item.heading) || isFilled(item.description));
+        const items = payload.items.filter((item) => isFilled(item.description));
         await createGroupAndInsert("finding", stepGroupHeadingByWizardStep.finding, bowtieDefaultWidth, bowtieControlHeight, (origin, index) => {
           const item = items[index];
           return {
             map_id: mapId,
             element_type: "incident_finding",
-            heading: item.heading.trim() || `Finding ${index + 1}`,
+            heading: "Finding",
             color_hex: "#1d4ed8",
             created_by_user_id: userId,
             element_config: {
@@ -4198,20 +4312,20 @@ function SystemMapCanvasInner({
             },
             pos_x: origin.x,
             pos_y: origin.y,
-            width: bowtieDefaultWidth,
-            height: bowtieControlHeight,
+            width: incidentCardWidth,
+            height: minorGridSize * 6,
           };
         }, items.length);
         return;
       }
 
-      const items = payload.items.filter((item) => isFilled(item.heading) || isFilled(item.description) || isFilled(item.ownerText) || isFilled(item.dueDate));
+      const items = payload.items.filter((item) => isFilled(item.description) || isFilled(item.ownerText) || isFilled(item.dueDate));
       await createGroupAndInsert("recommendation", stepGroupHeadingByWizardStep.recommendation, incidentCardWidth, incidentCardHeight, (origin, index) => {
         const item = items[index];
         return {
           map_id: mapId,
           element_type: "incident_recommendation",
-          heading: item.heading.trim() || `Recommendation ${index + 1}`,
+          heading: "Recommendation",
           color_hex: "#14b8a6",
           created_by_user_id: userId,
           element_config: {
@@ -4478,6 +4592,32 @@ function SystemMapCanvasInner({
     if (!selectedBowtieElement) return;
     const elementType = selectedBowtieElement.element_type;
     const nextConfig: Record<string, unknown> = { ...bowtieDraft };
+    if (elementType === "incident_factor") {
+      nextConfig.people_involved = Array.isArray(bowtieDraft.people_involved)
+        ? Array.from(
+            new Set(
+              bowtieDraft.people_involved.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+            )
+          )
+        : [];
+    }
+    if (elementType === "incident_outcome") {
+      const category = String(nextConfig.consequence_category ?? "actual").trim().toLowerCase();
+      nextConfig.consequence_category = category || "actual";
+      if (category === "reporting") {
+        nextConfig.reporting_consequence = String(nextConfig.reporting_consequence ?? "").trim().toLowerCase();
+        delete nextConfig.likelihood;
+        delete nextConfig.consequence;
+        delete nextConfig.risk_level;
+      } else {
+        const likelihood = String(nextConfig.likelihood ?? "possible").trim().toLowerCase();
+        const consequence = String(nextConfig.consequence ?? "moderate").trim().toLowerCase();
+        nextConfig.likelihood = likelihood;
+        nextConfig.consequence = consequence;
+        nextConfig.risk_level = calculateRiskLevel(likelihood, consequence);
+        delete nextConfig.reporting_consequence;
+      }
+    }
     const defaultLabel = methodologyDefaultLabelByType[elementType] || "Node";
     let nextHeading = defaultLabel;
     if (elementType === "bowtie_risk_rating") {
@@ -5132,6 +5272,7 @@ function SystemMapCanvasInner({
         handleAddIncidentSystemFactor={handleAddIncidentSystemFactor}
         handleAddIncidentControlBarrier={handleAddIncidentControlBarrier}
         handleAddIncidentEvidence={handleAddIncidentEvidence}
+        handleAddIncidentResponseRecovery={handleAddIncidentResponseRecovery}
         handleAddIncidentFinding={handleAddIncidentFinding}
         handleAddIncidentRecommendation={handleAddIncidentRecommendation}
         allowedNodeKinds={allowedNodeKinds}
@@ -5602,6 +5743,8 @@ function SystemMapCanvasInner({
             isMobile,
             leftAsideSlideIn,
             mapCategoryId,
+            personTypeDraft,
+            setPersonTypeDraft,
             personRoleDraft,
             setPersonRoleDraft,
             personRoleIdDraft,
@@ -5661,11 +5804,13 @@ function SystemMapCanvasInner({
                     | "incident_system_factor"
                     | "incident_control_barrier"
                     | "incident_evidence"
+                    | "incident_response_recovery"
                     | "incident_finding"
                     | "incident_recommendation")
                 : null,
             bowtieDraft,
             setBowtieDraft,
+            availableFactorPeople,
             evidenceUploadPreviewUrl,
             evidenceUploadFileName: evidenceUploadFile?.name ?? "",
             evidenceUploadFileMime: evidenceUploadFile?.type ?? "",

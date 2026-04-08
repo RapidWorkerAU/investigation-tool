@@ -39,6 +39,15 @@ type BillingTemplateArgs = GreetingArgs & {
   renewalDate?: string | null;
 };
 
+type SharedReportTemplateArgs = {
+  senderEmail: string;
+  reportTitle: string;
+  incidentDate?: string | null;
+  incidentLocation?: string | null;
+  responsibleName?: string | null;
+  executiveSummary?: string | null;
+};
+
 const BRAND_NAME = "Investigation Tool";
 const SUPPORT_EMAIL = process.env.RESEND_REPLY_TO_EMAIL || "support@investigationtool.com.au";
 const LOGO_DATA_URI = `data:image/png;base64,${readFileSync(
@@ -69,6 +78,11 @@ function greeting(firstName?: string | null) {
 
 function titleCaseSubject(value: string) {
   return value.replace(/\b([a-z])([a-z]*)/gi, (_match, first: string, rest: string) => `${first.toUpperCase()}${rest.toLowerCase()}`);
+}
+
+function cleanEmailField(value: string | null | undefined, fallback = "Not provided") {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : fallback;
 }
 
 function buildText({
@@ -611,6 +625,35 @@ export const emailTemplates = {
         "Once completed, this action cannot be undone.",
       ],
       note: "If you did not intend to delete your account, contact support immediately. If deletion has already completed, recovery may not be possible.",
+    });
+  },
+
+  sharedInvestigationReport({
+    senderEmail,
+    reportTitle,
+    incidentDate,
+    incidentLocation,
+    responsibleName,
+    executiveSummary,
+  }: SharedReportTemplateArgs): TemplateResult {
+    const safeSenderEmail = cleanEmailField(senderEmail, SUPPORT_EMAIL);
+    const safeReportTitle = cleanEmailField(reportTitle, "Investigation Report");
+
+    return renderTemplate({
+      preheader: `${safeSenderEmail} has shared an investigation report with you.`,
+      title: "Investigation report shared",
+      intro: [
+        "Hi,",
+        `${safeSenderEmail} has shared an investigation report with you. The PDF is attached to this email.`,
+      ],
+      highlights: [
+        `Investigation name: ${safeReportTitle}`,
+        `Incident date: ${cleanEmailField(incidentDate)}`,
+        `Incident location: ${cleanEmailField(incidentLocation)}`,
+        `Responsible name: ${cleanEmailField(responsibleName)}`,
+        `Incident executive summary: ${cleanEmailField(executiveSummary)}`,
+      ],
+      note: `For more information, please contact ${safeSenderEmail}.`,
     });
   },
 };

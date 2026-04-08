@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 
 export type WizardSequenceItem = {
-  heading: string;
   timestamp: string;
   description: string;
   location: string;
@@ -14,8 +13,15 @@ export type WizardPersonItem = {
   occupantName: string;
 };
 
+export type WizardOutcomeItem = {
+  description: string;
+  outcomeCategory: "maximum_reasonable" | "actual" | "reporting";
+  reportingOutcome: "" | "internally_reported" | "externally_reported" | "reported_to_regulator" | "reported_elsewhere";
+  likelihood: "rare" | "unlikely" | "possible" | "likely" | "almost_certain";
+  consequence: "insignificant" | "minor" | "moderate" | "major" | "severe";
+};
+
 export type WizardTaskConditionItem = {
-  heading: string;
   description: string;
   state: "normal" | "abnormal";
   environmentalContext: string;
@@ -23,7 +29,6 @@ export type WizardTaskConditionItem = {
 
 export type WizardFactorItem = {
   kind: "incident_factor" | "incident_system_factor";
-  heading: string;
   description: string;
   presence: "present" | "absent";
   classification: "essential" | "contributing" | "predisposing" | "neutral";
@@ -31,7 +36,6 @@ export type WizardFactorItem = {
 };
 
 export type WizardControlBarrierItem = {
-  heading: string;
   description: string;
   barrierState: "effective" | "failed" | "missing";
   barrierRole: "preventive" | "mitigative" | "recovery";
@@ -40,20 +44,22 @@ export type WizardControlBarrierItem = {
 };
 
 export type WizardEvidenceItem = {
-  heading: string;
   description: string;
   evidenceType: string;
   source: string;
 };
 
+export type WizardResponseRecoveryItem = {
+  description: string;
+  category: "" | "emergency_response" | "medical_treatment" | "scene_preservation" | "make_area_safe";
+};
+
 export type WizardFindingItem = {
-  heading: string;
   description: string;
   confidenceLevel: "low" | "medium" | "high";
 };
 
 export type WizardRecommendationItem = {
-  heading: string;
   description: string;
   actionType: "corrective" | "preventive";
   ownerText: string;
@@ -62,11 +68,13 @@ export type WizardRecommendationItem = {
 
 export type SystemMapWizardCommitPayload =
   | { step: "sequence"; items: WizardSequenceItem[] }
+  | { step: "outcome"; items: WizardOutcomeItem[] }
   | { step: "people"; items: WizardPersonItem[] }
   | { step: "task-condition"; items: WizardTaskConditionItem[] }
   | { step: "factors"; items: WizardFactorItem[] }
   | { step: "control-barrier"; items: WizardControlBarrierItem[] }
   | { step: "evidence"; items: WizardEvidenceItem[] }
+  | { step: "response-recovery"; items: WizardResponseRecoveryItem[] }
   | { step: "finding"; items: WizardFindingItem[] }
   | { step: "recommendation"; items: WizardRecommendationItem[] };
 
@@ -80,11 +88,13 @@ type SystemMapWizardModalProps = {
 
 const stepLabels = [
   "Sequence",
+  "Outcomes",
   "People",
   "Task / Condition",
   "Factors",
   "Controls / Barriers",
   "Evidence",
+  "Response / Recovery",
   "Findings",
   "Recommendations",
 ] as const;
@@ -98,7 +108,6 @@ const factorInfluenceTypeOptions = ["human", "equipment", "process", "environmen
 const systemFactorCategoryOptions = ["training", "supervision", "planning", "design", "culture", "other"] as const;
 
 const createSequenceItem = (): WizardSequenceItem => ({
-  heading: "",
   timestamp: "",
   description: "",
   location: "",
@@ -109,8 +118,15 @@ const createPersonItem = (): WizardPersonItem => ({
   occupantName: "",
 });
 
+const createOutcomeItem = (): WizardOutcomeItem => ({
+  description: "",
+  outcomeCategory: "actual",
+  reportingOutcome: "",
+  likelihood: "possible",
+  consequence: "moderate",
+});
+
 const createTaskConditionItem = (): WizardTaskConditionItem => ({
-  heading: "",
   description: "",
   state: "normal",
   environmentalContext: "",
@@ -118,7 +134,6 @@ const createTaskConditionItem = (): WizardTaskConditionItem => ({
 
 const createFactorItem = (): WizardFactorItem => ({
   kind: "incident_factor",
-  heading: "",
   description: "",
   presence: "present",
   classification: "contributing",
@@ -126,7 +141,6 @@ const createFactorItem = (): WizardFactorItem => ({
 });
 
 const createControlBarrierItem = (): WizardControlBarrierItem => ({
-  heading: "",
   description: "",
   barrierState: "effective",
   barrierRole: "preventive",
@@ -135,20 +149,22 @@ const createControlBarrierItem = (): WizardControlBarrierItem => ({
 });
 
 const createEvidenceItem = (): WizardEvidenceItem => ({
-  heading: "",
   description: "",
   evidenceType: "",
   source: "",
 });
 
+const createResponseRecoveryItem = (): WizardResponseRecoveryItem => ({
+  description: "",
+  category: "",
+});
+
 const createFindingItem = (): WizardFindingItem => ({
-  heading: "",
   description: "",
   confidenceLevel: "medium",
 });
 
 const createRecommendationItem = (): WizardRecommendationItem => ({
-  heading: "",
   description: "",
   actionType: "corrective",
   ownerText: "",
@@ -187,19 +203,23 @@ export function SystemMapWizardModal({
   const [currentStep, setCurrentStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [expandedSequenceIndex, setExpandedSequenceIndex] = useState(0);
+  const [expandedOutcomeIndex, setExpandedOutcomeIndex] = useState(0);
   const [expandedPersonIndex, setExpandedPersonIndex] = useState(0);
   const [expandedTaskConditionIndex, setExpandedTaskConditionIndex] = useState(0);
   const [expandedFactorIndex, setExpandedFactorIndex] = useState(0);
   const [expandedControlBarrierIndex, setExpandedControlBarrierIndex] = useState(0);
   const [expandedEvidenceIndex, setExpandedEvidenceIndex] = useState(0);
+  const [expandedResponseRecoveryIndex, setExpandedResponseRecoveryIndex] = useState(0);
   const [expandedFindingIndex, setExpandedFindingIndex] = useState(0);
   const [expandedRecommendationIndex, setExpandedRecommendationIndex] = useState(0);
   const [sequenceItems, setSequenceItems] = useState<WizardSequenceItem[]>([createSequenceItem()]);
+  const [outcomeItems, setOutcomeItems] = useState<WizardOutcomeItem[]>([createOutcomeItem()]);
   const [personItems, setPersonItems] = useState<WizardPersonItem[]>([createPersonItem()]);
   const [taskConditionItems, setTaskConditionItems] = useState<WizardTaskConditionItem[]>([createTaskConditionItem()]);
   const [factorItems, setFactorItems] = useState<WizardFactorItem[]>([createFactorItem()]);
   const [controlBarrierItems, setControlBarrierItems] = useState<WizardControlBarrierItem[]>([createControlBarrierItem()]);
   const [evidenceItems, setEvidenceItems] = useState<WizardEvidenceItem[]>([createEvidenceItem()]);
+  const [responseRecoveryItems, setResponseRecoveryItems] = useState<WizardResponseRecoveryItem[]>([createResponseRecoveryItem()]);
   const [findingItems, setFindingItems] = useState<WizardFindingItem[]>([createFindingItem()]);
   const [recommendationItems, setRecommendationItems] = useState<WizardRecommendationItem[]>([createRecommendationItem()]);
 
@@ -207,19 +227,23 @@ export function SystemMapWizardModal({
     setCurrentStep(0);
     setError(null);
     setExpandedSequenceIndex(0);
+    setExpandedOutcomeIndex(0);
     setExpandedPersonIndex(0);
     setExpandedTaskConditionIndex(0);
     setExpandedFactorIndex(0);
     setExpandedControlBarrierIndex(0);
     setExpandedEvidenceIndex(0);
+    setExpandedResponseRecoveryIndex(0);
     setExpandedFindingIndex(0);
     setExpandedRecommendationIndex(0);
     setSequenceItems([createSequenceItem()]);
+    setOutcomeItems([createOutcomeItem()]);
     setPersonItems([createPersonItem()]);
     setTaskConditionItems([createTaskConditionItem()]);
     setFactorItems([createFactorItem()]);
     setControlBarrierItems([createControlBarrierItem()]);
     setEvidenceItems([createEvidenceItem()]);
+    setResponseRecoveryItems([createResponseRecoveryItem()]);
     setFindingItems([createFindingItem()]);
     setRecommendationItems([createRecommendationItem()]);
   };
@@ -250,12 +274,14 @@ export function SystemMapWizardModal({
     setError(null);
     try {
       if (currentStep === 0) await onCommitStep({ step: "sequence", items: sequenceItems });
-      else if (currentStep === 1) await onCommitStep({ step: "people", items: personItems });
-      else if (currentStep === 2) await onCommitStep({ step: "task-condition", items: taskConditionItems });
-      else if (currentStep === 3) await onCommitStep({ step: "factors", items: factorItems });
-      else if (currentStep === 4) await onCommitStep({ step: "control-barrier", items: controlBarrierItems });
-      else if (currentStep === 5) await onCommitStep({ step: "evidence", items: evidenceItems });
-      else if (currentStep === 6) await onCommitStep({ step: "finding", items: findingItems });
+      else if (currentStep === 1) await onCommitStep({ step: "outcome", items: outcomeItems });
+      else if (currentStep === 2) await onCommitStep({ step: "people", items: personItems });
+      else if (currentStep === 3) await onCommitStep({ step: "task-condition", items: taskConditionItems });
+      else if (currentStep === 4) await onCommitStep({ step: "factors", items: factorItems });
+      else if (currentStep === 5) await onCommitStep({ step: "control-barrier", items: controlBarrierItems });
+      else if (currentStep === 6) await onCommitStep({ step: "evidence", items: evidenceItems });
+      else if (currentStep === 7) await onCommitStep({ step: "response-recovery", items: responseRecoveryItems });
+      else if (currentStep === 8) await onCommitStep({ step: "finding", items: findingItems });
       else await onCommitStep({ step: "recommendation", items: recommendationItems });
 
       if (isLastStep) {
@@ -368,13 +394,10 @@ export function SystemMapWizardModal({
                     {expandedSequenceIndex === index ? (
                       <div className="grid gap-4 md:grid-cols-2">
                         <label className="grid gap-1 text-sm text-slate-700">
-                          Step Title
-                          <input className={inputClass} value={item.heading} onChange={(event) => setSequenceItems((current) => updateItem(current, index, { heading: event.target.value }))} />
-                        </label>
-                        <label className="grid gap-1 text-sm text-slate-700">
                           Timestamp
                           <input type="datetime-local" className={inputClass} value={item.timestamp} onChange={(event) => setSequenceItems((current) => updateItem(current, index, { timestamp: event.target.value }))} />
                         </label>
+                        <div />
                         <label className="grid gap-1 text-sm text-slate-700 md:col-span-2">
                           Description
                           <textarea className={textareaClass} value={item.description} onChange={(event) => setSequenceItems((current) => updateItem(current, index, { description: event.target.value }))} />
@@ -386,7 +409,7 @@ export function SystemMapWizardModal({
                       </div>
                     ) : (
                       <div className="text-sm text-slate-500">
-                        {summarizeValues(item.heading, item.timestamp, item.location, item.description)}
+                        {summarizeValues(item.timestamp, item.location, item.description)}
                       </div>
                     )}
                   </div>
@@ -405,6 +428,98 @@ export function SystemMapWizardModal({
             ) : null}
 
             {currentStep === 1 ? (
+              <div className="space-y-4">
+                {outcomeItems.map((item, index) => (
+                  <div key={`outcome-${index}`} className={cardClass}>
+                    <div className="mb-3 flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedOutcomeIndex((current) => toggleExpandedIndex(current, index))}
+                        className="flex flex-1 items-center justify-between gap-3 text-left"
+                      >
+                        <span className="text-sm font-semibold text-slate-900">Outcome {index + 1}</span>
+                        <span className="text-xs font-semibold text-slate-500">
+                          {expandedOutcomeIndex === index ? "Collapse" : "Expand"}
+                        </span>
+                      </button>
+                      {outcomeItems.length > 1 ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOutcomeItems((current) => current.filter((_, currentIndex) => currentIndex !== index));
+                            setExpandedOutcomeIndex((current) => adjustExpandedIndexAfterRemove(current, index));
+                          }}
+                          className="ml-3 text-xs font-semibold text-slate-500 hover:text-slate-900"
+                        >
+                          Remove
+                        </button>
+                      ) : null}
+                    </div>
+                    {expandedOutcomeIndex === index ? (
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <label className="grid gap-1 text-sm text-slate-700">
+                          Outcome Category
+                          <select className={selectClass} value={item.outcomeCategory} onChange={(event) => setOutcomeItems((current) => updateItem(current, index, { outcomeCategory: event.target.value as WizardOutcomeItem["outcomeCategory"] }))}>
+                            <option value="maximum_reasonable">Maximum Reasonable Outcome</option>
+                            <option value="actual">Actual Outcome</option>
+                            <option value="reporting">Reporting Outcome</option>
+                          </select>
+                        </label>
+                        {item.outcomeCategory === "reporting" ? (
+                          <label className="grid gap-1 text-sm text-slate-700 md:col-span-2">
+                            Reporting Outcome
+                            <select className={selectClass} value={item.reportingOutcome} onChange={(event) => setOutcomeItems((current) => updateItem(current, index, { reportingOutcome: event.target.value as WizardOutcomeItem["reportingOutcome"] }))}>
+                              <option value="">Select reporting outcome</option>
+                              <option value="internally_reported">Internal Report</option>
+                              <option value="externally_reported">External Report</option>
+                              <option value="reported_to_regulator">Regulator Report</option>
+                              <option value="reported_elsewhere">Reported Elsewhere</option>
+                            </select>
+                          </label>
+                        ) : (
+                          <>
+                            <label className="grid gap-1 text-sm text-slate-700">
+                              Likelihood
+                              <select className={selectClass} value={item.likelihood} onChange={(event) => setOutcomeItems((current) => updateItem(current, index, { likelihood: event.target.value as WizardOutcomeItem["likelihood"] }))}>
+                                {["rare", "unlikely", "possible", "likely", "almost_certain"].map((option) => (
+                                  <option key={option} value={option}>{formatWizardOptionLabel(option)}</option>
+                                ))}
+                              </select>
+                            </label>
+                            <label className="grid gap-1 text-sm text-slate-700">
+                              Consequence
+                              <select className={selectClass} value={item.consequence} onChange={(event) => setOutcomeItems((current) => updateItem(current, index, { consequence: event.target.value as WizardOutcomeItem["consequence"] }))}>
+                                {["insignificant", "minor", "moderate", "major", "severe"].map((option) => (
+                                  <option key={option} value={option}>{formatWizardOptionLabel(option)}</option>
+                                ))}
+                              </select>
+                            </label>
+                          </>
+                        )}
+                        <label className="grid gap-1 text-sm text-slate-700 md:col-span-2">
+                          Description
+                          <textarea className={textareaClass} value={item.description} onChange={(event) => setOutcomeItems((current) => updateItem(current, index, { description: event.target.value }))} />
+                        </label>
+                      </div>
+                    ) : (
+                      <div className="text-sm text-slate-500">{summarizeValues(item.outcomeCategory, item.reportingOutcome, item.likelihood, item.consequence, item.description)}</div>
+                    )}
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOutcomeItems((current) => [...current, createOutcomeItem()]);
+                    setExpandedOutcomeIndex(outcomeItems.length);
+                  }}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                >
+                  Add Another Outcome
+                </button>
+              </div>
+            ) : null}
+
+            {currentStep === 2 ? (
               <div className="space-y-4">
                 {personItems.map((item, index) => (
                   <div key={`person-${index}`} className={cardClass}>
@@ -453,7 +568,7 @@ export function SystemMapWizardModal({
               </div>
             ) : null}
 
-            {currentStep === 2 ? (
+            {currentStep === 3 ? (
               <div className="space-y-4">
                 {taskConditionItems.map((item, index) => (
                   <div key={`task-${index}`} className={cardClass}>
@@ -480,10 +595,6 @@ export function SystemMapWizardModal({
                     {expandedTaskConditionIndex === index ? (
                     <div className="grid gap-4 md:grid-cols-2">
                       <label className="grid gap-1 text-sm text-slate-700">
-                        Title
-                        <input className={inputClass} value={item.heading} onChange={(event) => setTaskConditionItems((current) => updateItem(current, index, { heading: event.target.value }))} />
-                      </label>
-                      <label className="grid gap-1 text-sm text-slate-700">
                         State
                         <select className={selectClass} value={item.state} onChange={(event) => setTaskConditionItems((current) => updateItem(current, index, { state: event.target.value as WizardTaskConditionItem["state"] }))}>
                           <option value="normal">Normal</option>
@@ -500,7 +611,7 @@ export function SystemMapWizardModal({
                       </label>
                     </div>
                     ) : (
-                      <div className="text-sm text-slate-500">{summarizeValues(item.heading, item.state, item.environmentalContext, item.description)}</div>
+                      <div className="text-sm text-slate-500">{summarizeValues(item.state, item.environmentalContext, item.description)}</div>
                     )}
                   </div>
                 ))}
@@ -512,7 +623,7 @@ export function SystemMapWizardModal({
                 </button>
               </div>
             ) : null}
-            {currentStep === 3 ? (
+            {currentStep === 4 ? (
               <div className="space-y-4">
                 {factorItems.map((item, index) => (
                   <div key={`factor-${index}`} className={cardClass}>
@@ -556,9 +667,6 @@ export function SystemMapWizardModal({
                           <option value="incident_system_factor">System Factor</option>
                         </select>
                       </label>
-                      <label className="grid gap-1 text-sm text-slate-700">Title
-                        <input className={inputClass} value={item.heading} onChange={(event) => setFactorItems((current) => updateItem(current, index, { heading: event.target.value }))} />
-                      </label>
                       <label className="grid gap-1 text-sm text-slate-700">Presence
                         <select className={selectClass} value={item.presence} onChange={(event) => setFactorItems((current) => updateItem(current, index, { presence: event.target.value as WizardFactorItem["presence"] }))}>
                           <option value="present">Present</option>
@@ -587,7 +695,7 @@ export function SystemMapWizardModal({
                       </label>
                     </div>
                     ) : (
-                      <div className="text-sm text-slate-500">{summarizeValues(item.kind === "incident_system_factor" ? "System Factor" : "Factor", item.heading, item.presence, item.classification, item.category, item.description)}</div>
+                      <div className="text-sm text-slate-500">{summarizeValues(item.kind === "incident_system_factor" ? "System Factor" : "Factor", item.presence, item.classification, item.category, item.description)}</div>
                     )}
                   </div>
                 ))}
@@ -598,7 +706,7 @@ export function SystemMapWizardModal({
               </div>
             ) : null}
 
-            {currentStep === 4 ? (
+            {currentStep === 5 ? (
               <div className="space-y-4">
                 {controlBarrierItems.map((item, index) => (
                   <div key={`barrier-${index}`} className={cardClass}>
@@ -622,9 +730,6 @@ export function SystemMapWizardModal({
                     </div>
                     {expandedControlBarrierIndex === index ? (
                     <div className="grid gap-4 md:grid-cols-2">
-                      <label className="grid gap-1 text-sm text-slate-700">Title
-                        <input className={inputClass} value={item.heading} onChange={(event) => setControlBarrierItems((current) => updateItem(current, index, { heading: event.target.value }))} />
-                      </label>
                       <label className="grid gap-1 text-sm text-slate-700">Owner
                         <input className={inputClass} value={item.ownerText} onChange={(event) => setControlBarrierItems((current) => updateItem(current, index, { ownerText: event.target.value }))} />
                       </label>
@@ -658,7 +763,7 @@ export function SystemMapWizardModal({
                       </label>
                     </div>
                     ) : (
-                      <div className="text-sm text-slate-500">{summarizeValues(item.heading, item.barrierState, item.barrierRole, item.controlType, item.ownerText, item.description)}</div>
+                      <div className="text-sm text-slate-500">{summarizeValues(item.barrierState, item.barrierRole, item.controlType, item.ownerText, item.description)}</div>
                     )}
                   </div>
                 ))}
@@ -669,7 +774,7 @@ export function SystemMapWizardModal({
               </div>
             ) : null}
 
-            {currentStep === 5 ? (
+            {currentStep === 6 ? (
               <div className="space-y-4">
                 {evidenceItems.map((item, index) => (
                   <div key={`evidence-${index}`} className={cardClass}>
@@ -693,9 +798,6 @@ export function SystemMapWizardModal({
                     </div>
                     {expandedEvidenceIndex === index ? (
                     <div className="grid gap-4 md:grid-cols-2">
-                      <label className="grid gap-1 text-sm text-slate-700">Title
-                        <input className={inputClass} value={item.heading} onChange={(event) => setEvidenceItems((current) => updateItem(current, index, { heading: event.target.value }))} />
-                      </label>
                       <label className="grid gap-1 text-sm text-slate-700">Evidence Type
                         <input className={inputClass} value={item.evidenceType} onChange={(event) => setEvidenceItems((current) => updateItem(current, index, { evidenceType: event.target.value }))} />
                       </label>
@@ -708,7 +810,7 @@ export function SystemMapWizardModal({
                       </label>
                     </div>
                     ) : (
-                      <div className="text-sm text-slate-500">{summarizeValues(item.heading, item.evidenceType, item.source, item.description)}</div>
+                      <div className="text-sm text-slate-500">{summarizeValues(item.evidenceType, item.source, item.description)}</div>
                     )}
                   </div>
                 ))}
@@ -719,7 +821,58 @@ export function SystemMapWizardModal({
               </div>
             ) : null}
 
-            {currentStep === 6 ? (
+            {currentStep === 7 ? (
+              <div className="space-y-4">
+                {responseRecoveryItems.map((item, index) => (
+                  <div key={`response-recovery-${index}`} className={cardClass}>
+                    <div className="mb-3 flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedResponseRecoveryIndex((current) => toggleExpandedIndex(current, index))}
+                        className="flex flex-1 items-center justify-between gap-3 text-left"
+                      >
+                        <span className="text-sm font-semibold text-slate-900">Response / Recovery {index + 1}</span>
+                        <span className="text-xs font-semibold text-slate-500">
+                          {expandedResponseRecoveryIndex === index ? "Collapse" : "Expand"}
+                        </span>
+                      </button>
+                      {responseRecoveryItems.length > 1 ? (
+                        <button type="button" onClick={() => {
+                          setResponseRecoveryItems((current) => current.filter((_, currentIndex) => currentIndex !== index));
+                          setExpandedResponseRecoveryIndex((current) => adjustExpandedIndexAfterRemove(current, index));
+                        }} className="ml-3 text-xs font-semibold text-slate-500 hover:text-slate-900">Remove</button>
+                      ) : null}
+                    </div>
+                    {expandedResponseRecoveryIndex === index ? (
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <label className="grid gap-1 text-sm text-slate-700">
+                          Category
+                          <select className={selectClass} value={item.category} onChange={(event) => setResponseRecoveryItems((current) => updateItem(current, index, { category: event.target.value as WizardResponseRecoveryItem["category"] }))}>
+                            <option value="">Select category</option>
+                            <option value="emergency_response">Emergency Response</option>
+                            <option value="medical_treatment">Medical Treatment</option>
+                            <option value="scene_preservation">Scene Preservation</option>
+                            <option value="make_area_safe">Make Area Safe</option>
+                          </select>
+                        </label>
+                        <label className="grid gap-1 text-sm text-slate-700 md:col-span-2">
+                          Description
+                          <textarea className={textareaClass} value={item.description} onChange={(event) => setResponseRecoveryItems((current) => updateItem(current, index, { description: event.target.value }))} />
+                        </label>
+                      </div>
+                    ) : (
+                      <div className="text-sm text-slate-500">{summarizeValues(item.category, item.description)}</div>
+                    )}
+                  </div>
+                ))}
+                <button type="button" onClick={() => {
+                  setResponseRecoveryItems((current) => [...current, createResponseRecoveryItem()]);
+                  setExpandedResponseRecoveryIndex(responseRecoveryItems.length);
+                }} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100">Add Another Response / Recovery</button>
+              </div>
+            ) : null}
+
+            {currentStep === 8 ? (
               <div className="space-y-4">
                 {findingItems.map((item, index) => (
                   <div key={`finding-${index}`} className={cardClass}>
@@ -743,9 +896,6 @@ export function SystemMapWizardModal({
                     </div>
                     {expandedFindingIndex === index ? (
                     <div className="grid gap-4 md:grid-cols-2">
-                      <label className="grid gap-1 text-sm text-slate-700">Title
-                        <input className={inputClass} value={item.heading} onChange={(event) => setFindingItems((current) => updateItem(current, index, { heading: event.target.value }))} />
-                      </label>
                       <label className="grid gap-1 text-sm text-slate-700">Confidence Level
                         <select className={selectClass} value={item.confidenceLevel} onChange={(event) => setFindingItems((current) => updateItem(current, index, { confidenceLevel: event.target.value as WizardFindingItem["confidenceLevel"] }))}>
                           <option value="low">Low</option>
@@ -758,7 +908,7 @@ export function SystemMapWizardModal({
                       </label>
                     </div>
                     ) : (
-                      <div className="text-sm text-slate-500">{summarizeValues(item.heading, item.confidenceLevel, item.description)}</div>
+                      <div className="text-sm text-slate-500">{summarizeValues(item.confidenceLevel, item.description)}</div>
                     )}
                   </div>
                 ))}
@@ -769,7 +919,7 @@ export function SystemMapWizardModal({
               </div>
             ) : null}
 
-            {currentStep === 7 ? (
+            {currentStep === 9 ? (
               <div className="space-y-4">
                 {recommendationItems.map((item, index) => (
                   <div key={`recommendation-${index}`} className={cardClass}>
@@ -793,9 +943,6 @@ export function SystemMapWizardModal({
                     </div>
                     {expandedRecommendationIndex === index ? (
                     <div className="grid gap-4 md:grid-cols-2">
-                      <label className="grid gap-1 text-sm text-slate-700">Title
-                        <input className={inputClass} value={item.heading} onChange={(event) => setRecommendationItems((current) => updateItem(current, index, { heading: event.target.value }))} />
-                      </label>
                       <label className="grid gap-1 text-sm text-slate-700">Action Type
                         <select className={selectClass} value={item.actionType} onChange={(event) => setRecommendationItems((current) => updateItem(current, index, { actionType: event.target.value as WizardRecommendationItem["actionType"] }))}>
                           <option value="corrective">Corrective</option>
@@ -813,7 +960,7 @@ export function SystemMapWizardModal({
                       </label>
                     </div>
                     ) : (
-                      <div className="text-sm text-slate-500">{summarizeValues(item.heading, item.actionType, item.ownerText, item.dueDate, item.description)}</div>
+                      <div className="text-sm text-slate-500">{summarizeValues(item.actionType, item.ownerText, item.dueDate, item.description)}</div>
                     )}
                   </div>
                 ))}

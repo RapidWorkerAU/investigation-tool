@@ -9,11 +9,61 @@ import shellStyles from "@/components/dashboard/DashboardShell.module.css";
 import pageStyles from "./GeneratedReportPage.module.css";
 import InvestigationReportPdfDocument from "@/components/investigation-report/InvestigationReportPdfDocument";
 import { ReportProgressLoadingView } from "@/components/loading/ReportProgressLoadingView";
-import { accessBlocksInvestigationEntry, accessRequiresSelection, fetchAccessState } from "@/lib/access";
+import { accessBlocksInvestigationEntry, accessCanUseReportGeneration, accessRequiresSelection, fetchAccessState } from "@/lib/access";
 import { normalizeInvestigationReportPayload } from "@/lib/investigation-report/helpers";
 import type { InvestigationSavedReportPayload, ReadinessCheck } from "@/lib/investigation-report/types";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
 import { parsePersonLabels } from "@/app/(dashboard)/system-maps/[mapId]/canvasShared";
+
+function EditGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={pageStyles.controlButtonSvg}>
+      <path
+        d="M4 20h4l10-10a2.121 2.121 0 0 0-3-3L5 17v3Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="m13.5 6.5 4 4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function SaveGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={pageStyles.controlButtonSvg}>
+      <path
+        d="M5 3h11l3 3v15H5V3Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M8 3v6h8V3" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M9 21v-6h6v6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function PrintGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={pageStyles.controlButtonSvg}>
+      <path d="M7 8V3h10v5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d="M6 17H5a2 2 0 0 1-2-2v-4a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3v4a2 2 0 0 1-2 2h-1"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path d="M7 14h10v7H7v-7Z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 type MapRow = {
   id: string;
@@ -92,6 +142,7 @@ type FlowSection = {
 type PdfVisibleSectionId =
   | "executive_summary"
   | "long_description"
+  | "response_and_recovery"
   | "task_and_conditions"
   | "incident_outcomes"
   | "people_involved"
@@ -119,6 +170,15 @@ async function blobToBase64(blob: Blob) {
   });
 
   return dataUrl.includes(",") ? dataUrl.split(",")[1] ?? "" : dataUrl;
+}
+
+async function blobToDataUrl(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(typeof reader.result === "string" ? reader.result : "");
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
 }
 
 function formatDateTime(value: string | null | undefined) {
@@ -743,8 +803,10 @@ export default function GeneratedInvestigationReportPage() {
   const [emailTo, setEmailTo] = useState("");
   const [emailSending, setEmailSending] = useState(false);
   const [emailPanelOpen, setEmailPanelOpen] = useState(false);
+  const [emailSentFlash, setEmailSentFlash] = useState(false);
   const emailPanelRef = useRef<HTMLDivElement | null>(null);
   const emailInputRef = useRef<HTMLInputElement | null>(null);
+  const emailSentTimeoutRef = useRef<number | null>(null);
 
   const personElements = useMemo(() => elements.filter((element) => element.element_type === "person"), [elements]);
   const evidenceElements = useMemo(() => elements.filter((element) => element.element_type === "incident_evidence"), [elements]);
@@ -770,6 +832,13 @@ export default function GeneratedInvestigationReportPage() {
         report?.report.sections.controls_and_barriers.columns ?? [],
         report?.report.sections.controls_and_barriers.rows ?? [],
       ),
+    [report],
+  );
+  const responseRecoveryTable = useMemo(
+    () => ({
+      columns: report?.report.sections.response_and_recovery.columns ?? [],
+      rows: report?.report.sections.response_and_recovery.rows ?? [],
+    }),
     [report],
   );
   const normalizedRecommendationsTable = useMemo(
@@ -864,7 +933,23 @@ export default function GeneratedInvestigationReportPage() {
         return;
       }
 
-      setBrandingLogoUrl(data.signedUrl);
+      try {
+        const response = await fetch(data.signedUrl);
+        if (!response.ok) {
+          setBrandingLogoUrl(null);
+          return;
+        }
+
+        const logoBlob = await response.blob();
+        if (cancelled) return;
+
+        const logoDataUrl = await blobToDataUrl(logoBlob);
+        if (cancelled) return;
+
+        setBrandingLogoUrl(logoDataUrl || null);
+      } catch {
+        setBrandingLogoUrl(null);
+      }
     };
 
     void loadBrandingLogoUrl();
@@ -1092,6 +1177,23 @@ export default function GeneratedInvestigationReportPage() {
           <section className={pageStyles.sectionBlock}>
             <h2 className={pageStyles.inlineSectionHeading}>Long Description</h2>
             {renderParagraphBlocks(report.report.sections.long_description, "long-description")}
+          </section>
+        ),
+      } : null,
+      isPdfSectionVisible("response_and_recovery") ? {
+        key: "response-and-recovery",
+        label: "Response / Recovery",
+        estimatedUnits: 4,
+        content: (
+          <section className={pageStyles.sectionBlock}>
+            <h2 className={pageStyles.inlineSectionHeading}>Response / Recovery</h2>
+            <p className={pageStyles.paragraph}>{normalizeParagraphText(report.report.sections.response_and_recovery.summary)}</p>
+            <DocumentTable
+              columns={responseRecoveryTable.columns}
+              rows={responseRecoveryTable.rows}
+              emptyLabel="No response or recovery actions available."
+              renderCell={(value) => value || "-"}
+            />
           </section>
         ),
       } : null,
@@ -1533,7 +1635,7 @@ export default function GeneratedInvestigationReportPage() {
     [report, evidenceElements, evidencePreviewLayouts],
   );
   const defaultLogoUrl = useMemo(
-    () => (typeof window !== "undefined" ? `${window.location.origin}/assets/logo.png` : undefined),
+    () => (typeof window !== "undefined" ? `${window.location.origin}/images/logo-black.png` : undefined),
     [],
   );
   const logoUrl = brandingLogoUrl || defaultLogoUrl;
@@ -1551,6 +1653,7 @@ export default function GeneratedInvestigationReportPage() {
         factorsTable={normalizedFactorsTable}
         predisposingFactorsTable={normalizedPredisposingFactorsTable}
         controlsTable={normalizedControlsTable}
+        responseRecoveryTable={responseRecoveryTable}
         recommendationsTable={normalizedRecommendationsTable}
         evidenceEntries={pdfEvidenceEntries}
       />
@@ -1565,6 +1668,7 @@ export default function GeneratedInvestigationReportPage() {
     normalizedFactorsTable,
     normalizedPredisposingFactorsTable,
     normalizedControlsTable,
+    responseRecoveryTable,
     normalizedRecommendationsTable,
     pdfEvidenceEntries,
   ]);
@@ -1599,6 +1703,10 @@ export default function GeneratedInvestigationReportPage() {
 
           const accessState = await fetchAccessState(session.access_token);
           if (accessRequiresSelection(accessState)) {
+            router.push("/subscribe");
+            return;
+          }
+          if (!accessCanUseReportGeneration(accessState)) {
             router.push("/subscribe");
             return;
           }
@@ -1687,6 +1795,10 @@ export default function GeneratedInvestigationReportPage() {
 
           const accessState = await fetchAccessState(session.access_token);
           if (accessRequiresSelection(accessState)) {
+            router.push("/subscribe");
+            return;
+          }
+          if (!accessCanUseReportGeneration(accessState)) {
             router.push("/subscribe");
             return;
           }
@@ -1898,6 +2010,7 @@ export default function GeneratedInvestigationReportPage() {
 
   const handleEmailPdf = async () => {
     if (!pdfBlob || !report) return;
+    if (emailSentFlash) return;
     if (!emailTo.trim()) {
       setStatusMessage("Enter a recipient email first.");
       return;
@@ -1921,6 +2034,10 @@ export default function GeneratedInvestigationReportPage() {
         body: JSON.stringify({
           to: emailTo.trim(),
           reportTitle: report.report.cover_page.incident_name || map?.title || "Investigation Report",
+          incidentDate: report.report.cover_page.incident_date || map?.incident_occurred_at || "",
+          incidentLocation: map?.incident_location || "",
+          responsibleName: map?.responsible_person_name || "",
+          executiveSummary: report.report.sections.executive_summary || "",
           filename: `${(report.report.cover_page.incident_name || map?.title || "investigation-report")
             .toLowerCase()
             .replace(/[^a-z0-9]+/g, "-")
@@ -1935,6 +2052,17 @@ export default function GeneratedInvestigationReportPage() {
       }
 
       setStatusMessage(`PDF emailed to ${emailTo.trim()}.`);
+      setEmailSentFlash(true);
+      if (emailSentTimeoutRef.current !== null) {
+        window.clearTimeout(emailSentTimeoutRef.current);
+      }
+      emailSentTimeoutRef.current = window.setTimeout(() => {
+        setEmailSentFlash(false);
+        setEmailPanelOpen(false);
+        setEmailTo("");
+        setStatusMessage(null);
+        emailSentTimeoutRef.current = null;
+      }, 2000);
     } catch (emailError) {
       setStatusMessage(emailError instanceof Error ? emailError.message : "Unable to email PDF.");
     } finally {
@@ -1961,6 +2089,14 @@ export default function GeneratedInvestigationReportPage() {
     const timeoutId = window.setTimeout(() => emailInputRef.current?.focus(), 140);
     return () => window.clearTimeout(timeoutId);
   }, [emailPanelOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (emailSentTimeoutRef.current !== null) {
+        window.clearTimeout(emailSentTimeoutRef.current);
+      }
+    };
+  }, []);
 
   if (showLoadingExperience) {
     return (
@@ -2076,20 +2212,23 @@ export default function GeneratedInvestigationReportPage() {
               <div className={`${shellStyles.reportScopeActions} ${pageStyles.reportControlsRow}`}>
                 <div>
                   {pdfError ? <p className={`${shellStyles.message} ${shellStyles.messageError}`}>{pdfError}</p> : null}
-                  {statusMessage ? (
+                  {statusMessage && !emailSentFlash ? (
                     <p className={`${shellStyles.message} ${statusMessage.toLowerCase().includes("unable") ? shellStyles.messageError : shellStyles.messageSuccess}`}>{statusMessage}</p>
                   ) : null}
                 </div>
-                <div className={shellStyles.reportScopeActionButtons}>
+                <div className={`${shellStyles.reportScopeActionButtons} ${pageStyles.reportActionButtons}`}>
                   <div className={pageStyles.emailActionWrap}>
                     <div ref={emailPanelRef} className={`${pageStyles.emailPanelInline} ${emailPanelOpen ? pageStyles.emailPanelInlineOpen : ""}`}>
-                      <div className={pageStyles.emailExpandShell}>
+                      <div className={`${pageStyles.emailExpandShell} ${emailSentFlash ? pageStyles.emailExpandShellSent : ""}`}>
                         <button
                           type="button"
                           className={pageStyles.emailExpandTrigger}
-                          onClick={() => setEmailPanelOpen((open) => !open)}
+                          onClick={() => {
+                            if (emailSentFlash) return;
+                            setEmailPanelOpen((open) => !open);
+                          }}
                           aria-expanded={emailPanelOpen}
-                          disabled={!pdfBlob || pdfPreparing || emailSending}
+                          disabled={!pdfBlob || pdfPreparing || emailSending || emailSentFlash}
                         >
                           <Image src="/icons/email.svg" alt="" width={16} height={16} className={pageStyles.emailToolbarButtonIcon} />
                           <span>Email PDF</span>
@@ -2097,11 +2236,12 @@ export default function GeneratedInvestigationReportPage() {
                         <input
                           ref={emailInputRef}
                           type="email"
-                          className={pageStyles.emailInputInline}
+                          className={`${pageStyles.emailInputInline} ${emailSentFlash ? pageStyles.emailInputInlineSent : ""}`}
                           placeholder="Email PDF to..."
-                          value={emailTo}
+                          value={emailSentFlash ? "Email sent" : emailTo}
                           onChange={(event) => setEmailTo(event.target.value)}
                           onKeyDown={(event) => {
+                            if (emailSentFlash) return;
                             if (event.key === "Enter") {
                               event.preventDefault();
                               void handleEmailPdf();
@@ -2111,6 +2251,7 @@ export default function GeneratedInvestigationReportPage() {
                             }
                           }}
                           disabled={!pdfBlob || pdfPreparing || emailSending}
+                          readOnly={emailSentFlash}
                         />
                       </div>
                       <div className={pageStyles.emailPanelInlineBody}>
@@ -2118,7 +2259,7 @@ export default function GeneratedInvestigationReportPage() {
                           type="button"
                           className={pageStyles.emailInlineIconButton}
                           onClick={() => void handleEmailPdf()}
-                          disabled={!pdfBlob || pdfPreparing || emailSending}
+                          disabled={!pdfBlob || pdfPreparing || emailSending || emailSentFlash}
                           title={emailSending ? "Emailing" : "Send email"}
                           aria-label={emailSending ? "Emailing" : "Send email"}
                         >
@@ -2130,7 +2271,7 @@ export default function GeneratedInvestigationReportPage() {
                           onClick={() => setEmailPanelOpen(false)}
                           title="Close email field"
                           aria-label="Close email field"
-                          disabled={emailSending}
+                          disabled={emailSending || emailSentFlash}
                         >
                           <span className={pageStyles.emailInlineCloseIcon} aria-hidden="true" />
                         </button>
@@ -2144,7 +2285,7 @@ export default function GeneratedInvestigationReportPage() {
                     title="Edit report"
                     aria-label="Edit report"
                   >
-                    <img src="/icons/edit.svg" alt="" className={`${pageStyles.controlButtonIcon} ${pageStyles.controlButtonIconSmall}`} />
+                    <EditGlyph />
                   </button>
                   <button
                     type="button"
@@ -2154,7 +2295,7 @@ export default function GeneratedInvestigationReportPage() {
                     title="Save PDF"
                     aria-label="Save PDF"
                   >
-                    <img src="/icons/save.svg" alt="" className={`${pageStyles.controlButtonIcon} ${pageStyles.controlButtonIconSmall}`} />
+                    <SaveGlyph />
                   </button>
                   <button
                     type="button"
@@ -2164,7 +2305,7 @@ export default function GeneratedInvestigationReportPage() {
                     title="Print PDF"
                     aria-label="Print PDF"
                   >
-                    <img src="/icons/printer.svg" alt="" className={`${pageStyles.controlButtonIcon} ${pageStyles.controlButtonIconPrint}`} />
+                    <PrintGlyph />
                   </button>
                   <select
                     className={pageStyles.statusSelect}
