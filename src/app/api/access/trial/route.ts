@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { emailTemplates, loadEmailRecipientByUserId, sendResendEmail } from "@/lib/email";
+import { emailTemplates, loadEmailRecipientByUserId, sendAdminAccessActivatedEmail, sendResendEmail } from "@/lib/email";
 import { getUserFromAuthHeader } from "@/lib/supabase/auth";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 
@@ -48,6 +48,16 @@ export async function POST(request: NextRequest) {
         });
       } catch (error) {
         console.error("Failed to send welcome email", error);
+      }
+
+      try {
+        await sendAdminAccessActivatedEmail({
+          email: recipient.email,
+          fullName: recipient.fullName,
+          accessType: "trial_7d",
+        });
+      } catch (error) {
+        console.error("Failed to send admin trial signup notification", error);
       }
     }
 

@@ -88,43 +88,32 @@ function LoginPageContent() {
         return;
       }
 
-      const normalizedEmail = email.trim().toLowerCase();
-      const { data: emailExists, error: emailExistsError } = await supabase.rpc("email_exists_for_auth", {
-        p_email: normalizedEmail,
-      });
-
-      if (emailExistsError) {
-        setNotice({ type: "error", text: "Unable to verify that email address right now. Please try again." });
-        setLoading(false);
-        return;
-      }
-
-      if (emailExists) {
-        setMode("login");
-        setSignupComplete(false);
-        setNotice({
-          type: "error",
-          text: "That email address is already registered. Please sign in instead.",
-        });
-        setLoading(false);
-        return;
-      }
-
       const redirectTo = `${process.env.NEXT_PUBLIC_SITE_URL || window.location.origin}/confirm-account`;
-      const { error } = await supabase.auth.signUp({
-        email: normalizedEmail,
-        password,
-        options: {
-          emailRedirectTo: redirectTo,
-          data: {
-            full_name: fullName,
-            name: fullName,
-          },
+      const response = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
+        body: JSON.stringify({
+          email,
+          password,
+          fullName,
+          redirectTo,
+        }),
       });
 
-      if (error) {
-        setNotice({ type: "error", text: error.message });
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+
+      if (!response.ok) {
+        const message = payload?.error || "Unable to create your account right now.";
+        const existingAccount = message.toLowerCase().includes("already registered");
+
+        if (existingAccount) {
+          setMode("login");
+          setSignupComplete(false);
+        }
+
+        setNotice({ type: "error", text: message });
       } else {
         setSignupComplete(true);
         setNotice(null);

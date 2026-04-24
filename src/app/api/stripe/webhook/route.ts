@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { emailTemplates, loadEmailRecipientByUserId, sendResendEmail } from "@/lib/email";
+import { emailTemplates, loadEmailRecipientByUserId, sendAdminAccessActivatedEmail, sendResendEmail } from "@/lib/email";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -85,6 +85,32 @@ async function sendWelcomeEmailIfFirstAccess(
     });
   } catch (error) {
     console.error("Failed to send welcome email", error);
+  }
+}
+
+async function sendAdminAccessNotificationIfFirstAccess(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  userId: string,
+  accessType: "pass_30d" | "subscription_monthly",
+) {
+  const { count } = await supabase
+    .from("access_periods")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId);
+
+  if (count !== 1) return;
+
+  const recipient = await loadEmailRecipientByUserId(supabase, userId);
+  if (!recipient) return;
+
+  try {
+    await sendAdminAccessActivatedEmail({
+      email: recipient.email,
+      fullName: recipient.fullName,
+      accessType,
+    });
+  } catch (error) {
+    console.error(`Failed to send admin ${accessType} signup notification`, error);
   }
 }
 
@@ -216,6 +242,7 @@ export async function POST(req: NextRequest) {
 
           if (createdAccessPeriod) {
             await sendWelcomeEmailIfFirstAccess(supabase, userId);
+            await sendAdminAccessNotificationIfFirstAccess(supabase, userId, "pass_30d");
           }
         }
 
@@ -405,6 +432,7 @@ export async function POST(req: NextRequest) {
 
                 if (createdNewPeriod || previousStatus === "pending_activation") {
                   await sendWelcomeEmailIfFirstAccess(supabase, userId);
+                  await sendAdminAccessNotificationIfFirstAccess(supabase, userId, "subscription_monthly");
                 }
               } else if (previousStatus === "payment_failed") {
                 await sendLifecycleEmail(
