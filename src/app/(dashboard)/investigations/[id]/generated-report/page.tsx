@@ -1391,7 +1391,7 @@ export default function GeneratedInvestigationReportPage() {
                 if (cellIndex === 0) return renderFactorPrimaryCell(value);
                 if (cellIndex === 2) return value ? toTitleCaseLabel(value) : "-";
                 if (cellIndex === 3) return renderControlBarrierStatePill(value);
-                if (cellIndex === 4) return renderPill(value);
+                if (cellIndex === 4) return renderFactorPill(value);
                 return value || "-";
               }}
               columnClassName={(_column, cellIndex) =>
