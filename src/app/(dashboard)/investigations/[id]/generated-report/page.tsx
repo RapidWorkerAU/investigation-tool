@@ -420,6 +420,20 @@ function renderFactorPill(value: string) {
   return <span className={`${shellStyles.statusPill} ${className} ${pageStyles.factorPillCompact}`}>{toTitleCaseLabel(trimmed)}</span>;
 }
 
+function renderPresencePill(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "-";
+
+  const normalized = trimmed.toLowerCase();
+  let className = shellStyles.factorPillNeutral;
+
+  if (normalized.includes("present")) className = shellStyles.factorPillPresent;
+  else if (normalized.includes("failed")) className = shellStyles.factorPillAbsent;
+  else if (normalized.includes("absent") || normalized.includes("missing")) className = shellStyles.factorPillContributing;
+
+  return <span className={`${shellStyles.statusPill} ${className} ${pageStyles.factorPillCompact}`}>{toTitleCaseLabel(trimmed)}</span>;
+}
+
 function renderOutlinePill(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return "-";
@@ -475,6 +489,40 @@ function renderActionTypePill(value: string) {
   else if (normalized.includes("improve")) className = shellStyles.factorPillNeutral;
 
   return <span className={`${shellStyles.statusPill} ${className} ${pageStyles.factorPillCompact}`}>{toTitleCaseLabel(trimmed)}</span>;
+}
+
+function renderTaskConditionStatePill(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "-";
+
+  let className = shellStyles.factorPillNeutral;
+
+  switch (trimmed.toLowerCase()) {
+    case "normal":
+      className = shellStyles.factorPillPresent;
+      break;
+    case "abnormal":
+      className = shellStyles.factorPillAbsent;
+      break;
+    default:
+      className = shellStyles.factorPillNeutral;
+      break;
+  }
+
+  return <span className={`${shellStyles.statusPill} ${className} ${pageStyles.factorPillCompact}`}>{toTitleCaseLabel(trimmed)}</span>;
+}
+
+function buildTaskConditionsTable(elements: CanvasElementRow[]) {
+  return {
+    columns: ["Details", "State", "Environmental Context"],
+    rows: elements
+      .filter((element) => element.element_type === "incident_task_condition")
+      .map((element) => [
+        getConfigValue(element.element_config, "description", "summary", "detail", "details") || element.heading?.trim() || "",
+        getConfigValue(element.element_config, "state") || "normal",
+        getConfigValue(element.element_config, "environmental_context", "environmentalContext", "context"),
+      ]),
+  };
 }
 
 function normalizeFactorTable(columns: string[], rows: string[][]) {
@@ -558,7 +606,6 @@ function normalizeMainFactorsTable(columns: string[], rows: string[][]) {
     normalizedColumns.findIndex((column) => patterns.some((pattern) => column.includes(pattern)));
 
   const foundItemIndex = findIndex("factor", "item", "name");
-  const typeIndex = findIndex("type");
   const presenceIndex = findIndex("presence", "status", "present");
   const classificationIndex = findIndex("classification", "role in incident", "role", "contribution");
   const detailsIndex = findIndex("detail", "support", "description", "definition", "why");
@@ -567,52 +614,19 @@ function normalizeMainFactorsTable(columns: string[], rows: string[][]) {
 
   const pick = (row: string[], index: number) => (index >= 0 ? row[index] || "" : "");
 
-  const splitCombinedStatus = (value: string) => {
-    const trimmed = value.trim();
-    if (!trimmed) return { presence: "", classification: "" };
-
-    const slashParts = trimmed.split("/").map((part) => part.trim()).filter(Boolean);
-    if (slashParts.length >= 2) {
-      return {
-        presence: slashParts[0],
-        classification: slashParts.slice(1).join(" / "),
-      };
-    }
-
-    const normalized = trimmed.toLowerCase();
-    const presenceMatch = ["present", "absent", "neutral"].find((token) => normalized.includes(token)) ?? "";
-    const classificationMatch =
-      ["essential", "contributing", "predisposing", "neutral"].find((token) => normalized.includes(token)) ?? "";
-
-    return {
-      presence: presenceMatch ? toTitleCaseLabel(presenceMatch) : "",
-      classification: classificationMatch ? toTitleCaseLabel(classificationMatch) : "",
-    };
-  };
-
   return {
-    columns: ["Details", "Type", "Presence", "Classification", "Category"],
+    columns: ["Details", "Presence", "Classification", "Category"],
     rows: rows.map((row) => {
       const rawItem = pick(row, itemIndex);
-      const rawType = pick(row, typeIndex);
-      const rawPresence = pick(row, presenceIndex);
       const rawClassification = pick(row, classificationIndex);
-      const rawCategory = pick(row, categoryIndex);
       const itemParts = splitBracketedValue(rawItem);
-      const typeParts = splitBracketedValue(rawType);
-      const classificationParts = splitBracketedValue(rawClassification);
-      const combinedSource =
-        rawPresence && rawClassification && rawPresence === rawClassification
-          ? rawPresence
-          : rawPresence || rawClassification;
-      const split = splitCombinedStatus(combinedSource);
+      const detailText = pick(row, detailsIndex) || itemParts.main || rawItem;
 
       return [
-        pick(row, detailsIndex),
-        rawType || itemParts.bracket || classificationParts.bracket,
-        split.presence || rawPresence,
-        split.classification || classificationParts.main || rawClassification,
-        rawCategory,
+        detailText,
+        pick(row, presenceIndex),
+        rawClassification,
+        pick(row, categoryIndex),
       ];
     }),
   };
@@ -633,13 +647,13 @@ function normalizeControlsTable(columns: string[], rows: string[][]) {
   const pick = (row: string[], index: number) => (index >= 0 ? row[index] || "" : "");
 
   return {
-    columns: ["Item", "Type", "State", "Role", "Details"],
+    columns: ["Item", "Details", "Type", "State", "Role"],
     rows: rows.map((row) => [
       pick(row, itemIndex),
+      pick(row, detailsIndex),
       pick(row, typeIndex),
       pick(row, stateIndex),
       pick(row, roleIndex),
-      pick(row, detailsIndex),
     ]),
   };
 }
@@ -849,6 +863,7 @@ export default function GeneratedInvestigationReportPage() {
       ),
     [report],
   );
+  const taskConditionsTable = useMemo(() => buildTaskConditionsTable(elements), [elements]);
   const sequenceItems = useMemo<SequenceTimelineItem[]>(
     () =>
       elements
@@ -1271,11 +1286,20 @@ export default function GeneratedInvestigationReportPage() {
       isPdfSectionVisible("task_and_conditions") ? {
         key: "task-and-conditions",
         label: "Task And Conditions",
-        estimatedUnits: 2,
+        estimatedUnits: taskConditionsTable.rows.length > 0 ? 4 : 2,
         content: (
           <section className={pageStyles.sectionBlock}>
             <h2 className={pageStyles.inlineSectionHeading}>Task And Conditions</h2>
             <p className={pageStyles.paragraph}>{normalizeParagraphText(report.report.sections.task_and_conditions)}</p>
+            <DocumentTable
+              columns={taskConditionsTable.columns}
+              rows={taskConditionsTable.rows}
+              emptyLabel="No task or condition items available."
+              renderCell={(value, _rowIndex, cellIndex) => {
+                if (cellIndex === 1) return renderTaskConditionStatePill(value);
+                return value || "-";
+              }}
+            />
           </section>
         ),
       } : null,
@@ -1291,16 +1315,13 @@ export default function GeneratedInvestigationReportPage() {
               rows={normalizedFactorsTable.rows}
               emptyLabel="No factors or system factors available."
               renderCell={(value, _rowIndex, cellIndex) => {
-                if (cellIndex === 0) return value || "-";
-                if (cellIndex === 1) return renderFactorTypeCell(value);
-                if (cellIndex === 2 || cellIndex === 3) return renderFactorPill(value);
-                if (cellIndex === 4) return value.trim() ? toTitleCaseLabel(value) : "-";
+                if (cellIndex === 1 || cellIndex === 2) return renderFactorPill(value);
+                if (cellIndex === 3) return value.trim() ? toTitleCaseLabel(value) : "-";
                 return value || "-";
               }}
               columnClassName={(_column, cellIndex) =>
                 [
                   pageStyles.factorCellDetails,
-                  pageStyles.factorCellType,
                   pageStyles.factorCellPresence,
                   pageStyles.factorCellClassification,
                   pageStyles.factorCellItem,
@@ -1309,7 +1330,6 @@ export default function GeneratedInvestigationReportPage() {
               columnWidthClassName={(_column, cellIndex) =>
                 [
                   pageStyles.factorColumnDetails,
-                  pageStyles.factorColumnType,
                   pageStyles.factorColumnPresence,
                   pageStyles.factorColumnClassification,
                   pageStyles.factorColumnItem,
@@ -1331,16 +1351,14 @@ export default function GeneratedInvestigationReportPage() {
               rows={normalizedPredisposingFactorsTable.rows}
               emptyLabel="No predisposing factors available."
               renderCell={(value, _rowIndex, cellIndex) => {
-                if (cellIndex === 0) return value || "-";
-                if (cellIndex === 1) return renderFactorTypeCell(value);
-                if (cellIndex === 2 || cellIndex === 3) return renderFactorPill(value);
-                if (cellIndex === 4) return value.trim() ? toTitleCaseLabel(value) : "-";
+                if (cellIndex === 1) return renderPresencePill(value);
+                if (cellIndex === 2) return renderFactorPill(value);
+                if (cellIndex === 3) return value.trim() ? toTitleCaseLabel(value) : "-";
                 return value || "-";
               }}
               columnClassName={(_column, cellIndex) =>
                 [
                   pageStyles.factorCellDetails,
-                  pageStyles.factorCellType,
                   pageStyles.factorCellPresence,
                   pageStyles.factorCellClassification,
                   pageStyles.factorCellItem,
@@ -1349,7 +1367,6 @@ export default function GeneratedInvestigationReportPage() {
               columnWidthClassName={(_column, cellIndex) =>
                 [
                   pageStyles.factorColumnDetails,
-                  pageStyles.factorColumnType,
                   pageStyles.factorColumnPresence,
                   pageStyles.factorColumnClassification,
                   pageStyles.factorColumnItem,
@@ -1372,26 +1389,27 @@ export default function GeneratedInvestigationReportPage() {
               emptyLabel="No controls or barriers available."
               renderCell={(value, _rowIndex, cellIndex) => {
                 if (cellIndex === 0) return renderFactorPrimaryCell(value);
-                if (cellIndex === 1 || cellIndex === 3) return renderOutlinePill(value);
-                if (cellIndex === 2) return renderControlBarrierStatePill(value);
+                if (cellIndex === 2) return value ? toTitleCaseLabel(value) : "-";
+                if (cellIndex === 3) return renderControlBarrierStatePill(value);
+                if (cellIndex === 4) return renderPill(value);
                 return value || "-";
               }}
               columnClassName={(_column, cellIndex) =>
                 [
                   pageStyles.factorCellItem,
+                  pageStyles.factorCellDetails,
                   pageStyles.factorCellType,
                   pageStyles.factorCellPresence,
                   pageStyles.factorCellClassification,
-                  pageStyles.factorCellDetails,
                 ][cellIndex]
               }
               columnWidthClassName={(_column, cellIndex) =>
                 [
                   pageStyles.factorColumnItem,
+                  pageStyles.factorColumnDetails,
                   pageStyles.factorColumnType,
                   pageStyles.factorColumnPresence,
                   pageStyles.factorColumnClassification,
-                  pageStyles.factorColumnDetails,
                 ][cellIndex]
               }
             />
@@ -1545,6 +1563,7 @@ export default function GeneratedInvestigationReportPage() {
     report,
     personElements,
     sequenceItems,
+    taskConditionsTable,
     normalizedFactorsTable,
     normalizedPredisposingFactorsTable,
     normalizedControlsTable,
@@ -1650,6 +1669,7 @@ export default function GeneratedInvestigationReportPage() {
         contentEntries={contentEntries}
         people={pdfPeople}
         timelineItems={pdfTimelineItems}
+        taskConditionsTable={taskConditionsTable}
         factorsTable={normalizedFactorsTable}
         predisposingFactorsTable={normalizedPredisposingFactorsTable}
         controlsTable={normalizedControlsTable}
@@ -1665,6 +1685,7 @@ export default function GeneratedInvestigationReportPage() {
     contentEntries,
     pdfPeople,
     pdfTimelineItems,
+    taskConditionsTable,
     normalizedFactorsTable,
     normalizedPredisposingFactorsTable,
     normalizedControlsTable,
@@ -1772,13 +1793,7 @@ export default function GeneratedInvestigationReportPage() {
               version_number: savedReportRow.version_number,
             },
           } as ReportPayload);
-          setReadiness(
-            savedReportRow.ai_output_json &&
-              typeof savedReportRow.ai_output_json === "object" &&
-              "readiness" in (savedReportRow.ai_output_json as Record<string, unknown>)
-              ? (((savedReportRow.ai_output_json as Record<string, unknown>).readiness ?? null) as ReadinessCheck | null)
-              : null,
-          );
+          setReadiness(null);
           setGenerating(false);
           setLoading(false);
           return;
@@ -2126,6 +2141,7 @@ export default function GeneratedInvestigationReportPage() {
                 ? "Loading saved report content and building a stable PDF preview."
                 : "Generating the report and preparing a stable PDF preview."
             }
+            helperText="This may take a few minutes for larger reports."
             inline
           />
         </section>
@@ -2168,7 +2184,7 @@ export default function GeneratedInvestigationReportPage() {
           {error ? <p className={`${shellStyles.message} ${shellStyles.messageError}`}>{error}</p> : null}
           {errorDiagnostic ? (
             <div className={shellStyles.accountSection}>
-              <h2>Generation Diagnostic</h2>
+              <h2 className={pageStyles.readinessHeading}>Generation Diagnostic</h2>
               <dl className={shellStyles.reportList}>
                 <div><dt>Response Status</dt><dd>{errorDiagnostic.status || "-"}</dd></div>
                 <div><dt>Incomplete Reason</dt><dd>{errorDiagnostic.incompleteReason || "-"}</dd></div>
@@ -2177,29 +2193,29 @@ export default function GeneratedInvestigationReportPage() {
               </dl>
             </div>
           ) : null}
-          {readiness && readiness.missing_information_detected.length > 0 ? (
+          {!report && readiness && readiness.missing_information_detected.length > 0 ? (
             <div className={shellStyles.accountSection}>
-              <h2>Missing Information</h2>
-              {readiness.disclaimer ? <p className={`${shellStyles.message} ${shellStyles.messageError}`}>{readiness.disclaimer}</p> : null}
-              <ul className={shellStyles.accountChecklist}>
+              <h2 className={pageStyles.readinessHeading}>Missing Information</h2>
+              {readiness.disclaimer ? <p className={pageStyles.readinessDisclaimerText}>{readiness.disclaimer}</p> : null}
+              <ul className={pageStyles.warningList}>
                 {readiness.missing_information_detected.map((item) => <li key={item}>{item}</li>)}
               </ul>
               {readiness.suggested_next_steps.length > 0 ? (
-                <div className={shellStyles.reportScopeActions}>
-                  <div>
-                    <p className={shellStyles.subtitle}>Suggested next steps</p>
-                    <ul className={shellStyles.accountChecklist}>
+                <div className={`${shellStyles.reportScopeActions} ${pageStyles.readinessFollowup}`}>
+                  <div className={pageStyles.readinessFollowupContent}>
+                    <h2 className={pageStyles.readinessHeading}>Suggested next steps</h2>
+                    <ul className={pageStyles.warningList}>
                       {readiness.suggested_next_steps.map((item) => <li key={item}>{item}</li>)}
                     </ul>
+                    {!report ? (
+                      <div className={`${shellStyles.reportScopeActionButtons} ${pageStyles.readinessActionButtons}`}>
+                        <button type="button" className={`${shellStyles.button} ${shellStyles.buttonAccent}`} onClick={() => router.push(`/investigations/${params.id}`)}>Go Back</button>
+                        <button type="button" className={`${shellStyles.button} ${shellStyles.buttonAccent}`} onClick={() => void handleContinueAnyway()} disabled={generating}>
+                          {generating ? "Generating..." : "Continue Anyway"}
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
-                  {!report ? (
-                    <div className={shellStyles.reportScopeActionButtons}>
-                      <button type="button" className={`${shellStyles.button} ${shellStyles.buttonAccent}`} onClick={() => router.push(`/investigations/${params.id}`)}>Go Back</button>
-                      <button type="button" className={`${shellStyles.button} ${shellStyles.buttonAccent}`} onClick={() => void handleContinueAnyway()} disabled={generating}>
-                        {generating ? "Generating..." : "Continue Anyway"}
-                      </button>
-                    </div>
-                  ) : null}
                 </div>
               ) : null}
             </div>

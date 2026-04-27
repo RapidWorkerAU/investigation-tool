@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useParams, useRouter } from "next/navigation";
 import DashboardShell from "@/components/dashboard/DashboardShell";
+import DashboardTableFooter from "@/components/dashboard/DashboardTableFooter";
 import shellStyles from "@/components/dashboard/DashboardShell.module.css";
 import editStyles from "../EditReportPage.module.css";
 import { ReportProgressLoadingView } from "@/components/loading/ReportProgressLoadingView";
@@ -542,6 +543,45 @@ function renderPill(value: string, fallbackClass = shellStyles.factorPillNeutral
   return <span className={`${shellStyles.statusPill} ${getFactorPillClass(trimmed) || fallbackClass}`}>{toTitleCaseLabel(trimmed)}</span>;
 }
 
+function renderPresencePill(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "-";
+
+  const normalized = trimmed.toLowerCase();
+  let pillClass = shellStyles.factorPillNeutral;
+
+  if (normalized.includes("present")) {
+    pillClass = shellStyles.factorPillPresent;
+  } else if (normalized.includes("failed")) {
+    pillClass = shellStyles.factorPillAbsent;
+  } else if (normalized.includes("absent") || normalized.includes("missing")) {
+    pillClass = shellStyles.factorPillContributing;
+  }
+
+  return <span className={`${shellStyles.statusPill} ${pillClass}`}>{toTitleCaseLabel(trimmed)}</span>;
+}
+
+function renderTaskConditionStatePill(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "-";
+
+  let pillClass = shellStyles.factorPillNeutral;
+
+  switch (trimmed.toLowerCase()) {
+    case "abnormal":
+      pillClass = shellStyles.factorPillAbsent;
+      break;
+    case "normal":
+      pillClass = shellStyles.factorPillPresent;
+      break;
+    default:
+      pillClass = shellStyles.factorPillNeutral;
+      break;
+  }
+
+  return <span className={`${shellStyles.statusPill} ${pillClass}`}>{toTitleCaseLabel(trimmed)}</span>;
+}
+
 function normalizeMainFactorsTable(columns: string[], rows: string[][]) {
   const normalizedColumns = columns.map(normalizeHeaderKey);
   const findIndex = (...patterns: string[]) => normalizedColumns.findIndex((column) => patterns.some((pattern) => column.includes(pattern)));
@@ -555,18 +595,17 @@ function normalizeMainFactorsTable(columns: string[], rows: string[][]) {
   const pick = (row: string[], index: number) => (index >= 0 ? row[index] || "" : "");
 
   return {
-    columns: ["Details", "Type", "Presence", "Classification", "Category"],
+    columns: ["Details", "Presence", "Classification", "Category"],
     rows: rows.map((row) => {
       const rawItem = pick(row, itemIndex);
       const rawClassification = pick(row, classificationIndex);
       const itemParts = splitBracketedValue(rawItem);
-      const classificationParts = splitBracketedValue(rawClassification);
+      const detailText = pick(row, detailsIndex) || itemParts.main || rawItem;
 
       return [
-        pick(row, detailsIndex),
-        pick(row, typeIndex) || itemParts.bracket || classificationParts.bracket,
+        detailText,
         pick(row, presenceIndex),
-        classificationParts.main || rawClassification,
+        rawClassification,
         pick(row, categoryIndex),
       ];
     }),
@@ -583,8 +622,8 @@ function normalizeControlsTable(columns: string[], rows: string[][]) {
   const detailsIndex = findIndex("detail", "support", "description", "definition", "why");
   const pick = (row: string[], index: number) => (index >= 0 ? row[index] || "" : "");
   return {
-    columns: ["Item", "Type", "State", "Role", "Details"],
-    rows: rows.map((row) => [pick(row, itemIndex), pick(row, typeIndex), pick(row, stateIndex), pick(row, roleIndex), pick(row, detailsIndex)]),
+    columns: ["Item", "Details", "Type", "State", "Role"],
+    rows: rows.map((row) => [pick(row, itemIndex), pick(row, detailsIndex), pick(row, typeIndex), pick(row, stateIndex), pick(row, roleIndex)]),
   };
 }
 
@@ -603,19 +642,64 @@ function normalizeRecommendationsTable(columns: string[], rows: string[][]) {
   };
 }
 
+function buildTaskConditionsTable(elements: CanvasElementRow[]) {
+  return {
+    columns: ["Details", "State", "Environmental Context"],
+    rows: elements
+      .filter((element) => element.element_type === "incident_task_condition")
+      .map((element) => [
+        getConfigValue(element.element_config, "description", "summary", "detail", "details") || element.heading?.trim() || "",
+        getConfigValue(element.element_config, "state") || "normal",
+        getConfigValue(element.element_config, "environmental_context", "environmentalContext", "context"),
+      ]),
+  };
+}
+
 function ReadOnlyTable({
   columns,
   rows,
   renderCell,
+  pageSize,
+  paginationLabel,
+  columnWidths,
+  tableClassName,
 }: {
   columns: string[];
   rows: string[][];
   renderCell?: (value: string, rowIndex: number, cellIndex: number) => ReactNode;
+  pageSize?: number;
+  paginationLabel?: string;
+  columnWidths?: string[];
+  tableClassName?: string;
 }) {
+  const effectivePageSize = pageSize ?? 10;
+  const [page, setPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(rows.length / effectivePageSize));
+  const safePage = Math.min(Math.max(1, page), totalPages);
+  const rowStart = (safePage - 1) * effectivePageSize;
+  const visibleRows = rows.slice(rowStart, rowStart + effectivePageSize);
+
+  useEffect(() => {
+    setPage(1);
+  }, [columns.join("|"), rows.length, effectivePageSize]);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
   return (
     <>
       <div className={`${shellStyles.tableWrap} ${editStyles.readOnlyTableDesktop}`}>
-        <table className={`${shellStyles.table} ${shellStyles.reportDataTable}`}>
+        <table className={`${shellStyles.table} ${shellStyles.reportDataTable} ${editStyles.compactReadOnlyTable} ${tableClassName ?? ""}`}>
+          {columnWidths && columnWidths.length === columns.length ? (
+            <colgroup>
+              {columnWidths.map((width, index) => (
+                <col key={`${columns[index]}-width`} style={{ width }} />
+              ))}
+            </colgroup>
+          ) : null}
           <thead>
             <tr>
               {columns.map((column) => (
@@ -627,11 +711,11 @@ function ReadOnlyTable({
             {rows.length === 0 ? (
               <tr><td colSpan={columns.length}>No saved rows available for this section.</td></tr>
             ) : (
-              rows.map((row, rowIndex) => (
-                <tr key={`${columns.join("-")}-${rowIndex}`}>
+              visibleRows.map((row, rowIndex) => (
+                <tr key={`${columns.join("-")}-${rowStart + rowIndex}`}>
                   {columns.map((column, cellIndex) => (
                     <td key={`${column}-${cellIndex}`}>
-                      {renderCell ? renderCell(row[cellIndex] || "-", rowIndex, cellIndex) : row[cellIndex] || "-"}
+                      {renderCell ? renderCell(row[cellIndex] || "-", rowStart + rowIndex, cellIndex) : row[cellIndex] || "-"}
                     </td>
                   ))}
                 </tr>
@@ -641,14 +725,24 @@ function ReadOnlyTable({
         </table>
       </div>
 
+      {rows.length > effectivePageSize ? (
+        <DashboardTableFooter
+          total={rows.length}
+          page={safePage}
+          pageSize={effectivePageSize}
+          onPageChange={setPage}
+          label={paginationLabel ?? "rows"}
+        />
+      ) : null}
+
       <div className={editStyles.readOnlyMobileCards}>
         {rows.length === 0 ? (
           <div className={shellStyles.reportMobileEmptyState}>No saved rows available for this section.</div>
         ) : (
-          rows.map((row, rowIndex) => (
-            <article key={`${columns.join("-")}-mobile-${rowIndex}`} className={shellStyles.reportMobileCard}>
+          visibleRows.map((row, rowIndex) => (
+            <article key={`${columns.join("-")}-mobile-${rowStart + rowIndex}`} className={shellStyles.reportMobileCard}>
               <div className={shellStyles.reportMobileCardHeader}>
-                <strong>{`Row ${rowIndex + 1}`}</strong>
+                <strong>{`Row ${rowStart + rowIndex + 1}`}</strong>
               </div>
               <div className={editStyles.readOnlyMobileFieldList}>
                 {columns.map((column, cellIndex) => (
@@ -658,7 +752,7 @@ function ReadOnlyTable({
                   >
                     <span className={shellStyles.reportMobileLabel}>{column}</span>
                     <span className={shellStyles.reportMobileValue}>
-                      {renderCell ? renderCell(row[cellIndex] || "-", rowIndex, cellIndex) : row[cellIndex] || "-"}
+                      {renderCell ? renderCell(row[cellIndex] || "-", rowStart + rowIndex, cellIndex) : row[cellIndex] || "-"}
                     </span>
                   </div>
                 ))}
@@ -796,6 +890,7 @@ export default function EditInvestigationReportPage() {
       ),
     [report],
   );
+  const taskConditionsTable = useMemo(() => buildTaskConditionsTable(elements), [elements]);
   const dirtySectionCount = useMemo(() => {
     if (!report || !lastSavedReport) return 0;
 
@@ -1617,8 +1712,13 @@ export default function EditInvestigationReportPage() {
                   const labels = parsePersonLabels((person.heading ?? "").replaceAll("\\n", "\n"));
                   return (
                     <div key={person.id} className={editStyles.personCard}>
-                      <strong>{labels.role || "Person"}</strong>
-                      {labels.department && labels.department !== "Department" ? <span>{labels.department}</span> : null}
+                      <div className={editStyles.personCardIconWrap}>
+                        <Image src="/icons/account.svg" alt="" width={28} height={28} className={editStyles.personCardIcon} />
+                      </div>
+                      <div className={editStyles.personCardText}>
+                        <strong>{labels.role || "Person"}</strong>
+                        {labels.department && labels.department !== "Department" ? <span>{labels.department}</span> : null}
+                      </div>
                     </div>
                   );
                 })}
@@ -1660,9 +1760,14 @@ export default function EditInvestigationReportPage() {
               columns={normalizedFactorsTable.columns}
               rows={normalizedFactorsTable.rows}
               renderCell={(value, _rowIndex, cellIndex) => {
-                if (cellIndex === 2 || cellIndex === 3) return renderPill(value);
+                if (cellIndex === 1 || cellIndex === 2) return renderPill(value);
+                if (cellIndex === 3) return value ? toTitleCaseLabel(value) : "-";
                 return value || "-";
               }}
+              pageSize={10}
+              paginationLabel="factors"
+              columnWidths={["46%", "16%", "20%", "18%"]}
+              tableClassName={editStyles.factorsCompactTable}
             />
           </div>
         );
@@ -1674,9 +1779,13 @@ export default function EditInvestigationReportPage() {
               columns={normalizedPredisposingFactorsTable.columns}
               rows={normalizedPredisposingFactorsTable.rows}
               renderCell={(value, _rowIndex, cellIndex) => {
-                if (cellIndex === 2 || cellIndex === 3) return renderPill(value);
+                if (cellIndex === 1) return renderPresencePill(value);
+                if (cellIndex === 2) return renderPill(value);
+                if (cellIndex === 3) return value ? toTitleCaseLabel(value) : "-";
                 return value || "-";
               }}
+              columnWidths={["40%", "20%", "20%", "20%"]}
+              tableClassName={editStyles.predisposingCompactTable}
             />
           </div>
         );
@@ -1688,9 +1797,26 @@ export default function EditInvestigationReportPage() {
               columns={normalizedControlsTable.columns}
               rows={normalizedControlsTable.rows}
               renderCell={(value, _rowIndex, cellIndex) => {
-                if (cellIndex === 2 || cellIndex === 3) return renderPill(value);
+                if (cellIndex === 2) return value ? toTitleCaseLabel(value) : "-";
+                if (cellIndex === 3 || cellIndex === 4) return renderPill(value);
                 return value || "-";
               }}
+              columnWidths={["20%", "40%", "13.333%", "13.333%", "13.334%"]}
+            />
+          </div>
+        );
+      case "task_and_conditions":
+        return (
+          <div className={editStyles.previewStack}>
+            {note}
+            <ReadOnlyTable
+              columns={taskConditionsTable.columns}
+              rows={taskConditionsTable.rows}
+              renderCell={(value, _rowIndex, cellIndex) => {
+                if (cellIndex === 1) return renderTaskConditionStatePill(value);
+                return value || "-";
+              }}
+              columnWidths={["44%", "16%", "40%"]}
             />
           </div>
         );
@@ -2327,7 +2453,7 @@ export default function EditInvestigationReportPage() {
                   <p className={editStyles.helperText}>
                     Paragraph breaks are preserved in the saved report and carried into the PDF output where applicable.
                   </p>
-                  {activeSection.id === "response_and_recovery" || activeSection.id === "incident_findings" || activeSection.id === "recommendations"
+                  {activeSection.id === "task_and_conditions" || activeSection.id === "response_and_recovery" || activeSection.id === "incident_findings" || activeSection.id === "recommendations"
                     ? renderReadOnlySection()
                     : null}
                 </>

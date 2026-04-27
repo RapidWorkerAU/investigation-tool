@@ -15,6 +15,7 @@ export default function GeneratedReportLoading() {
           phase={0}
           title="Preparing PDF Viewer"
           subtitle="Loading report content and preparing the preview."
+          helperText="This may take a few minutes for larger reports."
           inline
         />
       </section>

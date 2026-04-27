@@ -117,6 +117,7 @@ export type InvestigationReportPdfDocumentProps = {
   contentEntries: ContentEntry[];
   people: PersonCard[];
   timelineItems: TimelineItem[];
+  taskConditionsTable: TableData;
   factorsTable: TableData;
   predisposingFactorsTable: TableData;
   controlsTable: TableData;
@@ -386,9 +387,11 @@ const styles = StyleSheet.create({
   timelineRow: {
     flexDirection: "row",
     marginBottom: 8,
+    width: "100%",
   },
   timelineDateBlock: {
     width: 88,
+    flexShrink: 0,
     alignItems: "flex-end",
     paddingTop: 2,
     paddingRight: 10,
@@ -403,6 +406,9 @@ const styles = StyleSheet.create({
   },
   timelineContent: {
     flexGrow: 1,
+    flexShrink: 1,
+    width: 0,
+    maxWidth: "100%",
     borderLeftWidth: 2,
     borderLeftColor: "#d7dce3",
     paddingLeft: 12,
@@ -413,6 +419,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   timelineDescription: {
+    width: "100%",
     fontSize: 9,
     lineHeight: 1.4,
   },
@@ -663,7 +670,10 @@ function renderFooter() {
 function getPillTone(value: string) {
   const normalized = value.trim().toLowerCase();
   if (!normalized) return { backgroundColor: "#f5f6f8", borderColor: "#cfd4dc", color: "#3b4657" };
-  if (normalized.includes("present") || normalized.includes("effective") || normalized.includes("high") || normalized.includes("prevent")) {
+  if (normalized.includes("abnormal")) {
+    return { backgroundColor: "#fdeeed", borderColor: "#f0b9b3", color: "#b42318" };
+  }
+  if (normalized.includes("present") || normalized.includes("effective") || normalized.includes("high") || normalized.includes("prevent") || normalized === "normal") {
     return { backgroundColor: "#e5f4e8", borderColor: "#b7dcbf", color: "#24743d" };
   }
   if (normalized.includes("absent") || normalized.includes("failed") || normalized.includes("missing") || normalized.includes("low") || normalized.includes("essential") || normalized.includes("immediate")) {
@@ -928,6 +938,7 @@ export default function InvestigationReportPdfDocument({
   contentEntries,
   people,
   timelineItems,
+  taskConditionsTable,
   factorsTable,
   predisposingFactorsTable,
   controlsTable,
@@ -989,7 +1000,7 @@ export default function InvestigationReportPdfDocument({
         <View style={styles.coverHero}>
           <View>
             <Text style={styles.coverEyebrow}>Investigation Report</Text>
-            <Text style={styles.coverTitle}>{report.report.cover_page.incident_name || map?.title || "-"}</Text>
+            <Text style={styles.coverTitle}>{map?.title || report.report.cover_page.incident_name || "-"}</Text>
             <Text style={styles.coverLocation}>{map?.incident_location || "-"}</Text>
           </View>
           <Text style={styles.coverVersion}>Report Version: {report.saved_report.version_number}</Text>
@@ -1098,6 +1109,14 @@ export default function InvestigationReportPdfDocument({
         {isPdfSectionVisible("task_and_conditions") ? (
           <>
             {renderSectionHeader("Task And Conditions", report.report.sections.task_and_conditions.trim() || "-", sectionHeadingColor, sectionHeadingTextColor)}
+            <PdfTable
+              columns={taskConditionsTable.columns}
+              rows={taskConditionsTable.rows}
+              cellWidths={["44%", "16%", "40%"]}
+              tableHeadingColor={tableHeadingColor}
+              tableHeadingTextColor={tableHeadingTextColor}
+              pillColumns={[1]}
+            />
             <View style={styles.sectionSpacing} />
           </>
         ) : null}
@@ -1113,12 +1132,11 @@ export default function InvestigationReportPdfDocument({
         <PdfTable
           columns={factorsTable.columns}
           rows={factorsTable.rows}
-          cellWidths={["30%", "15%", "15%", "15%", "25%"]}
+          cellWidths={["46%", "16%", "20%", "18%"]}
           tableHeadingColor={tableHeadingColor}
           tableHeadingTextColor={tableHeadingTextColor}
-          pillColumns={[2, 3]}
-          primaryColumns={[1]}
-          titleCaseColumns={[4]}
+          pillColumns={[1, 2]}
+          titleCaseColumns={[3]}
         />
         <View style={styles.sectionSpacing} />
           </>
@@ -1135,12 +1153,11 @@ export default function InvestigationReportPdfDocument({
         <PdfTable
           columns={predisposingFactorsTable.columns}
           rows={predisposingFactorsTable.rows}
-          cellWidths={["30%", "15%", "15%", "15%", "25%"]}
+          cellWidths={["40%", "20%", "20%", "20%"]}
           tableHeadingColor={tableHeadingColor}
           tableHeadingTextColor={tableHeadingTextColor}
-          pillColumns={[2, 3]}
-          primaryColumns={[1]}
-          titleCaseColumns={[4]}
+          pillColumns={[1, 2]}
+          titleCaseColumns={[3]}
         />
         <View style={styles.sectionSpacing} />
           </>
@@ -1157,11 +1174,11 @@ export default function InvestigationReportPdfDocument({
         <PdfTable
           columns={controlsTable.columns}
           rows={controlsTable.rows}
-          cellWidths={["25%", "15%", "15%", "15%", "30%"]}
+          cellWidths={["20%", "40%", "13.333%", "13.333%", "13.334%"]}
           tableHeadingColor={tableHeadingColor}
           tableHeadingTextColor={tableHeadingTextColor}
-          pillColumns={[2]}
-          outlineColumns={[1, 3]}
+          pillColumns={[3, 4]}
+          titleCaseColumns={[2]}
           primaryColumns={[0]}
         />
         <View style={styles.sectionSpacing} />

@@ -4,6 +4,7 @@ type ReportProgressLoadingViewProps = {
   phase: number;
   title: string;
   subtitle: string;
+  helperText?: string;
   inline?: boolean;
 };
 
@@ -17,7 +18,7 @@ const steps = [
   { progress: 100, text: "Final checks done. Ready to review." },
 ];
 
-export function ReportProgressLoadingView({ phase, title, subtitle, inline = false }: ReportProgressLoadingViewProps) {
+export function ReportProgressLoadingView({ phase, title, subtitle, helperText, inline = false }: ReportProgressLoadingViewProps) {
   const clampedPhase = Math.max(0, Math.min(phase, steps.length - 1));
   const step = steps[clampedPhase];
 
@@ -27,6 +28,7 @@ export function ReportProgressLoadingView({ phase, title, subtitle, inline = fal
         <p className={styles.eyebrow}>Investigation Tool</p>
         <h1 className={styles.title}>{title}</h1>
         <p className={styles.subtitle}>{subtitle}</p>
+        {helperText ? <p className={styles.helperText}>{helperText}</p> : null}
 
         <div className={styles.iconShell} aria-hidden="true">
           <div className={styles.iconFold} />

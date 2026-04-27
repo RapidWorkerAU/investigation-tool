@@ -48,6 +48,14 @@
   line-height: 1.5;
 }
 
+.helperText {
+  margin: -4px 0 0;
+  color: #6b7280;
+  font-size: 0.88rem;
+  text-align: center;
+  line-height: 1.45;
+}
+
 .iconShell {
   position: relative;
   width: 82px;
