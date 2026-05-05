@@ -9,7 +9,15 @@ type DashboardPageSkeletonProps = {
   title: string;
   eyebrow?: string;
   subtitle?: string;
-  activeNav?: "dashboard" | "templates" | "account";
+  activeNav?:
+    | "dashboard"
+    | "templates"
+    | "lead-access"
+    | "account"
+    | "admin"
+    | "admin-users"
+    | "admin-organisations";
+  mode?: "default" | "admin";
   variant?: "table" | "cards" | "detail";
   rows?: number;
   columns?: string;
@@ -34,6 +42,7 @@ export function DashboardPageSkeleton({
   eyebrow = "Investigation Tool",
   subtitle,
   activeNav = "dashboard",
+  mode = "default",
   variant = "table",
   rows,
   columns,
@@ -50,6 +59,7 @@ export function DashboardPageSkeleton({
 
   return (
     <DashboardShell
+      mode={mode}
       activeNav={activeNav}
       eyebrow={eyebrow}
       title={title}

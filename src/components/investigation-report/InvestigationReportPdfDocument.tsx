@@ -1,4 +1,4 @@
-import React from "react";
+﻿import React from "react";
 import {
   Document,
   Font,
@@ -118,10 +118,13 @@ export type InvestigationReportPdfDocumentProps = {
   people: PersonCard[];
   timelineItems: TimelineItem[];
   taskConditionsTable: TableData;
-  factorsTable: TableData;
+  incidentFactorsTable: TableData;
+  incidentSystemFactorsTable: TableData;
   predisposingFactorsTable: TableData;
   controlsTable: TableData;
   responseRecoveryTable: TableData;
+  incidentOutcomesTable: TableData;
+  findingsTable: TableData;
   recommendationsTable: TableData;
   evidenceEntries: EvidenceEntry[];
 };
@@ -174,12 +177,17 @@ const styles = StyleSheet.create({
   },
   section: {
     marginBottom: 30,
+    width: "100%",
   },
   sectionSpacing: {
     height: 30,
   },
+  tableSectionStart: {
+    width: "100%",
+  },
   sectionHeaderBlock: {
     marginBottom: 8,
+    width: "100%",
   },
   sectionTitle: {
     marginBottom: 6,
@@ -192,15 +200,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: 700,
     textTransform: "uppercase",
+    width: "100%",
   },
   paragraph: {
     fontSize: 10,
     lineHeight: 1.45,
+    width: "100%",
   },
   paragraphBlock: {
     marginBottom: 8,
     fontSize: 10,
     lineHeight: 1.45,
+    width: "100%",
   },
   subheading: {
     marginTop: 10,
@@ -666,7 +677,6 @@ function renderFooter() {
     </View>
   );
 }
-
 function getPillTone(value: string) {
   const normalized = value.trim().toLowerCase();
   if (!normalized) return { backgroundColor: "#f5f6f8", borderColor: "#cfd4dc", color: "#3b4657" };
@@ -683,6 +693,47 @@ function getPillTone(value: string) {
     return { backgroundColor: "#fff5df", borderColor: "#f3ce84", color: "#aa6b00" };
   }
   return { backgroundColor: "#eef1f5", borderColor: "#cfd5df", color: "#43526a" };
+}
+
+function getResponseRecoveryTone(value: string) {
+  const normalized = value.trim().toLowerCase();
+  switch (normalized) {
+    case "emergency_response":
+      return { backgroundColor: "#FEF3C7", color: "#92400E" };
+    case "make_area_safe":
+      return { backgroundColor: "#F3E8FF", color: "#6B21A8" };
+    case "medical_treatment":
+      return { backgroundColor: "#DCFCE7", color: "#166534" };
+    case "scene_preservation":
+      return { backgroundColor: "#E0E7FF", color: "#3730A3" };
+    default:
+      return { backgroundColor: "#FCE7F3", color: "#9D174D" };
+  }
+}
+
+function getOutcomeMatrixTone(value: string) {
+  const normalized = value.trim().toLowerCase();
+  switch (normalized) {
+    case "rare":
+    case "insignificant":
+      return { backgroundColor: "#DCFCE7", color: "#166534" };
+    case "unlikely":
+    case "minor":
+      return { backgroundColor: "#ECFCCB", color: "#3F6212" };
+    case "possible":
+    case "moderate":
+      return { backgroundColor: "#FEF3C7", color: "#92400E" };
+    case "likely":
+    case "major":
+      return { backgroundColor: "#FED7AA", color: "#9A3412" };
+    case "almost_certain":
+    case "almost certain":
+    case "severe":
+    case "catastrophic":
+      return { backgroundColor: "#FEE2E2", color: "#7F1D1D" };
+    default:
+      return { backgroundColor: "#F3F4F6", color: "#374151" };
+  }
 }
 
 function normalizeHexColor(value: string | null | undefined, fallback: string) {
@@ -709,6 +760,14 @@ function renderSectionHeader(
     <View style={styles.sectionHeaderBlock} wrap={false}>
       <Text style={[styles.sectionTitle, { backgroundColor: sectionHeadingColor, color: sectionHeadingTextColor }]}>{title}</Text>
       {intro ? <Text style={styles.sectionIntro}>{intro}</Text> : null}
+    </View>
+  );
+}
+
+function renderTableSectionStart(children: React.ReactNode) {
+  return (
+    <View style={styles.tableSectionStart} minPresenceAhead={240}>
+      {children}
     </View>
   );
 }
@@ -805,10 +864,12 @@ function PdfTable({
   tableHeadingColor,
   tableHeadingTextColor,
   pillColumns = [],
+  pillToneResolver,
   outlineColumns = [],
   titleCaseColumns = [],
   primaryColumns = [],
   checkboxColumns = [],
+  protectedLeadingRows = 0,
 }: {
   columns: string[];
   rows: string[][];
@@ -816,11 +877,18 @@ function PdfTable({
   tableHeadingColor: string;
   tableHeadingTextColor: string;
   pillColumns?: number[];
+  pillToneResolver?: (value: string, columnIndex: number) => { backgroundColor: string; color: string };
   outlineColumns?: number[];
   titleCaseColumns?: number[];
   primaryColumns?: number[];
   checkboxColumns?: number[];
+  protectedLeadingRows?: number;
 }) {
+  const leadingRows =
+    protectedLeadingRows > 0 && rows.length > 0 ? rows.slice(0, Math.min(rows.length, protectedLeadingRows)) : [];
+  const trailingRows =
+    protectedLeadingRows > 0 && rows.length > protectedLeadingRows ? rows.slice(protectedLeadingRows) : [];
+
   return (
     <View style={styles.table} minPresenceAhead={54}>
       <View style={[styles.tableRow, styles.tableHeaderRow, { backgroundColor: tableHeadingColor }]} fixed>
@@ -836,6 +904,98 @@ function PdfTable({
             <Text>-</Text>
           </View>
         </View>
+      ) : leadingRows.length > 0 ? (
+        <View wrap={false} minPresenceAhead={92}>
+          {leadingRows.map((row, rowIndex) => (
+            <View key={`row-${rowIndex}`} style={styles.tableRow} wrap={false}>
+              {columns.map((column, index) => {
+                const rawValue = row[index] || "-";
+                const titleValue = titleCaseColumns.includes(index) ? toTitleCaseLabel(rawValue) : rawValue;
+                if (pillColumns.includes(index)) {
+                  const tone = pillToneResolver ? pillToneResolver(rawValue, index) : getPillTone(rawValue);
+                  return (
+                    <View
+                      key={`${column}-${index}`}
+                      style={[
+                        styles.tableCell,
+                        styles.statusCell,
+                        {
+                          width: cellWidths[index],
+                          backgroundColor: tone.backgroundColor,
+                          borderLeftWidth: 1,
+                          borderLeftColor: "#d7dce3",
+                          borderRightWidth: 1,
+                          borderRightColor: "#d7dce3",
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.statusCellText, { color: tone.color }]}>{toTitleCaseLabel(rawValue)}</Text>
+                    </View>
+                  );
+                }
+                if (outlineColumns.includes(index)) {
+                  return (
+                    <View
+                      key={`${column}-${index}`}
+                      style={[
+                        styles.tableCell,
+                        styles.statusCell,
+                        {
+                          width: cellWidths[index],
+                          backgroundColor: "#f3f5f8",
+                          borderLeftWidth: 1,
+                          borderLeftColor: "#d7dce3",
+                          borderRightWidth: 1,
+                          borderRightColor: "#d7dce3",
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.statusCellText, { color: "#43526a" }]}>{toTitleCaseLabel(rawValue)}</Text>
+                    </View>
+                  );
+                }
+                if (checkboxColumns.includes(index)) {
+                  const isChecked = rawValue.trim().toLowerCase() === "true";
+                  return (
+                    <View
+                      key={`${column}-${index}`}
+                      style={[
+                        styles.tableCell,
+                        styles.statusCell,
+                        {
+                          width: cellWidths[index],
+                          backgroundColor: "#f8fafc",
+                          borderLeftWidth: 1,
+                          borderLeftColor: "#d7dce3",
+                        },
+                      ]}
+                    >
+                      <View style={styles.checkboxCellWrap}>
+                        <View style={isChecked ? [styles.checkboxBox, styles.checkboxBoxChecked] : styles.checkboxBox}>
+                          {isChecked ? <Text style={styles.checkboxTick}>Ã¢Å“â€œ</Text> : null}
+                        </View>
+                      </View>
+                    </View>
+                  );
+                }
+                if (primaryColumns.includes(index)) {
+                  const parts = splitBracketedValue(rawValue);
+                  return (
+                    <View key={`${column}-${index}`} style={[styles.tableCell, styles.primaryCell, { width: cellWidths[index] }]}>
+                      <Text>{parts.main || "-"}</Text>
+                      {parts.bracket ? <Text style={styles.primarySubtext}>{parts.bracket}</Text> : null}
+                    </View>
+                  );
+                }
+                return (
+                  <View key={`${column}-${index}`} style={[styles.tableCell, { width: cellWidths[index] }]}>
+                    <Text>{titleValue || "-"}</Text>
+                  </View>
+                );
+              })}
+            </View>
+          ))}
+        </View>
       ) : (
         rows.map((row, rowIndex) => (
           <View key={`row-${rowIndex}`} style={styles.tableRow} wrap={false}>
@@ -843,7 +1003,7 @@ function PdfTable({
               const rawValue = row[index] || "-";
               const titleValue = titleCaseColumns.includes(index) ? toTitleCaseLabel(rawValue) : rawValue;
               if (pillColumns.includes(index)) {
-                const tone = getPillTone(rawValue);
+                const tone = pillToneResolver ? pillToneResolver(rawValue, index) : getPillTone(rawValue);
                 return (
                   <View
                     key={`${column}-${index}`}
@@ -903,7 +1063,7 @@ function PdfTable({
                   >
                     <View style={styles.checkboxCellWrap}>
                       <View style={isChecked ? [styles.checkboxBox, styles.checkboxBoxChecked] : styles.checkboxBox}>
-                        {isChecked ? <Text style={styles.checkboxTick}>✓</Text> : null}
+                        {isChecked ? <Text style={styles.checkboxTick}>âœ“</Text> : null}
                       </View>
                     </View>
                   </View>
@@ -939,10 +1099,13 @@ export default function InvestigationReportPdfDocument({
   people,
   timelineItems,
   taskConditionsTable,
-  factorsTable,
+  incidentFactorsTable,
+  incidentSystemFactorsTable,
   predisposingFactorsTable,
   controlsTable,
   responseRecoveryTable,
+  incidentOutcomesTable,
+  findingsTable,
   recommendationsTable,
   evidenceEntries,
 }: InvestigationReportPdfDocumentProps) {
@@ -1047,25 +1210,31 @@ export default function InvestigationReportPdfDocument({
         {isPdfSectionVisible("long_description") ? <View style={styles.section}>
           <View wrap={false}>
             <Text style={[styles.sectionTitle, { backgroundColor: sectionHeadingColor, color: sectionHeadingTextColor }]}>Long Description</Text>
-            {renderParagraphBlocks(report.report.sections.long_description)}
           </View>
+          {renderParagraphBlocks(report.report.sections.long_description)}
         </View> : null}
 
         {isPdfSectionVisible("response_and_recovery") ? (
           <>
-            {renderSectionHeader(
-              "Response / Recovery",
-              report.report.sections.response_and_recovery.summary.trim() || "-",
-              sectionHeadingColor,
-              sectionHeadingTextColor,
+            {renderTableSectionStart(
+              <>
+                {renderSectionHeader(
+                  "Response / Recovery",
+                  report.report.sections.response_and_recovery.summary.trim() || "-",
+                  sectionHeadingColor,
+                  sectionHeadingTextColor,
+                )}
+                <PdfTable
+                  columns={responseRecoveryTable.columns}
+                  rows={responseRecoveryTable.rows}
+                  cellWidths={["80%", "20%"]}
+                  tableHeadingColor={tableHeadingColor}
+                  tableHeadingTextColor={tableHeadingTextColor}
+                  pillColumns={[1]}
+                  pillToneResolver={(value) => getResponseRecoveryTone(value)}
+                />
+              </>
             )}
-            <PdfTable
-              columns={responseRecoveryTable.columns}
-              rows={responseRecoveryTable.rows}
-              cellWidths={responseRecoveryTable.columns.length === 3 ? ["24%", "22%", "54%"] : responseRecoveryTable.columns.map(() => `${100 / Math.max(1, responseRecoveryTable.columns.length)}%`)}
-              tableHeadingColor={tableHeadingColor}
-              tableHeadingTextColor={tableHeadingTextColor}
-            />
             <View style={styles.sectionSpacing} />
           </>
         ) : null}
@@ -1108,125 +1277,187 @@ export default function InvestigationReportPdfDocument({
 
         {isPdfSectionVisible("task_and_conditions") ? (
           <>
-            {renderSectionHeader("Task And Conditions", report.report.sections.task_and_conditions.trim() || "-", sectionHeadingColor, sectionHeadingTextColor)}
-            <PdfTable
-              columns={taskConditionsTable.columns}
-              rows={taskConditionsTable.rows}
-              cellWidths={["44%", "16%", "40%"]}
-              tableHeadingColor={tableHeadingColor}
-              tableHeadingTextColor={tableHeadingTextColor}
-              pillColumns={[1]}
-            />
+            {renderTableSectionStart(
+              <>
+                {renderSectionHeader("Task And Conditions", report.report.sections.task_and_conditions.trim() || "-", sectionHeadingColor, sectionHeadingTextColor)}
+                <PdfTable
+                  columns={taskConditionsTable.columns}
+                  rows={taskConditionsTable.rows}
+                  cellWidths={["44%", "16%", "40%"]}
+                  tableHeadingColor={tableHeadingColor}
+                  tableHeadingTextColor={tableHeadingTextColor}
+                  pillColumns={[1]}
+                />
+              </>
+            )}
             <View style={styles.sectionSpacing} />
           </>
         ) : null}
 
         {isPdfSectionVisible("factors_and_system_factors") ? (
           <>
-            {renderSectionHeader(
-          report.report.sections.factors_and_system_factors.heading,
-          "This section sets out the factors and system factors identified by the investigation team as contributing to the incident sequence. It shows whether each factor was present or absent at the time of the event and the level of influence it had on the outcome, including whether it was essential, contributing, or neutral.",
-          sectionHeadingColor,
-          sectionHeadingTextColor,
-        )}
-        <PdfTable
-          columns={factorsTable.columns}
-          rows={factorsTable.rows}
-          cellWidths={["46%", "16%", "20%", "18%"]}
-          tableHeadingColor={tableHeadingColor}
-          tableHeadingTextColor={tableHeadingTextColor}
-          pillColumns={[1, 2]}
-          titleCaseColumns={[3]}
-        />
+            {renderTableSectionStart(
+              <>
+                {renderSectionHeader(
+                  "Factors",
+                  "This section sets out the factors identified by the investigation team as contributing to the incident sequence.",
+                  sectionHeadingColor,
+                  sectionHeadingTextColor,
+                )}
+                <PdfTable
+                  columns={incidentFactorsTable.columns.slice(1)}
+                  rows={incidentFactorsTable.rows.map((row) => row.slice(1))}
+                  cellWidths={["56%", "14%", "15%", "15%"]}
+                  tableHeadingColor={tableHeadingColor}
+                  tableHeadingTextColor={tableHeadingTextColor}
+                  pillColumns={[1, 2]}
+                  titleCaseColumns={[3]}
+                />
+              </>
+            )}
+        <View style={styles.sectionSpacing} />
+          </>
+        ) : null}
+
+        {isPdfSectionVisible("factors_and_system_factors") ? (
+          <>
+            {renderTableSectionStart(
+              <>
+                {renderSectionHeader(
+                  "System Factors",
+                  "This section sets out the organisational and systemic factors identified by the investigation team as contributing to the incident sequence.",
+                  sectionHeadingColor,
+                  sectionHeadingTextColor,
+                )}
+                <PdfTable
+                  columns={incidentSystemFactorsTable.columns.slice(1)}
+                  rows={incidentSystemFactorsTable.rows.map((row) => row.slice(1))}
+                  cellWidths={["56%", "14%", "15%", "15%"]}
+                  tableHeadingColor={tableHeadingColor}
+                  tableHeadingTextColor={tableHeadingTextColor}
+                  pillColumns={[1, 2]}
+                  titleCaseColumns={[3]}
+                />
+              </>
+            )}
         <View style={styles.sectionSpacing} />
           </>
         ) : null}
 
         {isPdfSectionVisible("predisposing_factors") ? (
           <>
-            {renderSectionHeader(
-          report.report.sections.predisposing_factors.heading,
-          "This section describes background conditions and existing circumstances that increased the likelihood of the incident occurring. These factors may not have directly triggered the event, but they help explain why the work environment or system was vulnerable at the time.",
-          sectionHeadingColor,
-          sectionHeadingTextColor,
-        )}
-        <PdfTable
-          columns={predisposingFactorsTable.columns}
-          rows={predisposingFactorsTable.rows}
-          cellWidths={["40%", "20%", "20%", "20%"]}
-          tableHeadingColor={tableHeadingColor}
-          tableHeadingTextColor={tableHeadingTextColor}
-          pillColumns={[1, 2]}
-          titleCaseColumns={[3]}
-        />
+            {renderTableSectionStart(
+              <>
+                {renderSectionHeader(
+                  report.report.sections.predisposing_factors.heading,
+                  "This section describes background conditions and existing circumstances that increased the likelihood of the incident occurring. These factors may not have directly triggered the event, but they help explain why the work environment or system was vulnerable at the time.",
+                  sectionHeadingColor,
+                  sectionHeadingTextColor,
+                )}
+                <PdfTable
+                  columns={predisposingFactorsTable.columns}
+                  rows={predisposingFactorsTable.rows}
+                  cellWidths={["56%", "20%", "24%"]}
+                  tableHeadingColor={tableHeadingColor}
+                  tableHeadingTextColor={tableHeadingTextColor}
+                  pillColumns={[1]}
+                  titleCaseColumns={[2]}
+                />
+              </>
+            )}
         <View style={styles.sectionSpacing} />
           </>
         ) : null}
 
         {isPdfSectionVisible("controls_and_barriers") ? (
           <>
-            {renderSectionHeader(
-          report.report.sections.controls_and_barriers.heading,
-          "This section summarises the controls and barriers that were expected to prevent the incident or reduce its consequences. It shows the type of control, its state at the time of the incident, and the role it was intended to play so the reader can understand where protections were effective, failed, or missing.",
-          sectionHeadingColor,
-          sectionHeadingTextColor,
-        )}
-        <PdfTable
-          columns={controlsTable.columns}
-          rows={controlsTable.rows}
-          cellWidths={["20%", "40%", "13.333%", "13.333%", "13.334%"]}
-          tableHeadingColor={tableHeadingColor}
-          tableHeadingTextColor={tableHeadingTextColor}
-          pillColumns={[3, 4]}
-          titleCaseColumns={[2]}
-          primaryColumns={[0]}
-        />
+            {renderTableSectionStart(
+              <>
+                {renderSectionHeader(
+                  report.report.sections.controls_and_barriers.heading,
+                  "This section summarises the controls and barriers that were expected to prevent the incident or reduce its consequences. It shows the type of control, its state at the time of the incident, and the role it was intended to play so the reader can understand where protections were effective, failed, or missing.",
+                  sectionHeadingColor,
+                  sectionHeadingTextColor,
+                )}
+                <PdfTable
+                  columns={controlsTable.columns}
+                  rows={controlsTable.rows}
+                  cellWidths={["40%", "14%", "14%", "16%", "16%"]}
+                  tableHeadingColor={tableHeadingColor}
+                  tableHeadingTextColor={tableHeadingTextColor}
+                  pillColumns={[1, 2]}
+                  titleCaseColumns={[3]}
+                />
+              </>
+            )}
         <View style={styles.sectionSpacing} />
           </>
         ) : null}
 
         {isPdfSectionVisible("incident_outcomes") ? (
           <>
-            {renderSectionHeader("Incident Outcomes", report.report.sections.incident_outcomes.trim() || "-", sectionHeadingColor, sectionHeadingTextColor)}
+            {renderTableSectionStart(
+              <>
+                {renderSectionHeader("Incident Outcomes", report.report.sections.incident_outcomes.trim() || "-", sectionHeadingColor, sectionHeadingTextColor)}
+                <PdfTable
+                  columns={incidentOutcomesTable.columns.slice(1)}
+                  rows={incidentOutcomesTable.rows.map((row) => row.slice(1))}
+                  cellWidths={["38%", "14%", "16%", "16%", "16%"]}
+                  tableHeadingColor={tableHeadingColor}
+                  tableHeadingTextColor={tableHeadingTextColor}
+                  pillColumns={[2, 3]}
+                  pillToneResolver={(value) => getOutcomeMatrixTone(value)}
+                  titleCaseColumns={[1, 4]}
+                />
+              </>
+            )}
             <View style={styles.sectionSpacing} />
           </>
         ) : null}
 
         {isPdfSectionVisible("incident_findings") ? (
           <>
-            {renderSectionHeader("Incident Findings", report.report.sections.incident_findings.summary.trim() || "-", sectionHeadingColor, sectionHeadingTextColor)}
-            <PdfTable
-          columns={report.report.sections.incident_findings.columns}
-          rows={report.report.sections.incident_findings.rows}
-          cellWidths={["30%", "50%", "20%"]}
-          tableHeadingColor={tableHeadingColor}
-          tableHeadingTextColor={tableHeadingTextColor}
-          pillColumns={[2]}
-        />
+            {renderTableSectionStart(
+              <>
+                {renderSectionHeader("Incident Findings", report.report.sections.incident_findings.summary.trim() || "-", sectionHeadingColor, sectionHeadingTextColor)}
+                <PdfTable
+                  columns={findingsTable.columns}
+                  rows={findingsTable.rows}
+                  cellWidths={["80%", "20%"]}
+                  tableHeadingColor={tableHeadingColor}
+                  tableHeadingTextColor={tableHeadingTextColor}
+                  pillColumns={[1]}
+                />
+              </>
+            )}
             <View style={styles.sectionSpacing} />
           </>
         ) : null}
 
         {isPdfSectionVisible("recommendations") ? (
           <>
-            {renderSectionHeader(
-          "Recommendations",
-          `${report.report.sections.recommendations.summary.trim() || "This section lists the actions identified to address the findings of the investigation."} The Approved column is used to indicate which recommendations are endorsed for implementation. The recommendation sign-off below records formal approval of the endorsed actions.`,
-          sectionHeadingColor,
-          sectionHeadingTextColor,
-        )}
-        <PdfTable
-          columns={[...recommendationsTable.columns, "Approved"]}
-          rows={recommendationsTable.rows.map((row, index) => [
-            ...row,
-            report.report.sections.recommendations.endorsed?.[index] ? "true" : "false",
-          ])}
-          cellWidths={["18%", "28%", "14%", "16%", "11%", "13%"]}
-          tableHeadingColor={tableHeadingColor}
-          tableHeadingTextColor={tableHeadingTextColor}
-          pillColumns={[2]}
-          checkboxColumns={[5]}
-        />
+            {renderTableSectionStart(
+              <>
+                {renderSectionHeader(
+                  "Recommendations",
+                  `${report.report.sections.recommendations.summary.trim() || "This section lists the actions identified to address the findings of the investigation."} The Approved column is used to indicate which recommendations are endorsed for implementation. The recommendation sign-off below records formal approval of the endorsed actions.`,
+                  sectionHeadingColor,
+                  sectionHeadingTextColor,
+                )}
+                <PdfTable
+                  columns={[...recommendationsTable.columns, "Approved"]}
+                  rows={recommendationsTable.rows.map((row, index) => [
+                    ...row,
+                    report.report.sections.recommendations.endorsed?.[index] ? "true" : "false",
+                  ])}
+                  cellWidths={["40%", "15%", "15%", "15%", "15%"]}
+                  tableHeadingColor={tableHeadingColor}
+                  tableHeadingTextColor={tableHeadingTextColor}
+                  pillColumns={[1]}
+                  checkboxColumns={[4]}
+                />
+              </>
+            )}
         {isPdfSectionVisible("signatures") ? <View wrap={false}>
           <View style={[styles.subsectionHeader, { backgroundColor: tableHeadingColor }]}>
             <Text style={[styles.subsectionHeaderText, { color: tableHeadingTextColor }]}>Recommendation Sign Off</Text>
@@ -1306,21 +1537,25 @@ export default function InvestigationReportPdfDocument({
             sectionHeadingTextColor,
           )}
           <Text style={[styles.subheading, { color: sectionHeadingColor }]}>{report.report.front_page.facts_uncertain_heading}</Text>
-          <PdfTable
-            columns={["Uncertain Fact", "Notes"]}
-            rows={uncertainFactRows}
-            cellWidths={["50%", "50%"]}
-            tableHeadingColor={tableHeadingColor}
-            tableHeadingTextColor={tableHeadingTextColor}
-          />
+          {renderTableSectionStart(
+            <PdfTable
+              columns={["Uncertain Fact", "Notes"]}
+              rows={uncertainFactRows}
+              cellWidths={["50%", "50%"]}
+              tableHeadingColor={tableHeadingColor}
+              tableHeadingTextColor={tableHeadingTextColor}
+            />
+          )}
           <Text style={[styles.subheading, { color: sectionHeadingColor }]}>{report.report.front_page.missing_information_heading}</Text>
-          <PdfTable
-            columns={["Missing Information", "Notes"]}
-            rows={missingInformationRows}
-            cellWidths={["50%", "50%"]}
-            tableHeadingColor={tableHeadingColor}
-            tableHeadingTextColor={tableHeadingTextColor}
-          />
+          {renderTableSectionStart(
+            <PdfTable
+              columns={["Missing Information", "Notes"]}
+              rows={missingInformationRows}
+              cellWidths={["50%", "50%"]}
+              tableHeadingColor={tableHeadingColor}
+              tableHeadingTextColor={tableHeadingTextColor}
+            />
+          )}
         </View>
 
         {renderFooter()}
@@ -1328,3 +1563,5 @@ export default function InvestigationReportPdfDocument({
     </Document>
   );
 }
+
+

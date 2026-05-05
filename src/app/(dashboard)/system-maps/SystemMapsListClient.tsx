@@ -171,18 +171,11 @@ export default function SystemMapsListClient() {
 
     const memberByMapId = new Map<string, MapMemberRow>();
     (memberRows ?? []).forEach((row) => memberByMapId.set(row.map_id, row as MapMemberRow));
-    const mapIds = [...memberByMapId.keys()];
-
-    if (!mapIds.length) {
-      setRows([]);
-      return;
-    }
 
     const { data, error: mapsError } = await supabaseBrowser
       .schema("ms")
       .from("system_maps")
       .select("id,title,description,owner_id,map_code,map_category,updated_at,created_at")
-      .in("id", mapIds)
       .eq("is_template_editor", false)
       .order("updated_at", { ascending: false });
 
@@ -193,7 +186,7 @@ export default function SystemMapsListClient() {
 
     const mergedRows = ((data ?? []) as Omit<SystemMapRow, "role">[]).map((row) => ({
       ...row,
-      role: memberByMapId.get(row.id)?.role ?? "read",
+      role: row.owner_id === user.id ? "full_write" : memberByMapId.get(row.id)?.role ?? "read",
     }));
     setRows(mergedRows);
   };

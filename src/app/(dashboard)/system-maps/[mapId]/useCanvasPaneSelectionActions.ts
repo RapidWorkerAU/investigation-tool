@@ -36,9 +36,10 @@ export function useCanvasPaneSelectionActions({
   onPaneBlankClick,
 }: Params) {
   const handlePaneClickClearSelection = useCallback(() => {
+    setSelectedFlowIds(new Set());
     setHoveredEdgeId(null);
     onPaneBlankClick?.();
-  }, [setHoveredEdgeId, onPaneBlankClick]);
+  }, [setHoveredEdgeId, onPaneBlankClick, setSelectedFlowIds]);
 
   const handlePaneMouseDown = useCallback(
     (event: {

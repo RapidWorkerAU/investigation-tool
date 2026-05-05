@@ -9,6 +9,8 @@ type MapCanvasHeaderProps = {
   isTemplateEditor: boolean;
   mapRole: "read" | "partial_write" | "full_write" | null;
   accessState: BillingAccessState | null;
+  brandHref?: string | null;
+  showMapInfoButton?: boolean;
   canManageMapMetadata: boolean;
   isEditingMapTitle: boolean;
   mapTitleDraft: string;
@@ -30,6 +32,8 @@ export function MapCanvasHeader({
   isTemplateEditor,
   mapRole,
   accessState,
+  brandHref = "/",
+  showMapInfoButton = true,
   canManageMapMetadata,
   isEditingMapTitle,
   mapTitleDraft,
@@ -83,14 +87,20 @@ export function MapCanvasHeader({
   })();
 
   return (
-    <header className="dashboardCanvasHeader fixed inset-x-0 top-0 z-[90] md:sticky">
+    <header className="dashboardCanvasHeader fixed inset-x-0 top-0 z-[90] bg-black md:sticky md:h-[64px]">
       <div
         className="dashboardCanvasHeaderInner flex flex-col items-stretch gap-2 md:flex-row md:items-center md:justify-between"
         style={{ paddingLeft: "26px", paddingRight: "16px", backgroundColor: "#000000", paddingTop: "8px", paddingBottom: "8px", height: "auto", minHeight: "0" }}
       >
         <div className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 md:contents">
           <div className="dashboardCanvasHeaderLeft flex min-w-0 items-center justify-start gap-3 justify-self-start text-left md:gap-5">
-            <a href="/"><img src="/images/investigation-tool.png" alt="Investigation Tool" className="block h-[34px] w-auto md:h-[48px]" /></a>
+            {brandHref ? (
+              <a href={brandHref}>
+                <img src="/images/investigation-tool.png" alt="Investigation Tool" className="block h-[34px] w-auto md:h-[48px]" />
+              </a>
+            ) : (
+              <img src="/images/investigation-tool.png" alt="Investigation Tool" className="block h-[34px] w-auto md:h-[48px]" />
+            )}
             <span
               className="min-w-0 rounded-full border px-4 py-1.5 text-center text-[14px] font-semibold tracking-[0.02em] md:text-left md:text-[16px]"
               style={{
@@ -103,27 +113,29 @@ export function MapCanvasHeader({
             </span>
           </div>
           <div className="flex shrink-0 justify-self-end items-center gap-2 md:hidden">
-            <button
-              ref={mapInfoButtonRef}
-              type="button"
-              aria-label="Open map information"
-              title="Map information"
-              className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-600/60 bg-transparent text-white hover:bg-slate-900/50"
-              onClick={() => {
-                closeAllLeftAsides();
-                setShowMapInfoAside((prev) => {
-                  const next = !prev;
-                  if (next) setIsEditingMapInfo(false);
-                  return next;
-                });
-              }}
-            >
-              <span
-                aria-hidden="true"
-                className="h-4 w-4 bg-current"
-                style={{ WebkitMaskImage: "url('/icons/info.svg')", maskImage: "url('/icons/info.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
-              />
-            </button>
+            {showMapInfoButton ? (
+              <button
+                ref={mapInfoButtonRef}
+                type="button"
+                aria-label="Open map information"
+                title="Map information"
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-600/60 bg-transparent text-white hover:bg-slate-900/50"
+                onClick={() => {
+                  closeAllLeftAsides();
+                  setShowMapInfoAside((prev) => {
+                    const next = !prev;
+                    if (next) setIsEditingMapInfo(false);
+                    return next;
+                  });
+                }}
+              >
+                <span
+                  aria-hidden="true"
+                  className="h-4 w-4 bg-current"
+                  style={{ WebkitMaskImage: "url('/icons/info.svg')", maskImage: "url('/icons/info.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
+                />
+              </button>
+            ) : null}
             <button
               type="button"
               aria-label="Open canvas help"
@@ -194,27 +206,29 @@ export function MapCanvasHeader({
             )}
             {savingMapTitle ? <span className="text-xs font-medium text-[#05c3dd]">Saving...</span> : null}
             {!savingMapTitle && mapTitleSavedFlash ? <span className="text-xs font-medium text-emerald-400">Saved</span> : null}
-            <button
-              ref={mapInfoButtonRef}
-              type="button"
-              aria-label="Open map information"
-              title="Map information"
-              className="ml-1 hidden h-8 w-8 items-center justify-center rounded-md border border-slate-600/60 bg-transparent text-white hover:bg-slate-900/50 md:inline-flex"
-              onClick={() => {
-                closeAllLeftAsides();
-                setShowMapInfoAside((prev) => {
-                  const next = !prev;
-                  if (next) setIsEditingMapInfo(false);
-                  return next;
-                });
-              }}
-            >
-              <span
-                aria-hidden="true"
-                className="h-4 w-4 bg-current"
-                style={{ WebkitMaskImage: "url('/icons/info.svg')", maskImage: "url('/icons/info.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
-              />
-            </button>
+            {showMapInfoButton ? (
+              <button
+                ref={mapInfoButtonRef}
+                type="button"
+                aria-label="Open map information"
+                title="Map information"
+                className="ml-1 hidden h-8 w-8 items-center justify-center rounded-md border border-slate-600/60 bg-transparent text-white hover:bg-slate-900/50 md:inline-flex"
+                onClick={() => {
+                  closeAllLeftAsides();
+                  setShowMapInfoAside((prev) => {
+                    const next = !prev;
+                    if (next) setIsEditingMapInfo(false);
+                    return next;
+                  });
+                }}
+              >
+                <span
+                  aria-hidden="true"
+                  className="h-4 w-4 bg-current"
+                  style={{ WebkitMaskImage: "url('/icons/info.svg')", maskImage: "url('/icons/info.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
+                />
+              </button>
+            ) : null}
             <button
               type="button"
               aria-label="Open canvas help"

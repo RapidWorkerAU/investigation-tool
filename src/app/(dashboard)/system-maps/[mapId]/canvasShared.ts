@@ -268,6 +268,15 @@ export type FlowData = {
     text: string;
   };
 };
+
+export type SystemMapCanvasSnapshot = {
+  map: SystemMap;
+  types: DocumentTypeRow[];
+  nodes: DocumentNodeRow[];
+  elements: CanvasElementRow[];
+  relations: NodeRelationRow[];
+  imageUrlsByElementId?: Record<string, string>;
+};
 export type DisciplineKey = "health" | "safety" | "environment" | "security" | "communities" | "training";
 export type RelationshipCategory =
   | "information"

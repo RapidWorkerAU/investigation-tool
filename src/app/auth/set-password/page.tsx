@@ -95,6 +95,29 @@ export default function SetPasswordPage() {
       return;
     }
 
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (session?.access_token) {
+      const activationResponse = await fetch("/api/account/organisation-invites/accept", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (!activationResponse.ok) {
+        const payload = (await activationResponse.json().catch(() => null)) as { error?: string } | null;
+        setNotice({
+          type: "error",
+          text: payload?.error || "Your password was updated, but your organisation access could not be activated yet.",
+        });
+        setLoading(false);
+        return;
+      }
+    }
+
     await supabase.auth.signOut();
     setResetComplete(true);
     setReady(false);

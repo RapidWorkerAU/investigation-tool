@@ -273,14 +273,14 @@ function AsideShell({ isMobile, leftAsideSlideIn, title, onClose, children }: As
   return (
     <aside
       className={`canvas-left-aside fixed border-r border-[#0b1f33] bg-[#102a43] text-slate-100 shadow-[12px_0_30px_rgba(2,12,27,0.45)] transition-transform duration-300 ${
-        isMobile ? "inset-0 z-[98] w-full max-w-full" : "bottom-0 left-0 top-[64px] z-[75] w-full max-w-[420px]"
+        isMobile ? "inset-0 z-[98] w-full max-w-full" : "bottom-4 left-[98px] top-[82px] z-[75] w-[calc(100vw-122px)] max-w-[408px] rounded-[28px] border"
       }`}
       style={{ transform: isMobile ? "translateX(0)" : leftAsideSlideIn ? "translateX(0)" : "translateX(-100%)" }}
     >
-      <div className="flex h-full flex-col overflow-auto p-4">
-        <div className="flex items-center justify-between border-b border-[#5f7894]/70 pb-3">
-          <h2 className="text-lg font-semibold text-white">{title}</h2>
-          <button className="w-full max-w-[110px] rounded-none border border-black bg-white px-2 py-1 text-xs text-black hover:bg-slate-100" onClick={onClose}>Close</button>
+      <div className="canvas-left-aside__body flex h-full flex-col overflow-auto p-4">
+        <div className="canvas-left-aside__header flex items-center justify-between border-b border-[#5f7894]/70 pb-3">
+          <h2 className="canvas-left-aside__title text-lg font-semibold text-white">{title}</h2>
+          <button className="canvas-left-aside__close w-full max-w-[110px] rounded-none border border-black bg-white px-2 py-1 text-xs text-black hover:bg-slate-100" onClick={onClose}>Close</button>
         </div>
         {children}
       </div>
@@ -529,22 +529,6 @@ export function SystemPropertiesAside(props: SystemPropertiesAsideProps) {
       actionDisabledReason={props.actionDisabledReason}
       deleteButtonLabel="Delete system"
       saveButtonLabel="Save name"
-      topAction={
-        wrapWithReason(
-          props.actionDisabledReason,
-          <button
-            title={undefined}
-            aria-label="Add Relationship"
-            className={`flex h-11 w-full items-center justify-center gap-2 rounded-none border border-black bg-white px-2 text-[11px] font-medium text-black hover:bg-slate-100 ${disabledAsideActionClass}`}
-            onClick={props.onAddRelationship}
-            disabled={!!props.actionDisabledReason}
-          >
-            <img src="/icons/relationship.svg" alt="" className="h-4 w-4" />
-            <span className="truncate">Relationship</span>
-          </button>
-        )
-      }
-      footerExtra={<RelationshipSection rows={props.relatedRows} resolveLabels={props.resolveLabels} {...props.relationshipSectionProps} />}
     />
   );
 }
@@ -582,22 +566,6 @@ export function ProcessPropertiesAside(props: ProcessPropertiesAsideProps) {
       actionDisabledReason={props.actionDisabledReason}
       deleteButtonLabel="Delete process"
       saveButtonLabel="Save label"
-      topAction={
-        wrapWithReason(
-          props.actionDisabledReason,
-          <button
-            title={undefined}
-            aria-label="Add Relationship"
-            className={`flex h-11 w-full items-center justify-center gap-2 rounded-none border border-black bg-white px-2 text-[11px] font-medium text-black hover:bg-slate-100 ${disabledAsideActionClass}`}
-            onClick={props.onAddRelationship}
-            disabled={!!props.actionDisabledReason}
-          >
-            <img src="/icons/relationship.svg" alt="" className="h-4 w-4" />
-            <span className="truncate">Relationship</span>
-          </button>
-        )
-      }
-      footerExtra={<RelationshipSection rows={props.relatedRows} resolveLabels={props.resolveLabels} {...props.relationshipSectionProps} />}
     />
   );
 }
@@ -744,21 +712,6 @@ export function ImageAssetAside({
   if (!open) return null;
   return (
     <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title="Image Properties" onClose={onClose}>
-      <div className="mt-3">
-        {wrapWithReason(
-          actionDisabledReason,
-          <button
-            title={undefined}
-            aria-label="Add Relationship"
-            className={`flex h-11 w-full items-center justify-center gap-2 rounded-none border border-black bg-white px-2 text-[11px] font-medium text-black hover:bg-slate-100 ${disabledAsideActionClass}`}
-            onClick={onAddRelationship}
-            disabled={!!actionDisabledReason}
-          >
-            <img src="/icons/relationship.svg" alt="" className="h-4 w-4" />
-            <span className="truncate">Relationship</span>
-          </button>
-        )}
-      </div>
       <div className="mt-4 space-y-3">
         <label className="text-sm text-white">Image Description
           <textarea
@@ -785,7 +738,6 @@ export function ImageAssetAside({
           </button>
         )}
       </div>
-      <RelationshipSection rows={relatedRows} resolveLabels={resolveLabels} {...relationshipSectionProps} />
     </AsideShell>
   );
 }
@@ -1267,7 +1219,7 @@ export function FlowShapeAside({
           <>
             <label className="text-sm text-white">Shape Text
               <textarea
-                className="mt-1 min-h-[180px] w-full rounded border border-slate-300 bg-white px-3 py-2 text-black"
+                className="mt-1 min-h-[90px] w-full rounded border border-slate-300 bg-white px-3 py-2 text-black"
                 value={shapeTextDraft}
                 onChange={(e) => setShapeTextDraft(e.target.value)}
                 placeholder="Enter shape text"
@@ -1609,6 +1561,56 @@ function RelationshipSection({
   );
 }
 
+type RelationshipManagerAsideProps = {
+  open: boolean;
+  isMobile: boolean;
+  leftAsideSlideIn: boolean;
+  title?: string;
+  addButtonLabel?: string;
+  onAddRelationship: () => void;
+  onClose: () => void;
+  rows: NodeRelationRow[];
+  resolveLabels: (row: NodeRelationRow) => RelationLabels;
+  relationshipSectionProps: Omit<RelationshipSectionProps, "rows" | "resolveLabels">;
+  actionDisabledReason?: string;
+};
+
+export function RelationshipManagerAside({
+  open,
+  isMobile,
+  leftAsideSlideIn,
+  title = "Relationships",
+  addButtonLabel = "Add Relationship",
+  onAddRelationship,
+  onClose,
+  rows,
+  resolveLabels,
+  relationshipSectionProps,
+  actionDisabledReason,
+}: RelationshipManagerAsideProps) {
+  if (!open) return null;
+  return (
+    <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title={title} onClose={onClose}>
+      <div className="mt-3">
+        {wrapWithReason(
+          actionDisabledReason,
+          <button
+            title={undefined}
+            aria-label={addButtonLabel}
+            className={`flex h-11 w-full items-center justify-center gap-2 rounded-none border border-black bg-white px-2 text-[11px] font-medium text-black hover:bg-slate-100 ${disabledAsideActionClass}`}
+            onClick={onAddRelationship}
+            disabled={!!actionDisabledReason}
+          >
+            <img src="/icons/relationship.svg" alt="" className="h-4 w-4" />
+            <span className="truncate">{addButtonLabel}</span>
+          </button>
+        )}
+      </div>
+      <RelationshipSection rows={rows} resolveLabels={resolveLabels} {...relationshipSectionProps} />
+    </AsideShell>
+  );
+}
+
 type PersonPropertiesAsideProps = {
   open: boolean;
   isMobile: boolean;
@@ -1698,21 +1700,6 @@ export function PersonPropertiesAside({
   ] as const;
   return (
     <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title="Person Properties" onClose={onClose}>
-      <div className="mt-3">
-        {wrapWithReason(
-          actionDisabledReason,
-          <button
-            title={undefined}
-            aria-label={isOrgChart ? "Link Direct Report" : "Add Relationship"}
-            className={`flex h-11 w-full items-center justify-center gap-2 rounded-none border border-black bg-white px-2 text-[11px] font-medium text-black hover:bg-slate-100 ${disabledAsideActionClass}`}
-            onClick={onAddRelationship}
-            disabled={!!actionDisabledReason}
-          >
-            <img src="/icons/relationship.svg" alt="" className="h-4 w-4" />
-            <span className="truncate">{isOrgChart ? "Link Direct Report" : "Relationship"}</span>
-          </button>
-        )}
-      </div>
       <div className="mt-4 space-y-3">
         {isOrgChart ? (
           <>
@@ -1845,7 +1832,6 @@ export function PersonPropertiesAside({
           <button className={`flex-1 rounded-none border border-black bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-slate-100 ${disabledAsideActionClass}`} onClick={() => void onSave()} disabled={!!actionDisabledReason}>Save person</button>
         )}
       </div>
-      <RelationshipSection rows={relatedRows} resolveLabels={resolveLabels} {...relationshipSectionProps} />
     </AsideShell>
   );
 }
@@ -1969,6 +1955,16 @@ export function BowtiePropertiesAside({
           )
         )
       : "";
+  const labelDraft = String(bowtieDraft.label ?? "").trim();
+  const descriptionDraft = String(bowtieDraft.description ?? "").trim();
+  const bodyDisplayMode =
+    bowtieDraft.body_display_mode === "label" || bowtieDraft.body_display_mode === "description"
+      ? bowtieDraft.body_display_mode
+      : descriptionDraft
+      ? "description"
+      : labelDraft
+      ? "label"
+      : "description";
   const uploadNameLower = String(evidenceUploadFileName || "").toLowerCase();
   const currentNameLower = String(evidenceCurrentMediaName || "").toLowerCase();
   const uploadIsPdf = evidenceUploadFileMime.toLowerCase().includes("pdf") || uploadNameLower.endsWith(".pdf");
@@ -2000,41 +1996,54 @@ export function BowtiePropertiesAside({
 
   return (
     <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title={`${title} Properties`} onClose={onClose}>
-      <div className="mt-3">
-        {wrapWithReason(
-          actionDisabledReason,
-          <button
-            title={undefined}
-            aria-label="Add Relationship"
-            className={`flex h-11 w-full items-center justify-center gap-2 rounded-none border border-black bg-white px-2 text-[11px] font-medium text-black hover:bg-slate-100 ${disabledAsideActionClass}`}
-            onClick={onAddRelationship}
-            disabled={!!actionDisabledReason}
-          >
-            <img src="/icons/relationship.svg" alt="" className="h-4 w-4" />
-            <span className="truncate">Relationship</span>
-          </button>
-        )}
-      </div>
       <div className="mt-4 space-y-3">
         {isRiskRating ? (
           <div className="text-sm text-white">Label
             <div className="mt-1 rounded border border-slate-300 bg-[#0f2942] px-3 py-2 text-white">{riskLevelLabel}</div>
           </div>
         ) : (
-          <div className="text-sm text-white">Label
-            <div className="mt-1 rounded border border-slate-300 bg-[#0f2942] px-3 py-2 text-white">{title}</div>
-          </div>
+          <>
+            <label className="text-sm text-white">Label / Heading
+              <input
+                className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 text-black"
+                value={String(bowtieDraft.label ?? "")}
+                onChange={(e) => setField("label", e.target.value)}
+                placeholder="Enter node label"
+              />
+            </label>
+            <label className="text-sm text-white">Description
+              <textarea
+                className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 text-black"
+                rows={3}
+                value={String(bowtieDraft.description ?? "")}
+                onChange={(e) => setField("description", e.target.value)}
+              />
+            </label>
+            <fieldset className="text-sm text-white">
+              <legend className="mb-2">Show In Node Body</legend>
+                <div className="space-y-2 rounded border border-slate-300 bg-white p-3 text-black">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name={`${bowtieElementType}-body-display`}
+                    checked={bodyDisplayMode === "label"}
+                    onChange={() => setField("body_display_mode", "label")}
+                  />
+                  <span>Label / Heading</span>
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name={`${bowtieElementType}-body-display`}
+                    checked={bodyDisplayMode === "description"}
+                    onChange={() => setField("body_display_mode", "description")}
+                  />
+                  <span>Description</span>
+                </label>
+              </div>
+            </fieldset>
+          </>
         )}
-        {!isRiskRating ? (
-          <label className="text-sm text-white">Description
-            <textarea
-              className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 text-black"
-              rows={3}
-              value={String(bowtieDraft.description ?? "")}
-              onChange={(e) => setField("description", e.target.value)}
-            />
-          </label>
-        ) : null}
 
         {bowtieElementType === "bowtie_hazard" ? (
           <>
@@ -2631,7 +2640,6 @@ export function BowtiePropertiesAside({
           </button>
         )}
       </div>
-      <RelationshipSection rows={relatedRows} resolveLabels={resolveLabels} {...relationshipSectionProps} />
     </AsideShell>
   );
 }
@@ -2675,21 +2683,6 @@ export function GroupingContainerAside({
   const safeHeaderColor = /^#[0-9a-fA-F]{6}$/.test(groupingHeaderColorDraft) ? groupingHeaderColorDraft.toUpperCase() : "#FFFFFF";
   return (
     <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title="Grouping Container" onClose={onClose}>
-      <div className="mt-3">
-        {wrapWithReason(
-          actionDisabledReason,
-          <button
-            title={undefined}
-            aria-label="Add Relationship"
-            className={`flex h-11 w-full items-center justify-center gap-2 rounded-none border border-black bg-white px-2 text-[11px] font-medium text-black hover:bg-slate-100 ${disabledAsideActionClass}`}
-            onClick={onAddRelationship}
-            disabled={!!actionDisabledReason}
-          >
-            <img src="/icons/relationship.svg" alt="" className="h-4 w-4" />
-            <span className="truncate">Relationship</span>
-          </button>
-        )}
-      </div>
       <div className="mt-4 space-y-3">
         <label className="text-sm text-white">Group Label
           <input
@@ -2732,7 +2725,6 @@ export function GroupingContainerAside({
           <button className={`flex-1 rounded-none border border-black bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-slate-100 ${disabledAsideActionClass}`} onClick={() => void onSave()} disabled={!!actionDisabledReason}>Save container</button>
         )}
       </div>
-      <RelationshipSection rows={relatedRows} resolveLabels={resolveLabels} {...relationshipSectionProps} />
     </AsideShell>
   );
 }
@@ -2817,28 +2809,15 @@ export function DocumentPropertiesAside({
   if (!open) return null;
   return (
     <aside
-      className="fixed bottom-0 left-0 top-[64px] z-[75] w-full max-w-[420px] border-r border-[#0b1f33] bg-[#102a43] text-slate-100 shadow-[12px_0_30px_rgba(2,12,27,0.45)] transition-transform duration-300"
+      className="canvas-left-aside fixed bottom-4 left-[98px] top-[82px] z-[75] w-[calc(100vw-122px)] max-w-[408px] rounded-[28px] border bg-[#102a43] text-slate-100 shadow-[12px_0_30px_rgba(2,12,27,0.45)] transition-transform duration-300"
       style={{ transform: leftAsideSlideIn ? "translateX(0)" : "translateX(-100%)" }}
     >
-      <div className="flex h-full flex-col overflow-auto p-4">
-        <div className="flex items-center justify-between border-b border-[#5f7894]/70 pb-3">
-          <h2 className="text-lg font-semibold text-white">Document Properties</h2>
-          <button className="w-full max-w-[110px] rounded-none border border-black bg-white px-2 py-1 text-xs text-black hover:bg-slate-100" onClick={onClose}>Close</button>
+      <div className="canvas-left-aside__body flex h-full flex-col overflow-auto p-4">
+        <div className="canvas-left-aside__header flex items-center justify-between border-b border-[#5f7894]/70 pb-3">
+          <h2 className="canvas-left-aside__title text-lg font-semibold text-white">Document Properties</h2>
+          <button className="canvas-left-aside__close w-full max-w-[110px] rounded-none border border-black bg-white px-2 py-1 text-xs text-black hover:bg-slate-100" onClick={onClose}>Close</button>
         </div>
         <div className="mt-3 grid grid-cols-3 gap-2">
-          {wrapWithReason(
-            actionDisabledReason,
-            <button
-              title={undefined}
-              aria-label="Add Relationship"
-              className={`flex h-11 items-center justify-center gap-2 rounded-none border border-black bg-white px-2 text-[11px] font-medium text-black hover:bg-slate-100 ${disabledAsideActionClass}`}
-              onClick={() => void onOpenRelationship()}
-              disabled={!!actionDisabledReason}
-            >
-              <img src="/icons/relationship.svg" alt="" className="h-4 w-4" />
-              <span className="truncate">Relationship</span>
-            </button>
-          )}
           {wrapWithReason(
             actionDisabledReason,
             <button
@@ -2969,7 +2948,6 @@ export function DocumentPropertiesAside({
             <button className={`w-full rounded-none border border-black bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-slate-100 ${disabledAsideActionClass}`} onClick={() => void onSaveNode()} disabled={!!actionDisabledReason}>Save properties</button>
           )}
         </div>
-        <RelationshipSection rows={relatedRows} resolveLabels={resolveLabels} {...relationshipSectionProps} />
       </div>
     </aside>
   );

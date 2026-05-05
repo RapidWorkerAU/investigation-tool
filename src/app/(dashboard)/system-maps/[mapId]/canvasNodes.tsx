@@ -36,6 +36,18 @@ import {
   unconfiguredDocumentTitle,
 } from "./canvasShared";
 
+function getContrastTextColor(hex: string | null | undefined, fallback = "#111827") {
+  if (!hex) return fallback;
+  const normalized = hex.trim().replace("#", "");
+  if (!/^[0-9a-fA-F]{6}$/.test(normalized)) return fallback;
+  const r = Number.parseInt(normalized.slice(0, 2), 16) / 255;
+  const g = Number.parseInt(normalized.slice(2, 4), 16) / 255;
+  const b = Number.parseInt(normalized.slice(4, 6), 16) / 255;
+  const toLinear = (value: number) => (value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+  const luminance = 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b);
+  return luminance > 0.42 ? "#111827" : "#FFFFFF";
+}
+
 function HiddenEdgeHandles() {
   return (
     <>
@@ -200,7 +212,7 @@ function ProcessHeadingNode({ data, selected }: NodeProps<Node<FlowData>>) {
   const outlineColor = data.categoryOutlineColor ?? categoryColor;
   const outlineWidth = Number.isFinite(Number(data.categoryOutlineWidth)) ? Math.max(1, Math.min(12, Math.round(Number(data.categoryOutlineWidth)))) : 1;
   const fillMode = data.categoryFillMode === "outline" ? "outline" : "fill";
-  const headingTextColor = fillMode === "outline" ? outlineColor : categoryColor.toLowerCase() === defaultCategoryColor ? "#ffffff" : "#000000";
+  const headingTextColor = fillMode === "outline" ? outlineColor : getContrastTextColor(categoryColor, "#111827");
   const fontSize = Math.max(10, Math.min(72, Number(data.textStyle?.fontSize ?? 12) || 12));
   return (
     <div
@@ -467,6 +479,9 @@ function FlowTableNode({ data, selected }: NodeProps<Node<FlowData>>) {
   const editingTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   const colorPickerRef = useRef<HTMLDivElement | null>(null);
+  const lastSyncedCellTextSignatureRef = useRef(normalizedCellTextSignature);
+  const lastSyncedCellStyleSignatureRef = useRef(normalizedCellStyleSignature);
+  const skipBlurCommitCellRef = useRef<number | null>(null);
   const toolbarInteractionUntilRef = useRef<number>(0);
   const pendingCursorToEndCellRef = useRef<number | null>(null);
   const [showFillColorPicker, setShowFillColorPicker] = useState(false);
@@ -529,8 +544,14 @@ function FlowTableNode({ data, selected }: NodeProps<Node<FlowData>>) {
   );
 
   useEffect(() => {
-    setDraftCellTexts((prev) => (areCellTextArraysEqual(prev, normalizedCellTexts) ? prev : normalizedCellTexts));
-    setDraftCellStyles((prev) => (areCellStyleArraysEqual(prev, normalizedCellStyles) ? prev : normalizedCellStyles));
+    if (lastSyncedCellTextSignatureRef.current !== normalizedCellTextSignature) {
+      setDraftCellTexts((prev) => (areCellTextArraysEqual(prev, normalizedCellTexts) ? prev : normalizedCellTexts));
+      lastSyncedCellTextSignatureRef.current = normalizedCellTextSignature;
+    }
+    if (lastSyncedCellStyleSignatureRef.current !== normalizedCellStyleSignature) {
+      setDraftCellStyles((prev) => (areCellStyleArraysEqual(prev, normalizedCellStyles) ? prev : normalizedCellStyles));
+      lastSyncedCellStyleSignatureRef.current = normalizedCellStyleSignature;
+    }
     setSelectedCellIndex((prev) => {
       if (prev == null) return null;
       return prev < totalCells ? prev : null;
@@ -604,25 +625,66 @@ function FlowTableNode({ data, selected }: NodeProps<Node<FlowData>>) {
       ? Array.from(selectedCellIndices.values())[0]
       : null;
   const activeCellStyle = toolbarActiveCellIndex != null ? getEffectiveCellStyle(toolbarActiveCellIndex) : null;
+  const setDraftCellTextAtIndex = useCallback((cellIndex: number, value: string) => {
+    setDraftCellTexts((prev) => {
+      if ((prev[cellIndex] ?? "") === value) return prev;
+      const next = [...prev];
+      next[cellIndex] = value;
+      return next;
+    });
+  }, []);
   const commitCellAtIndex = useCallback(
-    (cellIndex: number | null) => {
+    (cellIndex: number | null, overrideValue?: string) => {
       if (!canEdit || cellIndex == null) return;
       const rowIndex = Math.floor(cellIndex / columns);
       const columnIndex = cellIndex % columns;
-      const cellValue = draftCellTexts[cellIndex] ?? "";
+      const cellValue = overrideValue ?? draftCellTexts[cellIndex] ?? "";
+      if (overrideValue !== undefined) {
+        setDraftCellTextAtIndex(cellIndex, overrideValue);
+      }
       data.onTableCellCommit?.(rowIndex, columnIndex, cellValue);
     },
-    [canEdit, columns, draftCellTexts, data]
+    [canEdit, columns, draftCellTexts, data, setDraftCellTextAtIndex]
   );
   const commitAndClearSelection = useCallback(() => {
     if (selectedCellIndex != null) {
-      commitCellAtIndex(selectedCellIndex);
+      const liveEditingValue =
+        editingCellIndex != null && editingCellIndex === selectedCellIndex ? editingTextareaRef.current?.value : undefined;
+      if (editingCellIndex != null && editingCellIndex === selectedCellIndex) {
+        skipBlurCommitCellRef.current = selectedCellIndex;
+      }
+      commitCellAtIndex(selectedCellIndex, liveEditingValue);
     }
     setEditingCellIndex(null);
     setSelectedCellIndex(null);
     setRangeAnchorCellIndex(null);
     setSelectedCellIndices(new Set());
-  }, [selectedCellIndex, commitCellAtIndex]);
+  }, [selectedCellIndex, editingCellIndex, commitCellAtIndex]);
+  const selectCell = useCallback(
+    (index: number, options?: { extendRange?: boolean; enterEdit?: boolean }) => {
+      const extendRange = Boolean(options?.extendRange && rangeAnchorCellIndex != null);
+      if (extendRange && rangeAnchorCellIndex != null) {
+        const nextRange = buildRangeSelection(rangeAnchorCellIndex, index);
+        setSelectedCellIndices(nextRange);
+        setSelectedCellIndex(index);
+        setEditingCellIndex(null);
+        return;
+      }
+      if (selectedCellIndex != null && selectedCellIndex !== index) {
+        const liveEditingValue =
+          editingCellIndex != null && editingCellIndex === selectedCellIndex ? editingTextareaRef.current?.value : undefined;
+        if (editingCellIndex != null && editingCellIndex === selectedCellIndex) {
+          skipBlurCommitCellRef.current = selectedCellIndex;
+        }
+        commitCellAtIndex(selectedCellIndex, liveEditingValue);
+      }
+      setSelectedCellIndex(index);
+      setRangeAnchorCellIndex(index);
+      setSelectedCellIndices(new Set([index]));
+      setEditingCellIndex(options?.enterEdit && canEdit ? index : null);
+    },
+    [rangeAnchorCellIndex, buildRangeSelection, selectedCellIndex, editingCellIndex, commitCellAtIndex, canEdit]
+  );
   const moveSelectedCell = useCallback(
     (cellIndex: number, direction: "up" | "down" | "left" | "right") => {
       const rowIndex = Math.floor(cellIndex / columns);
@@ -1197,39 +1259,22 @@ function FlowTableNode({ data, selected }: NodeProps<Node<FlowData>>) {
                   boxShadow: selectedCellIndices.has(index) ? "inset 0 0 0 2px #1d4ed8" : "none",
                   alignItems: cellStyle.vAlign === "top" ? "flex-start" : cellStyle.vAlign === "bottom" ? "flex-end" : "center",
                 }}
+                onPointerDown={(event) => {
+                  if (!selected || event.button !== 0) return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                }}
                 onClick={(event) => {
                   if (!selected) return;
-                  const useRangeSelect = event.shiftKey && rangeAnchorCellIndex != null;
-                  if (useRangeSelect) {
-                    const nextRange = buildRangeSelection(rangeAnchorCellIndex, index);
-                    setSelectedCellIndices(nextRange);
-                    setSelectedCellIndex(index);
-                    setEditingCellIndex(null);
-                    return;
-                  }
-                  if (selectedCellIndex == null) {
-                    setSelectedCellIndex(index);
-                    setRangeAnchorCellIndex(index);
-                    setSelectedCellIndices(new Set([index]));
-                    return;
-                  }
-                  if (selectedCellIndex === index) return;
-                  commitCellAtIndex(selectedCellIndex);
-                  setEditingCellIndex(null);
-                  setSelectedCellIndex(index);
-                  setRangeAnchorCellIndex(index);
-                  setSelectedCellIndices(new Set([index]));
+                  event.stopPropagation();
+                  selectCell(index, { extendRange: event.shiftKey });
                 }}
-                onDoubleClick={(event) => {
+                onDoubleClickCapture={(event) => {
                   if (!canEdit) return;
                   if (!selected) return;
-                  if (selectedCellIndex != null && selectedCellIndex !== index) {
-                    commitCellAtIndex(selectedCellIndex);
-                  }
-                  setSelectedCellIndex(index);
-                  setRangeAnchorCellIndex(index);
-                  setSelectedCellIndices(new Set([index]));
-                  setEditingCellIndex(index);
+                  event.preventDefault();
+                  event.stopPropagation();
+                  selectCell(index, { enterEdit: true });
                 }}
               >
                 {isEditing && canEdit ? (
@@ -1253,17 +1298,24 @@ function FlowTableNode({ data, selected }: NodeProps<Node<FlowData>>) {
                         return next;
                       })
                     }
+                    onPointerDown={(event) => event.stopPropagation()}
                     onMouseDown={(event) => event.stopPropagation()}
                     onClick={(event) => event.stopPropagation()}
                     onBlur={(event) => {
                       event.stopPropagation();
-                      commitCellAtIndex(index);
+                      if (skipBlurCommitCellRef.current === index) {
+                        skipBlurCommitCellRef.current = null;
+                        setEditingCellIndex(null);
+                        return;
+                      }
+                      commitCellAtIndex(index, event.target.value);
                       setEditingCellIndex(null);
                     }}
                     onKeyDown={(event) => {
                       if (event.key === "Enter" && !event.shiftKey) {
                         event.preventDefault();
-                        commitCellAtIndex(index);
+                        skipBlurCommitCellRef.current = index;
+                        commitCellAtIndex(index, event.currentTarget.value);
                         setEditingCellIndex(null);
                       }
                     }}
@@ -2297,7 +2349,7 @@ function ModernIncidentNode({
                 </div>
               </div>
             ) : data.entityKind === "incident_response_recovery" ? (
-              <div className="flex flex-1 flex-col px-4 pb-3 pt-3">
+              <div className="flex min-h-0 flex-1 flex-col px-4 pb-3 pt-3">
                 <div className="min-h-0 flex-1 overflow-y-auto pr-1 text-left text-[11px] font-medium leading-[1.35] text-slate-800">
                   {data.metaLabel ? (
                     <div className="mb-2 flex">
@@ -2316,6 +2368,12 @@ function ModernIncidentNode({
                   <div>
                     {data.description || data.title || fallbackTitle}
                   </div>
+                </div>
+              </div>
+            ) : data.entityKind === "incident_finding" ? (
+              <div className="flex min-h-0 flex-1 flex-col px-4 pb-3 pt-3">
+                <div className="min-h-0 flex-1 overflow-y-auto pr-1 text-left text-[11px] font-medium leading-[1.35] text-slate-800">
+                  {data.description || data.title || fallbackTitle}
                 </div>
               </div>
             ) : (

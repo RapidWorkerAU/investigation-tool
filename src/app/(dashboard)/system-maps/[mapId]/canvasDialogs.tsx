@@ -34,9 +34,11 @@ export function ConfirmDialog({
 
 type CanvasConfirmDialogsProps = {
   confirmDeleteNodeId: string | null;
-  isMobile: boolean;
   setConfirmDeleteNodeId: (value: string | null) => void;
   handleDeleteNode: (id: string) => Promise<void>;
+  confirmDeleteElementId: string | null;
+  setConfirmDeleteElementId: (value: string | null) => void;
+  handleDeleteElement: (id: string) => Promise<void>;
   confirmDeleteOutlineItemId: string | null;
   setConfirmDeleteOutlineItemId: (value: string | null) => void;
   handleDeleteOutlineItem: () => Promise<void>;
@@ -44,9 +46,11 @@ type CanvasConfirmDialogsProps = {
 
 export function CanvasConfirmDialogs({
   confirmDeleteNodeId,
-  isMobile,
   setConfirmDeleteNodeId,
   handleDeleteNode,
+  confirmDeleteElementId,
+  setConfirmDeleteElementId,
+  handleDeleteElement,
   confirmDeleteOutlineItemId,
   setConfirmDeleteOutlineItemId,
   handleDeleteOutlineItem,
@@ -54,7 +58,7 @@ export function CanvasConfirmDialogs({
   return (
     <>
       <ConfirmDialog
-        open={!!confirmDeleteNodeId && isMobile}
+        open={!!confirmDeleteNodeId}
         title="Delete document?"
         message="This will permanently remove the document from the map."
         confirmLabel="Delete"
@@ -64,6 +68,20 @@ export function CanvasConfirmDialogs({
           setConfirmDeleteNodeId(null);
           if (!id) return;
           void handleDeleteNode(id);
+        }}
+      />
+
+      <ConfirmDialog
+        open={!!confirmDeleteElementId}
+        title="Delete component?"
+        message="This will permanently remove the selected component from the map."
+        confirmLabel="Delete"
+        onCancel={() => setConfirmDeleteElementId(null)}
+        onConfirm={() => {
+          const id = confirmDeleteElementId;
+          setConfirmDeleteElementId(null);
+          if (!id) return;
+          void handleDeleteElement(id);
         }}
       />
 

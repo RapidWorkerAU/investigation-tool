@@ -8,6 +8,29 @@ import {
   getElementRelationshipTypeLabel,
 } from "./canvasShared";
 
+function getCanvasElementSearchText(el: CanvasElementRow) {
+  const cfg = (el.element_config as Record<string, unknown> | null) ?? {};
+  const description =
+    typeof cfg.description === "string"
+      ? cfg.description
+      : typeof cfg.text === "string"
+        ? cfg.text
+        : "";
+  const typeLabel = getElementRelationshipTypeLabel(el.element_type);
+  const fallbackName = getElementDisplayName(el);
+  return [typeLabel, description, fallbackName, el.heading || ""]
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean)
+    .join(" ");
+}
+
+function getDocumentSearchText(n: DocumentNodeRow) {
+  return ["document", disciplineSummary(n.discipline), n.title]
+    .map((value) => (value || "").trim().toLowerCase())
+    .filter(Boolean)
+    .join(" ");
+}
+
 type Params = {
   relations: NodeRelationRow[];
   selectedNodeId: string | null;
@@ -206,7 +229,7 @@ export function useCanvasRelationshipDerived({
     const term = relationshipDocumentQuery.trim().toLowerCase();
     return nodes
       .filter((n) => n.id !== relationshipSourceNodeId)
-      .filter((n) => n.title.toLowerCase().includes(term));
+      .filter((n) => getDocumentSearchText(n).includes(term));
   }, [nodes, relationshipSourceNodeId, relationshipSourceSystemId, relationshipDocumentQuery, allowDocumentTargets]);
 
   const documentRelationCandidateLabelById = useMemo(() => {
@@ -248,7 +271,7 @@ export function useCanvasRelationshipDerived({
         if (relationshipSourceKind === "image_asset") return true;
         return allowedKinds?.has(el.element_type) ?? false;
       })
-      .filter((el) => (el.heading || "").toLowerCase().includes(term));
+      .filter((el) => getCanvasElementSearchText(el).includes(term));
   }, [elements, relationshipSourceNodeId, relationshipSourceSystemId, relationshipSystemQuery, allowSystemTargets, mapCategoryId, bowtieAllowedTargetsBySource, relationshipSourceKind]);
 
   const systemRelationCandidateLabelById = useMemo(() => {
@@ -268,7 +291,7 @@ export function useCanvasRelationshipDerived({
     const term = relationshipGroupingQuery.trim().toLowerCase();
     return elements
       .filter((el) => el.element_type === "grouping_container" && el.id !== relationshipSourceGroupingId)
-      .filter((el) => (el.heading || "").toLowerCase().includes(term));
+      .filter((el) => getCanvasElementSearchText(el).includes(term));
   }, [elements, relationshipSourceGroupingId, relationshipGroupingQuery]);
 
   const groupingRelationCandidateLabelById = useMemo(() => {

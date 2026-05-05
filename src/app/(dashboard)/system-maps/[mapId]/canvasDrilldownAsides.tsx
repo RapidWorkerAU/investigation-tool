@@ -10,10 +10,12 @@ import {
   getElementDisplayName,
   getElementRelationshipTypeLabel,
 } from "./canvasShared";
-import { MobileDocumentPropertiesModal } from "./canvasElementAsides";
+import { MobileDocumentPropertiesModal, RelationshipManagerAside } from "./canvasElementAsides";
 
 type AddRelationshipAsideProps = {
   open: boolean;
+  isMobile: boolean;
+  leftAsideSlideIn: boolean;
   relationshipModeGrouping: boolean;
   relationshipSourceLabel: string;
   relationshipSourceNodeTitle: string;
@@ -70,6 +72,8 @@ type AddRelationshipAsideProps = {
 
 export function AddRelationshipAside({
   open,
+  isMobile,
+  leftAsideSlideIn,
   relationshipModeGrouping,
   relationshipSourceLabel,
   relationshipSourceNodeTitle,
@@ -128,11 +132,16 @@ export function AddRelationshipAside({
   const showDocumentOptions = showRelationshipDocumentOptions;
   const showSystemOptions = showRelationshipSystemOptions;
   return (
-    <aside className="fixed bottom-0 left-[420px] top-[64px] z-[74] w-full max-w-[420px] border-l border-r border-slate-300 bg-white shadow-[-14px_0_28px_rgba(15,23,42,0.24),0_8px_22px_rgba(15,23,42,0.12)] transition-transform">
+    <aside
+      className={`canvas-left-aside fixed transition-transform duration-300 ${
+        isMobile ? "inset-0 z-[98] w-full max-w-full" : "bottom-4 left-[98px] top-[82px] z-[80] w-[calc(100vw-122px)] max-w-[408px] rounded-[28px] border"
+      }`}
+      style={{ transform: isMobile ? "translateX(0)" : leftAsideSlideIn ? "translateX(0)" : "translateX(-100%)" }}
+    >
       <div className="flex h-full flex-col overflow-auto p-4">
-        <div className="flex items-center justify-between border-b border-slate-300 pb-3">
-          <h2 className="text-base font-semibold">Add Relationship</h2>
-          <button className="rounded-none border border-black bg-white px-2 py-1 text-xs text-black hover:bg-slate-100" onClick={onCancel}>Close</button>
+        <div className="canvas-left-aside__header flex items-center justify-between border-b border-slate-300 pb-3">
+          <h2 className="canvas-left-aside__title text-base font-semibold">Add Relationship</h2>
+          <button className="canvas-left-aside__close rounded-none border border-black bg-white px-2 py-1 text-xs text-black hover:bg-slate-100" onClick={onCancel}>Close</button>
         </div>
         <p className="mt-3 text-sm text-slate-600">From: {relationshipSourceLabel || relationshipSourceNodeTitle || relationshipSourceGroupingHeading || "Unknown source"}</p>
         <div className="mt-3 grid gap-3">
@@ -432,6 +441,8 @@ type OrgChartDirectReportCandidate = {
 
 type OrgChartDirectReportAsideProps = {
   open: boolean;
+  isMobile: boolean;
+  leftAsideSlideIn: boolean;
   sourceLabel: string;
   query: string;
   setQuery: (value: string) => void;
@@ -448,6 +459,8 @@ type OrgChartDirectReportAsideProps = {
 
 export function OrgChartDirectReportAside({
   open,
+  isMobile,
+  leftAsideSlideIn,
   sourceLabel,
   query,
   setQuery,
@@ -463,11 +476,16 @@ export function OrgChartDirectReportAside({
 }: OrgChartDirectReportAsideProps) {
   if (!open) return null;
   return (
-    <aside className="fixed bottom-0 left-[420px] top-[64px] z-[74] w-full max-w-[420px] border-l border-r border-slate-300 bg-white shadow-[-14px_0_28px_rgba(15,23,42,0.24),0_8px_22px_rgba(15,23,42,0.12)] transition-transform">
+    <aside
+      className={`canvas-left-aside fixed transition-transform duration-300 ${
+        isMobile ? "inset-0 z-[98] w-full max-w-full" : "bottom-4 left-[98px] top-[82px] z-[80] w-[calc(100vw-122px)] max-w-[408px] rounded-[28px] border"
+      }`}
+      style={{ transform: isMobile ? "translateX(0)" : leftAsideSlideIn ? "translateX(0)" : "translateX(-100%)" }}
+    >
       <div className="flex h-full flex-col overflow-auto p-4">
-        <div className="flex items-center justify-between border-b border-slate-300 pb-3">
-          <h2 className="text-base font-semibold">Link Direct Report</h2>
-          <button className="rounded-none border border-black bg-white px-2 py-1 text-xs text-black hover:bg-slate-100" onClick={onCancel}>Close</button>
+        <div className="canvas-left-aside__header flex items-center justify-between border-b border-slate-300 pb-3">
+          <h2 className="canvas-left-aside__title text-base font-semibold">Link Direct Report</h2>
+          <button className="canvas-left-aside__close rounded-none border border-black bg-white px-2 py-1 text-xs text-black hover:bg-slate-100" onClick={onCancel}>Close</button>
         </div>
         <p className="mt-3 text-sm text-slate-600">Leader: {sourceLabel || "Unknown person"}</p>
         <div className="mt-3 grid gap-3">
@@ -847,6 +865,7 @@ export function DocumentStructureAside({
 
 type CanvasDrilldownOverlaysProps = {
   orgChartDirectReportAsideProps: Parameters<typeof OrgChartDirectReportAside>[0];
+  relationshipManagerAsideProps: Parameters<typeof RelationshipManagerAside>[0];
   addRelationshipAsideProps: Parameters<typeof AddRelationshipAside>[0];
   deleteDocumentAsideProps: Parameters<typeof DeleteDocumentAside>[0];
   mobileDocumentPropertiesModalProps: Parameters<typeof MobileDocumentPropertiesModal>[0];
@@ -855,6 +874,7 @@ type CanvasDrilldownOverlaysProps = {
 
 export function CanvasDrilldownOverlays({
   orgChartDirectReportAsideProps,
+  relationshipManagerAsideProps,
   addRelationshipAsideProps,
   deleteDocumentAsideProps,
   mobileDocumentPropertiesModalProps,
@@ -863,6 +883,7 @@ export function CanvasDrilldownOverlays({
   return (
     <>
       <OrgChartDirectReportAside {...orgChartDirectReportAsideProps} />
+      <RelationshipManagerAside {...relationshipManagerAsideProps} />
       <AddRelationshipAside {...addRelationshipAsideProps} />
       <DeleteDocumentAside {...deleteDocumentAsideProps} />
       <MobileDocumentPropertiesModal {...mobileDocumentPropertiesModalProps} />

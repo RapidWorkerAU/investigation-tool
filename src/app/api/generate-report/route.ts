@@ -331,6 +331,10 @@ function collectElementRecords(value: unknown, found: Array<Record<string, unkno
   return found;
 }
 
+function countElementType(value: unknown, elementType: string) {
+  return collectElementRecords(value).filter((record) => record.element_type === elementType).length;
+}
+
 function extractLocalMissingInformation(caseData: unknown) {
   const elementRecords = collectElementRecords(caseData);
   const counts = new Map<string, number>();
@@ -524,7 +528,14 @@ function getPreviousReportBranding(value: unknown): PreviousReportBranding | nul
 }
 
 export async function POST(request: NextRequest) {
+  const trace: string[] = [];
+  const addTrace = (message: string) => {
+    trace.push(`${new Date().toISOString()} ${message}`);
+  };
+
+  addTrace("Request received.");
   const body = (await request.json().catch(() => null)) as GenerateReportRequest | null;
+  addTrace("Request body parsed.");
   const authHeader = request.headers.get("authorization");
   const user = await getUserFromAuthHeader(authHeader);
 
@@ -559,6 +570,7 @@ export async function POST(request: NextRequest) {
 
   const authedSupabase = createAuthedServerClient(token);
   const serviceSupabase = createServiceRoleClient();
+  addTrace("Refreshing billing profile state.");
   const { data: refreshedAccessState, error: accessStateError } = await serviceSupabase.rpc("refresh_billing_profile_state", {
     p_user_id: user.userId,
   });
@@ -605,6 +617,7 @@ export async function POST(request: NextRequest) {
     .select("id")
     .eq("id", caseId)
     .maybeSingle();
+  addTrace("Verified map access.");
 
   if (!accessibleMap) {
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
@@ -612,6 +625,7 @@ export async function POST(request: NextRequest) {
 
   const localMissingInformation = extractLocalMissingInformation(body.caseData);
   const readiness = buildReadiness(localMissingInformation);
+  const responseRecoveryNodeCount = countElementType(body.caseData, "incident_response_recovery");
 
   if (readiness.requires_acknowledgement && !body.acknowledgeMissingInformation) {
     return NextResponse.json(
@@ -624,6 +638,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    addTrace("Creating OpenAI client.");
     const client = getOpenAIClient();
     const responseInputText = JSON.stringify({
       task: "Generate a structured investigation report using the fixed report layout.",
@@ -660,6 +675,42 @@ export async function POST(request: NextRequest) {
 
     const requestInstructions = [
       "You are an investigation reporting assistant.",
+      "ENGLISH SENTENCE STRUCTURE RULES FOR AI CONTENT GENERATION.",
+      "SYSTEM PROMPT FORMAT. COPY AND DEPLOY AS-IS.",
+      "PRIORITY 1. ABSOLUTE RULES. Never violate these rules. These rules must be applied to every sentence generated without exception.",
+      "RULE 1. ONE IDEA PER SENTENCE. Each sentence must contain exactly one main idea. If two ideas are present, they must be written as two separate sentences. Do not join independent ideas with 'and', 'but', or 'so' unless they are directly and inseparably linked.",
+      "RULE 2. EVERY SENTENCE MUST BE SELF-CONTAINED. Every sentence must make complete grammatical and logical sense when read in isolation. A reader must not need to read the next sentence to understand the current one.",
+      "RULE 3. NEVER FABRICATE OR IMPLY UNKNOWN INFORMATION. If information is not confirmed, do not state it as fact. Do not use vague qualifiers such as 'mostly', 'largely', 'generally', or 'in most cases' to conceal that information is missing or unverified. If something is unknown, state that it is unknown explicitly.",
+      "RULE 4. SEPARATE FACTS FROM INTERPRETATION. Confirmed facts and interpretations or assessments must appear in separate sentences. A sentence must not mix what is known with what it might mean. State the fact first. State the interpretation in the next sentence.",
+      "RULE 5. ACTIVE VOICE BY DEFAULT. All sentences must use active voice unless the subject of the action is genuinely unknown. In that case, passive voice is permitted. Passive voice must never be used simply to soften a statement or add formality.",
+      "PRIORITY 2. STRUCTURAL RULES. Apply these to every sentence.",
+      "RULE 6. SENTENCE LENGTH LIMIT. No sentence may exceed 30 words. If a sentence exceeds 30 words, it must be split. Count words before finalising any sentence.",
+      "RULE 7. CAUSAL AND CHRONOLOGICAL ORDER. When describing a sequence of events, sentences must be written in the order the events occurred. The cause must appear before the effect. Do not describe an outcome and then explain its cause afterward.",
+      "RULE 8. CONTEXT BEFORE CONCLUSION IN LONG SENTENCES. When a sentence requires a qualifying condition, that condition must appear at the start of the sentence. The main point must appear at the end. Example format: 'Although X was the case, Y was the outcome.'",
+      "RULE 9. NO EMBEDDED CLAUSES WITHIN CLAUSES. A sentence must not contain a clause nested inside another clause inside another clause. If a sentence requires re-reading to untangle its meaning, it must be rewritten as two or more sentences.",
+      "RULE 10. PARALLEL STRUCTURE IN LISTS AND SERIES. When listing items or actions within a sentence, every item must use the same grammatical form. Do not mix verb forms, noun forms, or tense within a list.",
+      "PRIORITY 3. FACTUAL AND REPORT-SPECIFIC RULES. Apply these when generating factual, investigative, or report-style content.",
+      "RULE 11. LEAD WITH CONFIRMED INFORMATION. When both confirmed and unconfirmed information is present, always state confirmed information first. Unconfirmed or partial information must follow, clearly labelled as such.",
+      "RULE 12. USE EXPLICIT UNCERTAINTY MARKERS. When information is incomplete or unverified, use one of the following phrases to signal this clearly: 'This could not be confirmed at the time of writing.' 'It is not yet known whether...' 'Preliminary findings indicate... however this has not been verified.' 'Data for [X] was unavailable at the time of this report.' '[X] is estimated based on available information and may be subject to revision.' Do not omit these markers. Do not substitute them with vague qualifiers.",
+      "RULE 13. DISTINGUISH CONFIRMED, ESTIMATED, AND UNKNOWN INFORMATION. Every piece of information must be clearly categorised using the following language. Confirmed fact: state directly with no qualifier. Estimated or partial: use 'approximately', 'based on available data', or 'estimated at'. Unknown: use 'has not been confirmed', 'is not yet known', or 'was unavailable at the time of writing.'",
+      "RULE 14. ATTRIBUTE INFORMATION TO ITS SOURCE. When a fact originates from a specific source, document, observation, or report, name that source within the sentence. Example: 'According to the site inspection report...' or 'Based on witness accounts...'",
+      "RULE 15. CLOSE INFORMATION GAPS WITH A RESOLUTION STATEMENT. When a gap in information is identified, the following sentence must state when or how that gap will be resolved, if this is known. Example: 'This will be confirmed in the follow-up investigation report.' If resolution timing is unknown, state: 'The timeframe for confirmation has not yet been established.'",
+      "RULE 16. NO PADDING OR FILLER PHRASES. The following phrases must never appear in generated content: 'It is worth noting that...' 'It should be mentioned that...' 'As previously stated...' 'It is important to note...' 'Needless to say...' State the fact directly. Remove any phrase that precedes the fact without adding meaning.",
+      "PRIORITY 4. FLOW AND READABILITY RULES.",
+      "RULE 17. USE TRANSITIONAL WORDS TO SIGNAL RELATIONSHIPS. When a sentence logically follows from the previous one, use a transitional word or phrase to signal the relationship. Use 'However,' for contrast, 'As a result,' for consequence, 'Subsequently,' for chronological follow-on, 'Notably,' for significant information, and 'At the time of writing,' for time-bounded statements.",
+      "RULE 18. VARY SENTENCE LENGTH DELIBERATELY. Short sentences under 12 words must be used to state key facts or conclusions. Longer sentences of 12 to 30 words must be used to provide context or explain relationships. Do not generate multiple long sentences in a row without a short sentence between them.",
+      "RULE 19. KEEP SUBJECT AND VERB CLOSE TOGETHER. The subject and its verb must not be separated by more than one clause. If a modifier or clause separates the subject from its verb by more than 8 words, restructure the sentence.",
+      "RULE 20. PLACE ADVERBS NEXT TO THE WORD THEY MODIFY. Adverbs must be placed immediately before or after the word or phrase they are modifying. Misplaced adverbs change meaning and will not be permitted.",
+      "COMPLIANCE CHECKLIST. Before finalising any output, verify every sentence against the following. Does this sentence contain only one main idea? Does this sentence make sense in isolation? Does this sentence state anything unconfirmed as fact? Are facts and interpretations in separate sentences? Is this sentence in active voice where possible? Is this sentence under 30 words? Are events written in the order they occurred? Is uncertainty clearly marked with an approved phrase? Is all information correctly categorised as confirmed, estimated, or unknown? Has any filler language been removed?",
+      "OUTPUT BEHAVIOUR INSTRUCTIONS. You are a factual content generator. You must follow all 20 sentence structure rules provided. You must apply the compliance checklist to every sentence before including it in your output. If you cannot confirm a piece of information, you must explicitly state it is unconfirmed using the approved uncertainty markers. You must never use vague language to conceal missing information. You must never exceed 30 words in a single sentence. You must write events in the order they occur. You must separate facts from interpretations. Violations of Priority 1 rules are not permitted under any circumstance.",
+      "REFINEMENT INSTRUCTIONS. ADD TO EXISTING SYSTEM PROMPT.",
+      "STRICT WORD COUNT ENFORCEMENT. You must count the words in every sentence before including it in your output. No sentence may exceed 30 words. This rule has no exceptions. If a sentence exceeds 30 words at any point during drafting, you must split it before outputting it. Do not wait until the end to check. Check every sentence as it is written.",
+      "MULTI-FACT SENTENCE PROHIBITION. When an event produces more than one distinct outcome, each outcome must be written as its own sentence. A sentence must never combine a death toll, a survival count, and a rescue method into one sentence. Each is a separate fact. Each requires a separate sentence. Apply this rule to any sentence that contains more than one number, more than one named outcome, or more than one named party.",
+      "NESTED CLAUSE PROHIBITION, EXTENDED. When describing a sequence of conditions that led to an outcome, do not write them as a single sentence. Each condition must be its own sentence. Each outcome must be its own sentence. The following structure is prohibited: '[Action] while [condition] and [condition], which led to [outcome].' Rewrite this as sentence 1, the action. Sentence 2, the first condition. Sentence 3, the second condition. Sentence 4, the outcome.",
+      "CAUSAL CHAIN RULE. When one event directly causes another, write the cause as one sentence and the effect as the next sentence. Do not place the cause and effect in the same sentence joined by 'which', 'causing', 'resulting in', or 'leading to'. Use a transitional opener on the effect sentence instead, for example 'As a result,' or 'This caused' or 'Subsequently,'.",
+      "RESOLUTION STATEMENT REQUIREMENT. When a paragraph describes an incident, event, or situation where further information exists, such as an investigation, inquiry, findings, or follow-up report, the final sentence of the paragraph must reference this. If investigation findings are known, state them. If they are not included in the paragraph, state that further detail is available and identify where. If no follow-up information exists, state: 'No further information was available at the time of this report.' Do not end a paragraph on an unresolved fact without this closing statement.",
+      "DEATH, INJURY, AND OUTCOME SEQUENCING RULE. When an incident results in fatalities, injuries, or significant harm, these must be stated in the following order. Fatalities, stated first, in their own sentence. Injuries or survivors, stated second, in their own sentence. Rescue, recovery, or response details, stated third, in their own sentence. Do not combine any of these into a single sentence regardless of how closely related they appear.",
+      "SELF-CHECK INSTRUCTION. APPEND TO EVERY OUTPUT TASK. Before submitting your output, re-read every sentence and answer the following for each one. Is this sentence 30 words or fewer? Does this sentence contain only one fact or idea? Does this sentence contain a clause nested inside another clause? Does this sentence combine a cause and effect using 'which', 'causing', or 'leading to'? If this sentence contains an unresolved fact, does the next sentence resolve it or acknowledge it explicitly? If the answer to any of these checks is a violation, rewrite the sentence before outputting it. Do not output a sentence that fails any check.",
       "Use only the information provided in the input.",
       "Do not infer, assume, estimate, or invent facts.",
       "If information is missing, list it under missing_information.",
@@ -677,11 +728,20 @@ export async function POST(request: NextRequest) {
       "The Executive Summary must describe what physically happened, when it happened, where it happened, and what the result was.",
       "The Executive Summary must set up the activity and operational context before describing the first initiating event in the incident sequence.",
       "The Executive Summary must read in this order where the information is available: date and location, the work or activity underway, the first supported initiating event, the immediate consequence, the escalation or eventual outcome, and finally the injury or fatality outcome.",
+      "The first two sentences of the Executive Summary must capture, in clear English and where supported by the information provided: the date, the location, the activity underway, what happened, how it happened, and whether an injury occurred or what the outcome was.",
+      "Do not omit the activity underway from the opening of the Executive Summary when that information is available.",
+      "Keep the Executive Summary to two to four sentences unless the available information is genuinely too limited to support that structure.",
+      "Do not overload the opening sentence. If the date, location, activity, incident sequence, and outcome create an overlong sentence, split them into two clear sentences.",
+      "Present the incident sequence in the order it occurred. Do not describe a later event and then explain the earlier cause afterward in the same sentence.",
+      "Separate confirmed physical outcomes from potential consequences or risk assessments. Do not combine actual damage, possible injury potential, and uncertainty in one crowded sentence.",
+      "If injury status is unknown, state the confirmed physical outcome first, then state clearly in a separate sentence that injury status could not be confirmed from the provided information.",
+      "Do not use phrases such as 'the recorded outcomes include', 'it was recorded that', or other wording that makes the summary sound like database extraction.",
       "Do not begin the Executive Summary with a technical event that assumes the reader already understands the operational context.",
       "When equipment names, permit numbers, or component identifiers are used, introduce them in a way that makes sense to a first-time reader rather than assuming prior knowledge.",
       "Where date or time is available, convert it into normal human-readable form rather than raw timestamps.",
       "If a time is approximate based on the available information, it may say approximately.",
       "If outcome nodes explicitly support that there were no injuries, say that clearly in the Executive Summary.",
+      "Do not invent a next step or future confirmation action unless the provided information explicitly states one.",
       "Do not write the Executive Summary as a list of recorded items or a recap of what the case data contains.",
       "Do not use phrases such as 'an event titled', 'was recorded', 'case data', 'sequence steps associated with', or similar metadata phrasing.",
       "Do not mention nodes, fields, records, titles, or source-data structure in the Executive Summary.",
@@ -696,6 +756,11 @@ export async function POST(request: NextRequest) {
       "Long Description paragraph 1 must use sequence nodes, task and condition nodes, and outcome nodes where available, but it must combine them into one easy-to-read opening account.",
       "Long Description paragraph 1 must explicitly say that an item is unknown at this stage when the relevant information is not available.",
       "Long Description paragraph 2 must give a chronological recount of what occurred using the sequence information as the backbone and weaving in only the supporting factors, system factors, findings, people, and predisposing factors that help the reader understand the event progression.",
+      "The Long Description must be sequential in layout. It must begin with the first supported incident sequence step and then move through the remaining sequence steps in logical order without jumping ahead or summarising later events before earlier ones.",
+      "When supporting node information is used in the Long Description, it must be inserted at the point in the sequence where it becomes relevant. Do not group all supporting factors, people, or findings into a separate untimed summary if they belong to a specific stage of the incident timeline.",
+      "Do not rearrange the incident sequence for style. Preserve the actual order of events shown by the sequence nodes unless two events share the same supported time and order cannot be distinguished.",
+      "If sequence timing is incomplete, use the best supported logical order from the available sequence nodes and state clearly where exact timing could not be confirmed.",
+      "The Long Description must read like a step-by-step incident narrative, not a thematic summary.",
       "Long Description paragraph 2 must be written as a coherent narrative with natural sentence structure, transitions, and links between events.",
       "Long Description paragraph 2 may reuse important investigation terminology from the source information, but it must not preserve awkward source phrasing if it harms readability.",
       "Long Description paragraph 3 must explain which controls or barriers contributed, whether they were present or absent, effective or ineffective, and how the predisposing factors and findings support that view.",
@@ -756,12 +821,16 @@ export async function POST(request: NextRequest) {
         },
       });
 
+    addTrace("Submitting OpenAI structured response request (max_output_tokens=5200).");
     let response = await createReportResponse(5200);
+    addTrace("OpenAI returned first structured response.");
     let diagnostic = extractResponseDiagnostic(response as unknown as Record<string, unknown>);
     let outputText = response.output_text?.trim();
 
     if (diagnostic.incompleteReason === "max_output_tokens") {
+      addTrace("OpenAI response hit max_output_tokens, retrying with 12000.");
       response = await createReportResponse(12000);
+      addTrace("OpenAI returned second structured response.");
       diagnostic = extractResponseDiagnostic(response as unknown as Record<string, unknown>);
       outputText = response.output_text?.trim();
     }
@@ -770,7 +839,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error: "OpenAI returned no structured text output.",
-          diagnostic,
+          diagnostic: { ...diagnostic, trace },
         },
         { status: 502 },
       );
@@ -780,11 +849,12 @@ export async function POST(request: NextRequest) {
 
     try {
       parsed = JSON.parse(outputText);
+      addTrace("Structured JSON parsed successfully.");
     } catch {
       return NextResponse.json(
         {
           error: "OpenAI returned invalid JSON.",
-          diagnostic,
+          diagnostic: { ...diagnostic, trace },
         },
         { status: 502 },
       );
@@ -794,7 +864,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error: "OpenAI returned a response that did not match the expected schema.",
-          diagnostic,
+          diagnostic: { ...diagnostic, trace },
         },
         { status: 502 },
       );
@@ -802,8 +872,22 @@ export async function POST(request: NextRequest) {
 
     parsed.readiness = readiness;
 
-    const draftReportText = buildDraftReportText(parsed);
+    if (responseRecoveryNodeCount === 0) {
+      parsed.report.sections.response_and_recovery = {
+        summary: "",
+        columns: [],
+        rows: [],
+      };
+      parsed.report.section_visibility = {
+        ...(parsed.report.section_visibility ?? {}),
+        response_and_recovery: false,
+      };
+    }
 
+    const draftReportText = buildDraftReportText(parsed);
+    addTrace("Draft report text assembled.");
+
+    addTrace("Loading previous report versions for numbering and branding.");
     const { data: previousReportRows } = await authedSupabase
       .schema("ms")
       .from("investigation_reports")
@@ -846,14 +930,39 @@ export async function POST(request: NextRequest) {
       })
       .select("id,status,generated_at,updated_at,version_number")
       .single();
+    addTrace("Attempted to save generated report.");
 
     if (saveError || !savedReport) {
       return NextResponse.json(
-        { error: saveError.message || "Report generated but could not be saved." },
+        {
+          error: saveError.message || "Report generated but could not be saved.",
+          diagnostic: { trace },
+        },
         { status: 500 },
       );
     }
 
+    const nextLongDescription = parsed.report.sections.long_description.trim();
+    const { error: mapUpdateError } = await authedSupabase
+      .schema("ms")
+      .from("system_maps")
+      .update({
+        incident_long_description: nextLongDescription || null,
+      })
+      .eq("id", caseId);
+    addTrace("Attempted to sync system map long description.");
+
+    if (mapUpdateError) {
+      return NextResponse.json(
+        {
+          error: "Report generated and saved, but the investigation long description could not be updated.",
+          diagnostic: { trace },
+        },
+        { status: 500 },
+      );
+    }
+
+    addTrace("Generated report saved successfully.");
     return NextResponse.json({
       ...parsed,
       saved_report: savedReport,
@@ -863,6 +972,7 @@ export async function POST(request: NextRequest) {
       {
         error: error instanceof Error ? error.message : "Unable to generate report.",
         readiness,
+        diagnostic: { trace },
       },
       { status: 500 },
     );

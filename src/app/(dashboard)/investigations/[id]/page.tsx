@@ -1990,7 +1990,7 @@ export default function InvestigationReportPage() {
       return;
     }
 
-    router.push(`/investigations/${params.id}/generated-report`);
+    window.location.assign(`/investigations/${params.id}/generated-report`);
   };
 
   const handleDeleteReport = async (reportId: string) => {
@@ -2084,7 +2084,7 @@ export default function InvestigationReportPage() {
       subtitle={loading ? undefined : "Review the investigation record before opening the incident map."}
       headerLead={
         !loading && !error && map ? (
-          <button type="button" className={styles.reportBackButton} onClick={() => router.back()} aria-label="Go back">
+          <button type="button" className={styles.reportBackButton} onClick={() => router.push("/dashboard")} aria-label="Go to dashboard">
             <Image src="/icons/back.svg" alt="" width={18} height={18} className={styles.reportBackIcon} />
             <span>Back</span>
           </button>
@@ -3391,7 +3391,7 @@ export default function InvestigationReportPage() {
                               <tr
                                 key={row.id}
                                 className={styles.clickableRow}
-                                onClick={() => router.push(`/investigations/${params.id}/generated-report?reportId=${row.id}`)}
+                                onClick={() => window.location.assign(`/investigations/${params.id}/generated-report?reportId=${row.id}`)}
                               >
                                 <td className={styles.reportCellCenter} onClick={(event) => event.stopPropagation()}>
                                   <input
@@ -3642,7 +3642,7 @@ export default function InvestigationReportPage() {
                 className={`${styles.button} ${styles.buttonAccent}`}
                 onClick={() => {
                   setShowCreateVersionModal(false);
-                  router.push(`/investigations/${params.id}/generated-report`);
+                  window.location.assign(`/investigations/${params.id}/generated-report`);
                 }}
               >
                 Create New Version

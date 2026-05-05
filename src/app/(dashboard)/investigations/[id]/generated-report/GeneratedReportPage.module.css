@@ -657,24 +657,41 @@
 }
 
 .readinessHeading {
-  margin: 0 0 12px;
-  font-size: 1.2rem;
-  line-height: 1.2;
-  font-weight: 500;
-  color: #1d2430;
+  margin: 0 0 14px;
+  font: inherit;
+  font-size: clamp(1.45rem, 2vw, 1.85rem);
+  line-height: 1.05;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: #172033;
+  text-wrap: balance;
+  max-width: 92ch;
 }
 
 .readinessDisclaimerText {
-  margin: 0 0 20px;
-  color: #c0392b;
-  font-size: 0.98rem;
-  line-height: 1.45;
+  margin: 0 0 24px;
+  color: #9f342a;
+  font-size: 0.96rem;
+  line-height: 1.55;
+  font-weight: 600;
+  max-width: 92ch;
+  text-wrap: pretty;
+}
+
+.readinessSubheading {
+  margin: 0 0 14px;
+  font: inherit;
+  font-size: 0.82rem;
+  line-height: 1.15;
   font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #38506f;
 }
 
 .readinessFollowup {
   margin-bottom: 20px;
-  margin-top: 20px;
+  margin-top: 48px;
   display: block;
   width: 100%;
 }
@@ -689,42 +706,93 @@
   width: 100%;
   display: flex;
   justify-content: flex-end;
-  margin-top: 16px;
+  align-items: center;
+  gap: 12px;
+  margin-top: 28px;
   flex-wrap: wrap;
 }
 
 .warningList {
   margin: 0;
-  padding: 0 0 0 12px;
+  padding: 0;
   list-style: none;
   display: grid;
   gap: 10px;
+  max-width: 96ch;
+}
+
+.readinessPrimaryList {
+  gap: 8px;
+  margin-bottom: 30px;
+}
+
+.readinessSecondaryList {
+  gap: 8px;
 }
 
 .warningList li {
   position: relative;
-  padding-left: 32px;
-  line-height: 1.45;
+  padding-left: 36px;
+  line-height: 1.55;
+  color: #243246;
+  font-size: 0.95rem;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  text-wrap: pretty;
 }
 
 .warningList li::before {
   content: "!";
   position: absolute;
   left: 0;
-  top: 2px;
-  width: 18px;
-  height: 18px;
+  top: 4px;
+  width: 20px;
+  height: 20px;
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: #fff3d6;
-  border: 1px solid #f1c96b;
+  background: linear-gradient(180deg, #fff6df 0%, #ffe7b3 100%);
+  border: 1px solid #efc468;
   color: #9a5a00;
-  font-size: 0.78rem;
+  font-size: 0.74rem;
   font-weight: 700;
   line-height: 1;
   box-sizing: border-box;
+  box-shadow: 0 6px 14px rgba(174, 120, 9, 0.12);
+}
+
+.readinessBackButton,
+.readinessContinueButton {
+  min-height: 46px;
+  padding: 0 20px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.readinessBackButton {
+  border: 1px solid rgba(39, 61, 92, 0.16);
+  background: #ffffff;
+  color: #27415c;
+  box-shadow: none;
+}
+
+.readinessBackButton:hover {
+  background: #f5f8fc;
+}
+
+.readinessContinueButton {
+  border: 1px solid #136f87;
+  background: linear-gradient(135deg, #136f87 0%, #0d5f77 100%);
+  color: #ffffff;
+  box-shadow: 0 12px 24px rgba(16, 99, 121, 0.2);
+}
+
+.readinessContinueButton:hover {
+  background: linear-gradient(135deg, #157994 0%, #0f6780 100%);
 }
 
 .inlineSubsectionHeading {
@@ -1055,6 +1123,29 @@
 }
 
 @media (max-width: 900px) {
+  .readinessHeading {
+    font-size: clamp(1.28rem, 5vw, 1.55rem);
+  }
+
+  .readinessDisclaimerText {
+    font-size: 0.92rem;
+  }
+
+  .warningList li {
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+
+  .readinessActionButtons {
+    justify-content: stretch;
+  }
+
+  .readinessBackButton,
+  .readinessContinueButton {
+    width: 100%;
+    justify-content: center;
+  }
+
   .reportControlsSection {
     padding: 20px 0 !important;
   }

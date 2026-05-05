@@ -5,12 +5,24 @@ import Link from "next/link";
 import { ReactNode, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
+import { isPlatformAdminEmail } from "@/lib/platformAdmin";
 import styles from "./DashboardShell.module.css";
 
-type NavKey = "dashboard" | "templates" | "account" | "export";
+type NavKey =
+  | "dashboard"
+  | "templates"
+  | "lead-access"
+  | "account"
+  | "admin"
+  | "admin-users"
+  | "admin-organisations"
+  | "export";
+
+type ShellMode = "default" | "admin";
 
 type DashboardShellProps = {
   activeNav?: NavKey;
+  mode?: ShellMode;
   eyebrow: string;
   title: string;
   subtitle?: string;
@@ -25,6 +37,17 @@ const sidebarLinks = [
   { key: "account" as const, href: "/account", label: "Edit Account", icon: "/icons/account.svg" },
 ];
 
+const adminSidebarLinks = [
+  { key: "dashboard" as const, href: "/dashboard", label: "Dashboard", icon: "/icons/house.svg" },
+  { key: "admin-users" as const, href: "/admin/users", label: "Users", icon: "/icons/users.svg" },
+  {
+    key: "admin-organisations" as const,
+    href: "/admin/organisations",
+    label: "Organisations",
+    icon: "/icons/organisation.svg",
+  },
+];
+
 const DESKTOP_SIDEBAR_STATE_KEY = "investigation_tool_dashboard_sidebar_collapsed";
 
 const getInitialDesktopSidebarCollapsed = () => {
@@ -34,6 +57,7 @@ const getInitialDesktopSidebarCollapsed = () => {
 
 export default function DashboardShell({
   activeNav = "dashboard",
+  mode = "default",
   eyebrow,
   title,
   subtitle,
@@ -47,6 +71,7 @@ export default function DashboardShell({
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(getInitialDesktopSidebarCollapsed);
+  const [showAdminMenuItem, setShowAdminMenuItem] = useState(false);
 
   useEffect(() => {
     const body = document.body;
@@ -77,6 +102,29 @@ export default function DashboardShell({
     window.localStorage.setItem(DESKTOP_SIDEBAR_STATE_KEY, String(desktopSidebarCollapsed));
   }, [desktopSidebarCollapsed]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadAdminState = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!cancelled) {
+        setShowAdminMenuItem(isPlatformAdminEmail(user?.email));
+      }
+    };
+
+    void loadAdminState();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase]);
+
+  const visibleSidebarLinks = mode === "admin" ? adminSidebarLinks : sidebarLinks;
+  const isAdminShell = mode === "admin";
+
   const handleLogout = async () => {
     if (!logoutConfirmArmed) {
       setLogoutConfirmArmed(true);
@@ -99,7 +147,7 @@ export default function DashboardShell({
     <div className={styles.viewport}>
       <div className={styles.deviceShell}>
         <div className={styles.deviceBezel}>
-          <header className={styles.mobileHeader}>
+          <header className={`${styles.mobileHeader} ${isAdminShell ? styles.mobileHeaderAdmin : ""}`}>
             <Link href="/" className={styles.mobileHeaderBrand} aria-label="Investigation Tool home">
               <Image
                 src="/images/investigation-tool.png"
@@ -136,7 +184,11 @@ export default function DashboardShell({
             </button>
           </header>
 
-          <aside className={`${styles.sidebar} ${desktopSidebarCollapsed ? styles.sidebarCollapsed : ""}`}>
+          <aside
+            className={`${styles.sidebar} ${desktopSidebarCollapsed ? styles.sidebarCollapsed : ""} ${
+              isAdminShell ? styles.sidebarAdmin : ""
+            }`}
+          >
             <div className={styles.sidebarTop}>
               <Link href="/" className={styles.brand} aria-label="Investigation Tool home">
                 <Image
@@ -161,7 +213,7 @@ export default function DashboardShell({
             </div>
 
             <nav className={styles.sidebarNav} aria-label="Dashboard shortcuts">
-              {sidebarLinks.map((link) => (
+              {visibleSidebarLinks.map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
@@ -182,6 +234,23 @@ export default function DashboardShell({
             </nav>
 
             <div className={styles.sidebarFooter}>
+              {!isAdminShell && showAdminMenuItem ? (
+                <Link
+                  href="/admin/users"
+                  className={`${styles.sidebarLink} ${activeNav === "admin" ? styles.sidebarLinkActive : ""}`}
+                  title="Admin"
+                  aria-label="Admin"
+                >
+                  <Image
+                    src="/icons/configure.svg"
+                    alt=""
+                    width={22}
+                    height={22}
+                    className={styles.sidebarIcon}
+                  />
+                  <span className={styles.sidebarLinkLabel}>Admin</span>
+                </Link>
+              ) : null}
               <button
                 type="button"
                 className={`${styles.sidebarLink} ${logoutConfirmArmed ? styles.sidebarLinkConfirm : ""}`}
@@ -205,7 +274,7 @@ export default function DashboardShell({
           </aside>
 
           <section className={styles.canvas}>
-            <header className={styles.topbar}>
+            <header className={`${styles.topbar} ${isAdminShell ? styles.topbarAdmin : ""}`}>
               <div className={styles.greetingBlock}>
                 <div>
                   {headerLead ? <div className={styles.headerLead}>{headerLead}</div> : null}
@@ -224,7 +293,12 @@ export default function DashboardShell({
       </div>
 
       {mobileMenuOpen ? (
-        <div className={styles.mobileMenu} role="dialog" aria-modal="true" aria-label="Dashboard menu">
+        <div
+          className={`${styles.mobileMenu} ${isAdminShell ? styles.mobileMenuAdmin : ""}`}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Dashboard menu"
+        >
           <div className={styles.mobileMenuHeader}>
             <Link href="/" className={styles.mobileMenuBrand} aria-label="Investigation Tool home" onClick={() => setMobileMenuOpen(false)}>
               <Image
@@ -264,12 +338,30 @@ export default function DashboardShell({
             <Link href="/dashboard" onClick={() => setMobileMenuOpen(false)}>
               Home
             </Link>
-            <Link href="/templates" onClick={() => setMobileMenuOpen(false)}>
-              Templates
-            </Link>
-            <Link href="/account" onClick={() => setMobileMenuOpen(false)}>
-              Account
-            </Link>
+            {isAdminShell ? (
+              <>
+                <Link href="/admin/users" onClick={() => setMobileMenuOpen(false)}>
+                  Users
+                </Link>
+                <Link href="/admin/organisations" onClick={() => setMobileMenuOpen(false)}>
+                  Organisations
+                </Link>
+              </>
+            ) : (
+              <Link href="/templates" onClick={() => setMobileMenuOpen(false)}>
+                Templates
+              </Link>
+            )}
+            {!isAdminShell && showAdminMenuItem ? (
+              <Link href="/admin/users" onClick={() => setMobileMenuOpen(false)}>
+                Admin
+              </Link>
+            ) : null}
+            {!isAdminShell ? (
+              <Link href="/account" onClick={() => setMobileMenuOpen(false)}>
+                Account
+              </Link>
+            ) : null}
           </nav>
 
           <div className={styles.mobileMenuActions}>

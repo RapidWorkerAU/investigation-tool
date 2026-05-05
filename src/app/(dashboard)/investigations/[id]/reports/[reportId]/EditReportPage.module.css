@@ -10,7 +10,7 @@
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
   gap: 18px;
-  align-items: stretch;
+  align-items: start;
 }
 
 .sidebarCard,
@@ -21,12 +21,14 @@
 }
 
 .sidebarCard {
+  --sidebar-tab-height: 42px;
+  --sidebar-tab-gap: 10px;
   padding: 16px;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
   gap: 10px;
   align-content: start;
-  align-self: stretch;
+  align-self: start;
   min-height: 0;
   height: auto;
   overflow: hidden;
@@ -34,10 +36,11 @@
 
 .sidebarNavList {
   min-height: 0;
+  max-height: calc((var(--sidebar-tab-height) * 10) + (var(--sidebar-tab-gap) * 9));
   overflow-y: auto;
   overflow-x: hidden;
   display: grid;
-  gap: 10px;
+  gap: var(--sidebar-tab-gap);
   align-content: start;
 }
 
@@ -57,7 +60,7 @@
 
 .navButton {
   width: 100%;
-  min-height: 42px;
+  min-height: var(--sidebar-tab-height);
   padding: 10px 12px;
   border: 1px solid rgba(24, 29, 39, 0.08);
   background: #f8fafc;

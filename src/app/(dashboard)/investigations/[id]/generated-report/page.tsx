@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { PDFViewer, pdf, type DocumentProps } from "@react-pdf/renderer";
 import DashboardShell from "@/components/dashboard/DashboardShell";
@@ -9,7 +9,7 @@ import shellStyles from "@/components/dashboard/DashboardShell.module.css";
 import pageStyles from "./GeneratedReportPage.module.css";
 import InvestigationReportPdfDocument from "@/components/investigation-report/InvestigationReportPdfDocument";
 import { ReportProgressLoadingView } from "@/components/loading/ReportProgressLoadingView";
-import { accessBlocksInvestigationEntry, accessCanUseReportGeneration, accessRequiresSelection, fetchAccessState } from "@/lib/access";
+import { type OrganisationBranding, type ResolvedOrganisationBranding, normalizeOrganisationBranding } from "@/lib/organisationBranding";
 import { normalizeInvestigationReportPayload } from "@/lib/investigation-report/helpers";
 import type { InvestigationSavedReportPayload, ReadinessCheck } from "@/lib/investigation-report/types";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
@@ -127,10 +127,40 @@ type ErrorPayload = {
     refusal?: string | null;
     outputTextPreview?: string | null;
     incompleteReason?: string | null;
+    trace?: string[] | null;
   };
 };
 
 type ReportPayload = InvestigationSavedReportPayload;
+
+async function loadOrganisationBranding(accessToken: string) {
+  const response = await fetch("/api/account/organisation-branding", {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  const payload = (await response.json().catch(() => null)) as { branding?: OrganisationBranding; error?: string } | null;
+  if (!response.ok) {
+    throw new Error(payload?.error || "Unable to load organisation branding.");
+  }
+
+  return normalizeOrganisationBranding(payload?.branding ?? null);
+}
+
+function applyOrganisationBrandingFallback(report: ReportPayload, branding: ResolvedOrganisationBranding) {
+  return {
+    ...report,
+    report: {
+      ...report.report,
+      branding: {
+        logo_storage_path: report.report.branding?.logo_storage_path?.trim() || branding.logo_storage_path || undefined,
+        section_heading_color: report.report.branding?.section_heading_color?.trim() || branding.section_heading_color,
+        table_heading_color: report.report.branding?.table_heading_color?.trim() || branding.table_heading_color,
+      },
+    },
+  };
+}
 
 type FlowSection = {
   key: string;
@@ -359,6 +389,62 @@ function toTitleCaseLabel(value: string) {
     .join(" ");
 }
 
+function stripActivityTimestamp(entry: string) {
+  return entry.replace(/^\d{1,2}:\d{2}:\d{2}\s+/, "").trim();
+}
+
+function readAccessTokenFromLocalStorage() {
+  if (typeof window === "undefined") return "";
+
+  const directToken = window.localStorage.getItem("investigation_tool_access_token")?.trim() ?? "";
+  if (directToken) return directToken;
+
+  for (let index = 0; index < window.localStorage.length; index += 1) {
+    const key = window.localStorage.key(index);
+    if (!key || !key.includes("-auth-token")) continue;
+
+    const rawValue = window.localStorage.getItem(key);
+    if (!rawValue) continue;
+
+    try {
+      const parsed = JSON.parse(rawValue) as unknown;
+
+      if (parsed && typeof parsed === "object" && "access_token" in parsed) {
+        const token = typeof parsed.access_token === "string" ? parsed.access_token.trim() : "";
+        if (token) return token;
+      }
+
+      if (Array.isArray(parsed)) {
+        for (const item of parsed) {
+          if (!item || typeof item !== "object" || !("access_token" in item)) continue;
+          const token = typeof item.access_token === "string" ? item.access_token.trim() : "";
+          if (token) return token;
+        }
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return "";
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string) {
+  return new Promise<T>((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timeoutId);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timeoutId);
+        reject(error);
+      },
+    );
+  });
+}
+
 function renderFactorPrimaryCell(value: string) {
   const trimmed = value.trim();
   const match = trimmed.match(/^(.*?)\s*\((.*?)\)\s*$/);
@@ -512,6 +598,71 @@ function renderTaskConditionStatePill(value: string) {
   return <span className={`${shellStyles.statusPill} ${className} ${pageStyles.factorPillCompact}`}>{toTitleCaseLabel(trimmed)}</span>;
 }
 
+function getResponseRecoveryCategoryPillStyle(value: string) {
+  const normalized = value.trim().toLowerCase();
+
+  switch (normalized) {
+    case "emergency_response":
+      return { backgroundColor: "#FEF3C7", color: "#92400E", borderColor: "#FCD34D" };
+    case "make_area_safe":
+      return { backgroundColor: "#F3E8FF", color: "#6B21A8", borderColor: "#D8B4FE" };
+    case "medical_treatment":
+      return { backgroundColor: "#DCFCE7", color: "#166534", borderColor: "#86EFAC" };
+    case "scene_preservation":
+      return { backgroundColor: "#E0E7FF", color: "#3730A3", borderColor: "#A5B4FC" };
+    default:
+      return { backgroundColor: "#FCE7F3", color: "#9D174D", borderColor: "#F9A8D4" };
+  }
+}
+
+function renderResponseRecoveryCategoryPill(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "-";
+
+  return (
+    <span className={`${shellStyles.statusPill} ${pageStyles.factorPillCompact}`} style={getResponseRecoveryCategoryPillStyle(trimmed)}>
+      {toTitleCaseLabel(trimmed)}
+    </span>
+  );
+}
+
+function getOutcomeMatrixPillStyle(value: string) {
+  const normalized = value.trim().toLowerCase();
+
+  switch (normalized) {
+    case "rare":
+    case "insignificant":
+      return { backgroundColor: "#DCFCE7", color: "#166534", borderColor: "#86EFAC" };
+    case "unlikely":
+    case "minor":
+      return { backgroundColor: "#ECFCCB", color: "#3F6212", borderColor: "#BEF264" };
+    case "possible":
+    case "moderate":
+      return { backgroundColor: "#FEF3C7", color: "#92400E", borderColor: "#FCD34D" };
+    case "likely":
+    case "major":
+      return { backgroundColor: "#FED7AA", color: "#9A3412", borderColor: "#FB923C" };
+    case "almost_certain":
+    case "almost certain":
+    case "severe":
+    case "catastrophic":
+      return { backgroundColor: "#FEE2E2", color: "#7F1D1D", borderColor: "#F87171" };
+    default:
+      return { backgroundColor: "#F3F4F6", color: "#374151", borderColor: "#D1D5DB" };
+  }
+}
+
+function renderOutcomeMatrixPill(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "-";
+
+  return (
+    <span className={`${shellStyles.statusPill} ${pageStyles.factorPillCompact}`} style={getOutcomeMatrixPillStyle(trimmed)}>
+      {toTitleCaseLabel(trimmed)}
+    </span>
+  );
+}
+
 function buildTaskConditionsTable(elements: CanvasElementRow[]) {
   return {
     columns: ["Details", "State", "Environmental Context"],
@@ -521,6 +672,22 @@ function buildTaskConditionsTable(elements: CanvasElementRow[]) {
         getConfigValue(element.element_config, "description", "summary", "detail", "details") || element.heading?.trim() || "",
         getConfigValue(element.element_config, "state") || "normal",
         getConfigValue(element.element_config, "environmental_context", "environmentalContext", "context"),
+      ]),
+  };
+}
+
+function buildIncidentOutcomesTable(elements: CanvasElementRow[]) {
+  return {
+    columns: ["Outcome", "Description", "Category", "Likelihood", "Consequence", "Reporting Outcome"],
+    rows: elements
+      .filter((element) => element.element_type === "incident_outcome")
+      .map((element) => [
+        element.heading?.trim() || "Outcome",
+        getConfigValue(element.element_config, "description", "summary", "detail", "details"),
+        getConfigValue(element.element_config, "consequence_category"),
+        getConfigValue(element.element_config, "likelihood"),
+        getConfigValue(element.element_config, "consequence"),
+        getConfigValue(element.element_config, "reporting_consequence"),
       ]),
   };
 }
@@ -632,55 +799,97 @@ function normalizeMainFactorsTable(columns: string[], rows: string[][]) {
   };
 }
 
-function normalizeControlsTable(columns: string[], rows: string[][]) {
+function normalizePredisposingFactorsTable(columns: string[], rows: string[][]) {
   const normalizedColumns = columns.map(normalizeHeaderKey);
-
-  const findIndex = (...patterns: string[]) =>
-    normalizedColumns.findIndex((column) => patterns.some((pattern) => column.includes(pattern)));
-
-  const itemIndex = findIndex("control", "barrier", "item");
-  const typeIndex = findIndex("type");
-  const stateIndex = findIndex("state", "status", "present", "failed", "absent");
-  const roleIndex = findIndex("role", "classification", "essential", "contributing", "predisposing");
+  const findIndex = (...patterns: string[]) => normalizedColumns.findIndex((column) => patterns.some((pattern) => column.includes(pattern)));
+  const foundItemIndex = findIndex("factor", "item", "name");
+  const itemIndex = foundItemIndex >= 0 ? foundItemIndex : 0;
+  const presenceIndex = findIndex("presence", "status", "present");
   const detailsIndex = findIndex("detail", "support", "description", "definition", "why");
-
+  const categoryIndex = findIndex("category", "influence", "type");
   const pick = (row: string[], index: number) => (index >= 0 ? row[index] || "" : "");
 
   return {
-    columns: ["Item", "Details", "Type", "State", "Role"],
-    rows: rows.map((row) => [
-      pick(row, itemIndex),
-      pick(row, detailsIndex),
-      pick(row, typeIndex),
-      pick(row, stateIndex),
-      pick(row, roleIndex),
-    ]),
+    columns: ["Details", "Presence", "Influence Type"],
+    rows: rows.map((row) => {
+      const rawItem = pick(row, itemIndex);
+      const itemParts = splitBracketedValue(rawItem);
+      const detailText = pick(row, detailsIndex) || itemParts.main || rawItem;
+      return [detailText, pick(row, presenceIndex), pick(row, categoryIndex)];
+    }),
   };
 }
 
-function normalizeRecommendationsTable(columns: string[], rows: string[][]) {
+function buildFactorsTable(elements: CanvasElementRow[], targetType: "incident_factor" | "incident_system_factor") {
+  const firstColumnLabel = targetType === "incident_system_factor" ? "System Factor" : "Factor";
+  const finalColumnLabel = targetType === "incident_system_factor" ? "Category" : "Influence Type";
+
+  return {
+    columns: [firstColumnLabel, "Details", "Presence", "Classification", finalColumnLabel],
+    rows: elements
+      .filter((element) => element.element_type === targetType)
+      .map((element) => [
+        element.heading?.trim() || toTitleCaseLabel(targetType.replace("incident_", "").replaceAll("_", " ")),
+        getConfigValue(element.element_config, "description", "summary", "detail", "details"),
+        getConfigValue(element.element_config, "factor_presence", "factorPresence", "presence", "factor_presence_state", "factorPresenceState"),
+        getConfigValue(element.element_config, "factor_classification", "factorClassification", "cause_level", "causeLevel", "classification"),
+        getConfigValue(element.element_config, "category", "influence_type", "influenceType"),
+      ]),
+  };
+}
+
+function buildControlsBarriersTable(elements: CanvasElementRow[]) {
+  return {
+    columns: ["Description", "Barrier State", "Barrier Role", "Control Type", "Owner"],
+    rows: elements
+      .filter((element) => element.element_type === "incident_control_barrier")
+      .map((element) => [
+        getConfigValue(element.element_config, "description", "summary", "detail", "details") || element.heading?.trim() || "",
+        getConfigValue(element.element_config, "barrier_state", "barrierState", "state", "status"),
+        getConfigValue(element.element_config, "barrier_role", "barrierRole", "role"),
+        getConfigValue(element.element_config, "control_type", "controlType", "type"),
+        getConfigValue(element.element_config, "owner_text", "ownerText", "owner"),
+      ]),
+  };
+}
+
+function normalizeResponseRecoveryTable(columns: string[], rows: string[][]) {
   const normalizedColumns = columns.map(normalizeHeaderKey);
-
-  const findIndex = (...patterns: string[]) =>
-    normalizedColumns.findIndex((column) => patterns.some((pattern) => column.includes(pattern)));
-
-  const recommendationIndex = findIndex("recommendation", "action", "item");
-  const descriptionIndex = findIndex("description", "detail", "summary", "why");
-  const actionTypeIndex = findIndex("action type", "type");
-  const ownerIndex = findIndex("owner", "responsible");
-  const dueDateIndex = findIndex("due", "date");
-
+  const findIndex = (...patterns: string[]) => normalizedColumns.findIndex((column) => patterns.some((pattern) => column.includes(pattern)));
+  const categoryIndex = findIndex("category", "type", "classification");
+  const detailsIndex = findIndex("description", "detail", "summary", "action", "response", "recovery");
   const pick = (row: string[], index: number) => (index >= 0 ? row[index] || "" : "");
 
   return {
-    columns: ["Recommendation", "Description", "Action Type", "Owner", "Due Date"],
-    rows: rows.map((row) => [
-      pick(row, recommendationIndex),
-      pick(row, descriptionIndex),
-      pick(row, actionTypeIndex),
-      pick(row, ownerIndex),
-      pick(row, dueDateIndex),
-    ]),
+    columns: ["Response Or Recovery Action", "Category"],
+    rows: rows.map((row) => [pick(row, detailsIndex), pick(row, categoryIndex)]),
+  };
+}
+
+function normalizeFindingsTable(columns: string[], rows: string[][]) {
+  const normalizedColumns = columns.map(normalizeHeaderKey);
+  const findIndex = (...patterns: string[]) => normalizedColumns.findIndex((column) => patterns.some((pattern) => column.includes(pattern)));
+  const findingIndex = findIndex("finding", "description", "detail", "summary", "item");
+  const confidenceIndex = findIndex("confidence");
+  const pick = (row: string[], index: number) => (index >= 0 ? row[index] || "" : "");
+
+  return {
+    columns: ["Finding", "Confidence"],
+    rows: rows.map((row) => [pick(row, findingIndex), pick(row, confidenceIndex)]),
+  };
+}
+
+function buildRecommendationsTable(elements: CanvasElementRow[]) {
+  return {
+    columns: ["Description", "Action Type", "Owner", "Due Date"],
+    rows: elements
+      .filter((element) => element.element_type === "incident_recommendation")
+      .map((element) => [
+        getConfigValue(element.element_config, "description", "summary", "detail", "details") || element.heading?.trim() || "",
+        getConfigValue(element.element_config, "action_type", "actionType", "type"),
+        getConfigValue(element.element_config, "owner_text", "ownerText", "owner"),
+        getConfigValue(element.element_config, "due_date", "dueDate", "date"),
+      ]),
   };
 }
 
@@ -814,56 +1023,76 @@ export default function GeneratedInvestigationReportPage() {
   const [loadingPhase, setLoadingPhase] = useState(0);
   const [displayLoadingPhase, setDisplayLoadingPhase] = useState(0);
   const [brandingLogoUrl, setBrandingLogoUrl] = useState<string | null>(null);
+  const [activityLog, setActivityLog] = useState<string[]>([]);
   const [emailTo, setEmailTo] = useState("");
   const [emailSending, setEmailSending] = useState(false);
   const [emailPanelOpen, setEmailPanelOpen] = useState(false);
   const [emailSentFlash, setEmailSentFlash] = useState(false);
+  const initialLoadRunKeyRef = useRef<string | null>(null);
   const emailPanelRef = useRef<HTMLDivElement | null>(null);
   const emailInputRef = useRef<HTMLInputElement | null>(null);
   const emailSentTimeoutRef = useRef<number | null>(null);
 
+  const appendActivityLog = useCallback((message: string) => {
+    const timestamp = new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+    setActivityLog((current) => {
+      const next = [...current, `${timestamp}  ${message}`];
+      return next.slice(-8);
+    });
+  }, []);
+
+  const getAccessToken = useCallback(async () => {
+    const storedToken = readAccessTokenFromLocalStorage();
+    if (storedToken) return storedToken;
+
+    const { data } = await withTimeout(
+      supabase.auth.getSession(),
+      8000,
+      "Session lookup timed out after 8 seconds.",
+    );
+
+    const liveToken = data.session?.access_token?.trim();
+    if (liveToken) return liveToken;
+
+    return "";
+  }, [supabase]);
+
   const personElements = useMemo(() => elements.filter((element) => element.element_type === "person"), [elements]);
   const evidenceElements = useMemo(() => elements.filter((element) => element.element_type === "incident_evidence"), [elements]);
-  const normalizedFactorsTable = useMemo(
-    () =>
-      normalizeMainFactorsTable(
-        report?.report.sections.factors_and_system_factors.columns ?? [],
-        report?.report.sections.factors_and_system_factors.rows ?? [],
-      ),
-    [report],
-  );
+  const incidentFactorsTable = useMemo(() => buildFactorsTable(elements, "incident_factor"), [elements]);
+  const incidentSystemFactorsTable = useMemo(() => buildFactorsTable(elements, "incident_system_factor"), [elements]);
   const normalizedPredisposingFactorsTable = useMemo(
     () =>
-      normalizeMainFactorsTable(
+      normalizePredisposingFactorsTable(
         report?.report.sections.predisposing_factors.columns ?? [],
         report?.report.sections.predisposing_factors.rows ?? [],
       ),
     [report],
   );
-  const normalizedControlsTable = useMemo(
-    () =>
-      normalizeControlsTable(
-        report?.report.sections.controls_and_barriers.columns ?? [],
-        report?.report.sections.controls_and_barriers.rows ?? [],
-      ),
-    [report],
-  );
+  const controlsBarriersTable = useMemo(() => buildControlsBarriersTable(elements), [elements]);
   const responseRecoveryTable = useMemo(
-    () => ({
-      columns: report?.report.sections.response_and_recovery.columns ?? [],
-      rows: report?.report.sections.response_and_recovery.rows ?? [],
-    }),
-    [report],
-  );
-  const normalizedRecommendationsTable = useMemo(
     () =>
-      normalizeRecommendationsTable(
-        report?.report.sections.recommendations.columns ?? [],
-        report?.report.sections.recommendations.rows ?? [],
+      normalizeResponseRecoveryTable(
+        report?.report.sections.response_and_recovery.columns ?? [],
+        report?.report.sections.response_and_recovery.rows ?? [],
       ),
     [report],
   );
+  const normalizedFindingsTable = useMemo(
+    () =>
+      normalizeFindingsTable(
+        report?.report.sections.incident_findings.columns ?? [],
+        report?.report.sections.incident_findings.rows ?? [],
+      ),
+    [report],
+  );
+  const recommendationsTable = useMemo(() => buildRecommendationsTable(elements), [elements]);
   const taskConditionsTable = useMemo(() => buildTaskConditionsTable(elements), [elements]);
+  const incidentOutcomesTable = useMemo(() => buildIncidentOutcomesTable(elements), [elements]);
   const sequenceItems = useMemo<SequenceTimelineItem[]>(
     () =>
       elements
@@ -897,17 +1126,33 @@ export default function GeneratedInvestigationReportPage() {
   );
   const isPdfSectionVisible = (sectionId: PdfVisibleSectionId) =>
     report?.report.section_visibility?.[sectionId] !== false;
-  const showLoadingExperience =
-    loading ||
-    generating ||
-    (!!report && !pdfError && (!stablePdfDocument || pdfPreparing || !pdfBlobUrl)) ||
-    displayLoadingPhase < loadingPhase;
+  const pdfViewerReady = Boolean(stablePdfDocument && !pdfPreparing && pdfBlobUrl);
+  const showLoadingExperience = loading || generating || (!!report && !pdfError && !pdfViewerReady);
+  const latestActivityMessage = activityLog.length > 0 ? stripActivityTimestamp(activityLog[activityLog.length - 1]) : "";
+  const liveProgressPercent = useMemo(() => {
+    if (viewMode) {
+      if (report && stablePdfDocument && !pdfPreparing && pdfBlobUrl) return 100;
+      if (report && stablePdfDocument) return 92;
+      if (activityLog.length > 0) return Math.min(88, 10 + activityLog.length * 6);
+      return 0;
+    }
+
+    if (!generating) {
+      if (report && stablePdfDocument && !pdfPreparing && pdfBlobUrl) return 100;
+      if (report && stablePdfDocument) return 92;
+      if (loading) return 0;
+      return Math.min(88, 8 + activityLog.length * 6);
+    }
+
+    if (activityLog.length === 0) return 0;
+    return Math.min(94, 10 + activityLog.length * 6);
+  }, [activityLog.length, generating, loading, pdfBlobUrl, pdfPreparing, report, stablePdfDocument, viewMode]);
 
   useEffect(() => {
-    const targetPhase = loading
-      ? 0
-      : generating
-        ? 1
+    const targetPhase = generating
+      ? 1
+      : loading
+        ? 0
         : !report
           ? 2
           : !stablePdfDocument
@@ -918,6 +1163,19 @@ export default function GeneratedInvestigationReportPage() {
 
     setLoadingPhase((current) => Math.max(current, targetPhase));
   }, [generating, loading, pdfBlobUrl, pdfPreparing, report, stablePdfDocument]);
+
+  useEffect(() => {
+    if (!generating) return;
+
+    const intervalId = window.setInterval(() => {
+      setLoadingPhase((current) => {
+        if (current >= 4) return current;
+        return current + 1;
+      });
+    }, 1800);
+
+    return () => window.clearInterval(intervalId);
+  }, [generating]);
 
   useEffect(() => {
     if (displayLoadingPhase >= loadingPhase) return;
@@ -1207,7 +1465,10 @@ export default function GeneratedInvestigationReportPage() {
               columns={responseRecoveryTable.columns}
               rows={responseRecoveryTable.rows}
               emptyLabel="No response or recovery actions available."
-              renderCell={(value) => value || "-"}
+              renderCell={(value, _rowIndex, cellIndex) => {
+                if (cellIndex === 1) return renderResponseRecoveryCategoryPill(value);
+                return value || "-";
+              }}
             />
           </section>
         ),
@@ -1304,31 +1565,55 @@ export default function GeneratedInvestigationReportPage() {
         ),
       } : null,
       isPdfSectionVisible("factors_and_system_factors") ? {
-        key: "factors-and-system-factors",
-        label: "Factors And System Factors",
+        key: "factors",
+        label: "Factors",
         estimatedUnits: 5,
         content: (
           <section className={pageStyles.sectionBlock}>
-            <h2 className={pageStyles.inlineSectionHeading}>{report.report.sections.factors_and_system_factors.heading}</h2>
+            <h2 className={pageStyles.inlineSectionHeading}>Factors</h2>
             <DocumentTable
-              columns={normalizedFactorsTable.columns}
-              rows={normalizedFactorsTable.rows}
-              emptyLabel="No factors or system factors available."
+              columns={incidentFactorsTable.columns}
+              rows={incidentFactorsTable.rows}
+              emptyLabel="No factors available."
               renderCell={(value, _rowIndex, cellIndex) => {
-                if (cellIndex === 1 || cellIndex === 2) return renderFactorPill(value);
-                if (cellIndex === 3) return value.trim() ? toTitleCaseLabel(value) : "-";
+                if (cellIndex === 2) return renderPresencePill(value);
+                if (cellIndex === 3) return renderFactorPill(value);
+                if (cellIndex === 4) return value.trim() ? toTitleCaseLabel(value) : "-";
                 return value || "-";
               }}
-              columnClassName={(_column, cellIndex) =>
-                [
-                  pageStyles.factorCellDetails,
-                  pageStyles.factorCellPresence,
-                  pageStyles.factorCellClassification,
-                  pageStyles.factorCellItem,
-                ][cellIndex]
-              }
               columnWidthClassName={(_column, cellIndex) =>
                 [
+                  pageStyles.factorColumnItem,
+                  pageStyles.factorColumnDetails,
+                  pageStyles.factorColumnPresence,
+                  pageStyles.factorColumnClassification,
+                  pageStyles.factorColumnItem,
+                ][cellIndex]
+              }
+            />
+          </section>
+        ),
+      } : null,
+      isPdfSectionVisible("factors_and_system_factors") ? {
+        key: "system-factors",
+        label: "System Factors",
+        estimatedUnits: 5,
+        content: (
+          <section className={pageStyles.sectionBlock}>
+            <h2 className={pageStyles.inlineSectionHeading}>System Factors</h2>
+            <DocumentTable
+              columns={incidentSystemFactorsTable.columns}
+              rows={incidentSystemFactorsTable.rows}
+              emptyLabel="No system factors available."
+              renderCell={(value, _rowIndex, cellIndex) => {
+                if (cellIndex === 2) return renderPresencePill(value);
+                if (cellIndex === 3) return renderFactorPill(value);
+                if (cellIndex === 4) return value.trim() ? toTitleCaseLabel(value) : "-";
+                return value || "-";
+              }}
+              columnWidthClassName={(_column, cellIndex) =>
+                [
+                  pageStyles.factorColumnItem,
                   pageStyles.factorColumnDetails,
                   pageStyles.factorColumnPresence,
                   pageStyles.factorColumnClassification,
@@ -1352,23 +1637,13 @@ export default function GeneratedInvestigationReportPage() {
               emptyLabel="No predisposing factors available."
               renderCell={(value, _rowIndex, cellIndex) => {
                 if (cellIndex === 1) return renderPresencePill(value);
-                if (cellIndex === 2) return renderFactorPill(value);
-                if (cellIndex === 3) return value.trim() ? toTitleCaseLabel(value) : "-";
+                if (cellIndex === 2) return value.trim() ? toTitleCaseLabel(value) : "-";
                 return value || "-";
               }}
-              columnClassName={(_column, cellIndex) =>
-                [
-                  pageStyles.factorCellDetails,
-                  pageStyles.factorCellPresence,
-                  pageStyles.factorCellClassification,
-                  pageStyles.factorCellItem,
-                ][cellIndex]
-              }
               columnWidthClassName={(_column, cellIndex) =>
                 [
                   pageStyles.factorColumnDetails,
                   pageStyles.factorColumnPresence,
-                  pageStyles.factorColumnClassification,
                   pageStyles.factorColumnItem,
                 ][cellIndex]
               }
@@ -1384,32 +1659,22 @@ export default function GeneratedInvestigationReportPage() {
           <section className={pageStyles.sectionBlock}>
             <h2 className={pageStyles.inlineSectionHeading}>{report.report.sections.controls_and_barriers.heading}</h2>
             <DocumentTable
-              columns={normalizedControlsTable.columns}
-              rows={normalizedControlsTable.rows}
+              columns={controlsBarriersTable.columns}
+              rows={controlsBarriersTable.rows}
               emptyLabel="No controls or barriers available."
               renderCell={(value, _rowIndex, cellIndex) => {
-                if (cellIndex === 0) return renderFactorPrimaryCell(value);
-                if (cellIndex === 2) return value ? toTitleCaseLabel(value) : "-";
-                if (cellIndex === 3) return renderControlBarrierStatePill(value);
-                if (cellIndex === 4) return renderFactorPill(value);
+                if (cellIndex === 1) return renderControlBarrierStatePill(value);
+                if (cellIndex === 2) return renderFactorPill(value);
+                if (cellIndex === 3) return value ? toTitleCaseLabel(value) : "-";
                 return value || "-";
               }}
-              columnClassName={(_column, cellIndex) =>
-                [
-                  pageStyles.factorCellItem,
-                  pageStyles.factorCellDetails,
-                  pageStyles.factorCellType,
-                  pageStyles.factorCellPresence,
-                  pageStyles.factorCellClassification,
-                ][cellIndex]
-              }
               columnWidthClassName={(_column, cellIndex) =>
                 [
-                  pageStyles.factorColumnItem,
                   pageStyles.factorColumnDetails,
-                  pageStyles.factorColumnType,
                   pageStyles.factorColumnPresence,
                   pageStyles.factorColumnClassification,
+                  pageStyles.factorColumnType,
+                  pageStyles.factorColumnItem,
                 ][cellIndex]
               }
             />
@@ -1419,11 +1684,22 @@ export default function GeneratedInvestigationReportPage() {
       isPdfSectionVisible("incident_outcomes") ? {
         key: "incident-outcomes",
         label: "Incident Outcomes",
-        estimatedUnits: 2,
+        estimatedUnits: 4,
         content: (
           <section className={pageStyles.sectionBlock}>
             <h2 className={pageStyles.inlineSectionHeading}>Incident Outcomes</h2>
             <p className={pageStyles.paragraph}>{normalizeParagraphText(report.report.sections.incident_outcomes)}</p>
+            <DocumentTable
+              columns={incidentOutcomesTable.columns}
+              rows={incidentOutcomesTable.rows}
+              emptyLabel="No outcomes available."
+              renderCell={(value, _rowIndex, cellIndex) => {
+                if (!value) return "-";
+                if (cellIndex === 3 || cellIndex === 4) return renderOutcomeMatrixPill(value);
+                if (cellIndex === 2 || cellIndex === 5) return toTitleCaseLabel(value);
+                return value || "-";
+              }}
+            />
           </section>
         ),
       } : null,
@@ -1436,21 +1712,19 @@ export default function GeneratedInvestigationReportPage() {
             <h2 className={pageStyles.inlineSectionHeading}>Incident Findings</h2>
             <p className={pageStyles.paragraph}>{normalizeParagraphText(report.report.sections.incident_findings.summary)}</p>
             <DocumentTable
-              columns={report.report.sections.incident_findings.columns}
-              rows={report.report.sections.incident_findings.rows}
+              columns={normalizedFindingsTable.columns}
+              rows={normalizedFindingsTable.rows}
               emptyLabel="No finding details available."
-              renderCell={(value, _rowIndex, cellIndex) => (cellIndex === 2 ? renderConfidencePill(value) : value || "-")}
+              renderCell={(value, _rowIndex, cellIndex) => (cellIndex === 1 ? renderConfidencePill(value) : value || "-")}
               columnClassName={(_column, cellIndex) =>
                 [
                   pageStyles.findingColumnFinding,
-                  pageStyles.findingColumnDescription,
                   pageStyles.findingColumnConfidence,
                 ][cellIndex]
               }
               columnWidthClassName={(_column, cellIndex) =>
                 [
                   pageStyles.findingColumnFinding,
-                  pageStyles.findingColumnDescription,
                   pageStyles.findingColumnConfidence,
                 ][cellIndex]
               }
@@ -1467,13 +1741,12 @@ export default function GeneratedInvestigationReportPage() {
             <h2 className={pageStyles.inlineSectionHeading}>Recommendations</h2>
             <p className={pageStyles.paragraph}>{normalizeParagraphText(report.report.sections.recommendations.summary)}</p>
             <DocumentTable
-              columns={normalizedRecommendationsTable.columns}
-              rows={normalizedRecommendationsTable.rows}
+              columns={recommendationsTable.columns}
+              rows={recommendationsTable.rows}
               emptyLabel="No recommendations available."
-              renderCell={(value, _rowIndex, cellIndex) => (cellIndex === 2 ? renderActionTypePill(value) : value || "-")}
+              renderCell={(value, _rowIndex, cellIndex) => (cellIndex === 1 ? renderActionTypePill(value) : value || "-")}
               columnWidthClassName={(_column, cellIndex) =>
                 [
-                  pageStyles.recommendationColumnRecommendation,
                   pageStyles.recommendationColumnDescription,
                   pageStyles.recommendationColumnActionType,
                   pageStyles.recommendationColumnOwner,
@@ -1483,8 +1756,8 @@ export default function GeneratedInvestigationReportPage() {
             />
             {isPdfSectionVisible("signatures") ? (
               <div className={pageStyles.signatureGrid}>
-                {report.report.sections.recommendations.approval_fields.map((field) => (
-                  <div key={field} className={pageStyles.signatureField}>
+                {report.report.sections.recommendations.approval_fields.map((field, index) => (
+                  <div key={`${field}-${index}`} className={pageStyles.signatureField}>
                     <span>{field}</span>
                     <div />
                   </div>
@@ -1546,8 +1819,8 @@ export default function GeneratedInvestigationReportPage() {
           <section className={pageStyles.sectionBlock}>
             <h2 className={pageStyles.inlineSectionHeading}>{report.report.sections.investigation_sign_off.heading}</h2>
             <div className={pageStyles.signoffGrid}>
-              {report.report.sections.investigation_sign_off.fields.map((field) => (
-                <div key={field} className={pageStyles.signoffField}>
+              {report.report.sections.investigation_sign_off.fields.map((field, index) => (
+                <div key={`${field}-${index}`} className={pageStyles.signoffField}>
                   <span>{field}</span>
                   <div />
                 </div>
@@ -1564,10 +1837,14 @@ export default function GeneratedInvestigationReportPage() {
     personElements,
     sequenceItems,
     taskConditionsTable,
-    normalizedFactorsTable,
+    incidentFactorsTable,
+    incidentSystemFactorsTable,
     normalizedPredisposingFactorsTable,
-    normalizedControlsTable,
-    normalizedRecommendationsTable,
+    controlsBarriersTable,
+    responseRecoveryTable,
+    incidentOutcomesTable,
+    normalizedFindingsTable,
+    recommendationsTable,
     evidenceElements,
     evidenceSignedUrls,
     evidencePdfPageImages,
@@ -1670,11 +1947,14 @@ export default function GeneratedInvestigationReportPage() {
         people={pdfPeople}
         timelineItems={pdfTimelineItems}
         taskConditionsTable={taskConditionsTable}
-        factorsTable={normalizedFactorsTable}
+        incidentFactorsTable={incidentFactorsTable}
+        incidentSystemFactorsTable={incidentSystemFactorsTable}
         predisposingFactorsTable={normalizedPredisposingFactorsTable}
-        controlsTable={normalizedControlsTable}
+        controlsTable={controlsBarriersTable}
         responseRecoveryTable={responseRecoveryTable}
-        recommendationsTable={normalizedRecommendationsTable}
+        incidentOutcomesTable={incidentOutcomesTable}
+        findingsTable={normalizedFindingsTable}
+        recommendationsTable={recommendationsTable}
         evidenceEntries={pdfEvidenceEntries}
       />
     ) as ReactElement<DocumentProps>;
@@ -1686,56 +1966,70 @@ export default function GeneratedInvestigationReportPage() {
     pdfPeople,
     pdfTimelineItems,
     taskConditionsTable,
-    normalizedFactorsTable,
+    incidentFactorsTable,
+    incidentSystemFactorsTable,
     normalizedPredisposingFactorsTable,
-    normalizedControlsTable,
+    controlsBarriersTable,
     responseRecoveryTable,
-    normalizedRecommendationsTable,
+    incidentOutcomesTable,
+    normalizedFindingsTable,
+    recommendationsTable,
     pdfEvidenceEntries,
   ]);
 
   const callGenerateReport = async (args: { caseData: unknown; acknowledgeMissingInformation: boolean }) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    return fetch("/api/generate-report", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-      },
-      body: JSON.stringify(args),
-    });
+    const accessToken = await getAccessToken();
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 180000);
+
+    try {
+      return await fetch("/api/generate-report", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+        body: JSON.stringify(args),
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        throw new Error("Report generation timed out after 180 seconds while waiting for the AI response.");
+      }
+      throw error;
+    } finally {
+      window.clearTimeout(timeoutId);
+    }
   };
 
   useEffect(() => {
+    const runKey = `${params.id}:${reportId}:${viewMode ? "view" : "generate"}`;
+    if (initialLoadRunKeyRef.current === runKey) return;
+    initialLoadRunKeyRef.current = runKey;
+    let cancelled = false;
+
     const loadAndGenerate = async (acknowledgeMissingInformation = false, existingCaseData?: unknown) => {
+      if (cancelled) return;
       setGenerating(true);
       setError(null);
       setErrorDiagnostic(null);
       setLoadingPhase(0);
       setDisplayLoadingPhase(0);
+      setActivityLog([]);
+      appendActivityLog(viewMode ? "Loading saved report viewer." : "Preparing a new report generation run.");
 
       try {
         if (viewMode) {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (!session?.access_token) {
+          appendActivityLog("Checking signed-in session.");
+          const accessToken = await getAccessToken();
+          if (cancelled) return;
+          if (!accessToken) {
             router.push(`/login?returnTo=${encodeURIComponent(`/investigations/${params.id}/generated-report?reportId=${reportId}`)}`);
             return;
           }
+          const organisationBranding = await loadOrganisationBranding(accessToken).catch(() => normalizeOrganisationBranding(null));
 
-          const accessState = await fetchAccessState(session.access_token);
-          if (accessRequiresSelection(accessState)) {
-            router.push("/subscribe");
-            return;
-          }
-          if (!accessCanUseReportGeneration(accessState)) {
-            router.push("/subscribe");
-            return;
-          }
-          if (accessBlocksInvestigationEntry(accessState)) {
-            router.push("/dashboard?mapAccess=blocked");
-            return;
-          }
-
+          appendActivityLog("Loading saved report data and related investigation records.");
           const [
             { data: mapRow, error: mapError },
             { data: elementRows, error: elementsError },
@@ -1761,6 +2055,7 @@ export default function GeneratedInvestigationReportPage() {
               .eq("id", reportId)
               .single(),
           ]);
+          if (cancelled) return;
 
           if (mapError) {
             setError(mapError.message || "Unable to load investigation.");
@@ -1783,7 +2078,7 @@ export default function GeneratedInvestigationReportPage() {
 
           setMap(mapRow as MapRow);
           setElements((elementRows ?? []) as CanvasElementRow[]);
-          setReport({
+          setReport(applyOrganisationBrandingFallback({
             ...normalizeInvestigationReportPayload((savedReportRow.ai_output_json ?? {}) as Omit<ReportPayload, "saved_report">),
             saved_report: {
               id: savedReportRow.id,
@@ -1792,8 +2087,9 @@ export default function GeneratedInvestigationReportPage() {
               updated_at: savedReportRow.updated_at,
               version_number: savedReportRow.version_number,
             },
-          } as ReportPayload);
+          } as ReportPayload, organisationBranding));
           setReadiness(null);
+          appendActivityLog("Saved report loaded. Preparing PDF viewer.");
           setGenerating(false);
           setLoading(false);
           return;
@@ -1802,26 +2098,15 @@ export default function GeneratedInvestigationReportPage() {
         let caseData = existingCaseData;
 
         if (!caseData) {
-          const { data: { session } } = await supabase.auth.getSession();
-          if (!session?.access_token) {
+          appendActivityLog("Checking signed-in session.");
+          const accessToken = await getAccessToken();
+          if (cancelled) return;
+          if (!accessToken) {
             router.push(`/login?returnTo=${encodeURIComponent(`/investigations/${params.id}/generated-report`)}`);
             return;
           }
 
-          const accessState = await fetchAccessState(session.access_token);
-          if (accessRequiresSelection(accessState)) {
-            router.push("/subscribe");
-            return;
-          }
-          if (!accessCanUseReportGeneration(accessState)) {
-            router.push("/subscribe");
-            return;
-          }
-          if (accessBlocksInvestigationEntry(accessState)) {
-            router.push("/dashboard?mapAccess=blocked");
-            return;
-          }
-
+          appendActivityLog("Loading investigation map and canvas elements.");
           const [{ data: mapRow, error: mapError }, { data: elementRows, error: elementsError }] = await Promise.all([
             supabase
               .schema("ms")
@@ -1836,6 +2121,7 @@ export default function GeneratedInvestigationReportPage() {
               .eq("map_id", params.id)
               .order("created_at", { ascending: true }),
           ]);
+          if (cancelled) return;
 
           if (mapError) {
             setError(mapError.message || "Unable to load investigation.");
@@ -1854,17 +2140,42 @@ export default function GeneratedInvestigationReportPage() {
           const nextElements = (elementRows ?? []) as CanvasElementRow[];
           setMap(nextMap);
           setElements(nextElements);
+          appendActivityLog("Building report request from investigation data.");
           caseData = buildCaseData(nextMap, nextElements);
           setPendingCaseData(caseData);
         }
 
-        const response = await callGenerateReport({ caseData, acknowledgeMissingInformation });
+        appendActivityLog("Sending your report to the report builder.");
+        appendActivityLog("Report builder request sent successfully.");
+        const requestStartedAt = Date.now();
+        let waitNoticeCount = 0;
+        const waitNoticeInterval = window.setInterval(() => {
+          waitNoticeCount += 1;
+          const elapsedSeconds = Math.round((Date.now() - requestStartedAt) / 1000);
+          appendActivityLog(
+            waitNoticeCount === 1
+              ? `Waiting for the structured report response (${elapsedSeconds}s elapsed).`
+              : `Still building your structured report (${elapsedSeconds}s elapsed).`,
+          );
+        }, 12000);
+
+        let response: Response;
+        try {
+          response = await callGenerateReport({ caseData, acknowledgeMissingInformation });
+        } finally {
+          window.clearInterval(waitNoticeInterval);
+        }
+        if (cancelled) return;
+        appendActivityLog("Report builder response received.");
         const payload = (await response.json().catch(() => null)) as (ReportPayload & ErrorPayload) | ErrorPayload | null;
+        if (cancelled) return;
 
         if (response.status === 409) {
           setReadiness(payload && "readiness" in payload ? payload.readiness ?? null : null);
           setReport(null);
+          setError(payload && "error" in payload ? payload.error ?? null : null);
           setErrorDiagnostic(payload && "diagnostic" in payload ? payload.diagnostic ?? null : null);
+          appendActivityLog("Missing-information confirmation is required before continuing.");
           setLoading(false);
           setGenerating(false);
           return;
@@ -1874,40 +2185,79 @@ export default function GeneratedInvestigationReportPage() {
           setError(payload && "error" in payload ? payload.error ?? "Unable to generate report." : "Unable to generate report.");
           setReadiness(payload && "readiness" in payload ? payload.readiness ?? null : null);
           setErrorDiagnostic(payload && "diagnostic" in payload ? payload.diagnostic ?? null : null);
+          const trace = payload && "diagnostic" in payload ? payload.diagnostic?.trace ?? [] : [];
+          trace.forEach((entry) => appendActivityLog(`Server trace: ${entry}`));
+          appendActivityLog("The report could not be completed before the editor opened.");
           setLoading(false);
           setGenerating(false);
           return;
         }
 
+        appendActivityLog("Report generated and saved. Redirecting to the editor.");
         router.replace(`/investigations/${params.id}/reports/${payload.saved_report.id}/edit`);
         return;
       } catch (loadError) {
-        setError(loadError instanceof Error ? loadError.message : "Unable to generate report.");
+        if (cancelled) return;
+        const message = loadError instanceof Error ? loadError.message : "Unable to generate report.";
+        setError(message);
+        appendActivityLog(`Generation request failed: ${message}`);
         setLoading(false);
         setGenerating(false);
       }
     };
 
     void loadAndGenerate();
-  }, [params.id, reportId, router, supabase, viewMode]);
+    return () => {
+      cancelled = true;
+    };
+  }, [appendActivityLog, params.id, reportId, router, supabase, viewMode]);
 
   const handleContinueAnyway = async () => {
     if (!pendingCaseData) return;
     setError(null);
     setErrorDiagnostic(null);
+    setReadiness(null);
     setLoading(false);
     setGenerating(true);
+    setLoadingPhase(0);
+    setDisplayLoadingPhase(0);
+    setActivityLog([]);
+    appendActivityLog("Missing-information confirmation accepted.");
+    appendActivityLog("Sending your report to the report builder.");
+    appendActivityLog("Report builder request sent successfully.");
 
-    const response = await callGenerateReport({ caseData: pendingCaseData, acknowledgeMissingInformation: true });
+    const requestStartedAt = Date.now();
+    let waitNoticeCount = 0;
+    const waitNoticeInterval = window.setInterval(() => {
+      waitNoticeCount += 1;
+      const elapsedSeconds = Math.round((Date.now() - requestStartedAt) / 1000);
+      appendActivityLog(
+        waitNoticeCount === 1
+          ? `Waiting for the structured report response (${elapsedSeconds}s elapsed).`
+          : `Still building your structured report (${elapsedSeconds}s elapsed).`,
+      );
+    }, 12000);
+
+    let response: Response;
+    try {
+      response = await callGenerateReport({ caseData: pendingCaseData, acknowledgeMissingInformation: true });
+    } finally {
+      window.clearInterval(waitNoticeInterval);
+    }
+    appendActivityLog("Report builder response received.");
     const payload = (await response.json().catch(() => null)) as (ReportPayload & ErrorPayload) | ErrorPayload | null;
 
     if (!response.ok || !payload || !("report" in payload)) {
       setError(payload && "error" in payload ? payload.error ?? "Unable to generate report." : "Unable to generate report.");
       setErrorDiagnostic(payload && "diagnostic" in payload ? payload.diagnostic ?? null : null);
+      const trace = payload && "diagnostic" in payload ? payload.diagnostic?.trace ?? [] : [];
+      trace.forEach((entry) => appendActivityLog(`Server trace: ${entry}`));
+      appendActivityLog("The report could not be completed before the editor opened.");
       setGenerating(false);
       return;
     }
 
+    appendActivityLog("Report generated and saved. Redirecting to the editor.");
     router.replace(`/investigations/${params.id}/reports/${payload.saved_report.id}/edit`);
   };
 
@@ -2142,6 +2492,9 @@ export default function GeneratedInvestigationReportPage() {
                 : "Generating the report and preparing a stable PDF preview."
             }
             helperText="This may take a few minutes for larger reports."
+            activityLog={activityLog}
+            progressPercent={liveProgressPercent}
+            statusText={latestActivityMessage || undefined}
             inline
           />
         </section>
@@ -2181,7 +2534,9 @@ export default function GeneratedInvestigationReportPage() {
               <span>Generating report...</span>
             </div>
           ) : null}
-          {error ? <p className={`${shellStyles.message} ${shellStyles.messageError}`}>{error}</p> : null}
+          {error && !(readiness && readiness.missing_information_detected.length > 0 && !report) ? (
+            <p className={`${shellStyles.message} ${shellStyles.messageError}`}>{error}</p>
+          ) : null}
           {errorDiagnostic ? (
             <div className={shellStyles.accountSection}>
               <h2 className={pageStyles.readinessHeading}>Generation Diagnostic</h2>
@@ -2197,20 +2552,31 @@ export default function GeneratedInvestigationReportPage() {
             <div className={shellStyles.accountSection}>
               <h2 className={pageStyles.readinessHeading}>Missing Information</h2>
               {readiness.disclaimer ? <p className={pageStyles.readinessDisclaimerText}>{readiness.disclaimer}</p> : null}
-              <ul className={pageStyles.warningList}>
+              <ul className={`${pageStyles.warningList} ${pageStyles.readinessPrimaryList}`}>
                 {readiness.missing_information_detected.map((item) => <li key={item}>{item}</li>)}
               </ul>
               {readiness.suggested_next_steps.length > 0 ? (
                 <div className={`${shellStyles.reportScopeActions} ${pageStyles.readinessFollowup}`}>
                   <div className={pageStyles.readinessFollowupContent}>
-                    <h2 className={pageStyles.readinessHeading}>Suggested next steps</h2>
-                    <ul className={pageStyles.warningList}>
+                    <h2 className={pageStyles.readinessSubheading}>Suggested next steps</h2>
+                    <ul className={`${pageStyles.warningList} ${pageStyles.readinessSecondaryList}`}>
                       {readiness.suggested_next_steps.map((item) => <li key={item}>{item}</li>)}
                     </ul>
                     {!report ? (
                       <div className={`${shellStyles.reportScopeActionButtons} ${pageStyles.readinessActionButtons}`}>
-                        <button type="button" className={`${shellStyles.button} ${shellStyles.buttonAccent}`} onClick={() => router.push(`/investigations/${params.id}`)}>Go Back</button>
-                        <button type="button" className={`${shellStyles.button} ${shellStyles.buttonAccent}`} onClick={() => void handleContinueAnyway()} disabled={generating}>
+                        <button
+                          type="button"
+                          className={`${shellStyles.button} ${pageStyles.readinessBackButton}`}
+                          onClick={() => router.push(`/investigations/${params.id}`)}
+                        >
+                          Go Back
+                        </button>
+                        <button
+                          type="button"
+                          className={`${shellStyles.button} ${pageStyles.readinessContinueButton}`}
+                          onClick={() => void handleContinueAnyway()}
+                          disabled={generating}
+                        >
                           {generating ? "Generating..." : "Continue Anyway"}
                         </button>
                       </div>

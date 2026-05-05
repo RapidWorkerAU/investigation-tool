@@ -8,6 +8,43 @@ import { accessRequiresSelection, fetchAccessState } from "@/lib/access";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
 import styles from "./LoginPage.module.css";
 
+const SESSION_STORAGE_KEYS = {
+  accessToken: "investigation_tool_access_token",
+  refreshToken: "investigation_tool_refresh_token",
+  userEmail: "investigation_tool_user_email",
+  userId: "investigation_tool_user_id",
+} as const;
+
+function persistPortalSession(session: {
+  access_token?: string;
+  refresh_token?: string;
+  user?: { email?: string | null; id?: string };
+}) {
+  if (typeof window === "undefined") return;
+
+  if (session.access_token) {
+    window.localStorage.setItem(SESSION_STORAGE_KEYS.accessToken, session.access_token);
+  }
+  if (session.refresh_token) {
+    window.localStorage.setItem(SESSION_STORAGE_KEYS.refreshToken, session.refresh_token);
+  }
+  if (session.user?.email) {
+    window.localStorage.setItem(SESSION_STORAGE_KEYS.userEmail, session.user.email);
+  }
+  if (session.user?.id) {
+    window.localStorage.setItem(SESSION_STORAGE_KEYS.userId, session.user.id);
+  }
+}
+
+async function acceptPendingOrganisationInvites(accessToken: string) {
+  await fetch("/api/account/organisation-invites/accept", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  }).catch(() => null);
+}
+
 type AuthMode = "login" | "signup";
 type NoticeType = "error" | "success" | "info";
 
@@ -152,6 +189,9 @@ function LoginPageContent() {
       router.refresh();
       return;
     }
+
+    persistPortalSession(session);
+    await acceptPendingOrganisationInvites(session.access_token);
 
     try {
       const accessState = await fetchAccessState(session.access_token);

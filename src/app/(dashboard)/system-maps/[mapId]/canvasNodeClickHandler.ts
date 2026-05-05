@@ -90,7 +90,7 @@ export const handleCanvasNodeClick = ({
   setSelectedBowtieElementId,
   setMobileNodeMenuId,
 }: HandleCanvasNodeClickParams) => {
-  setSelectedFlowIds((prev) => (prev.size ? new Set<string>() : prev));
+  const markSelected = () => setSelectedFlowIds(new Set<string>([node.id]));
   setSelectedFlowShapeId(null);
 
   if (mapRole === "read") {
@@ -98,6 +98,7 @@ export const handleCanvasNodeClick = ({
       const stickyId = parseProcessFlowId(node.id);
       const sticky = elements.find((el) => el.id === stickyId && el.element_type === "sticky_note");
       if (sticky && canEditElement(sticky)) {
+        markSelected();
         setSelectedNodeId(null);
         setSelectedProcessId(null);
         setSelectedSystemId(null);
@@ -112,6 +113,7 @@ export const handleCanvasNodeClick = ({
         return;
       }
     }
+    markSelected();
     setSelectedStickyId(null);
     setSelectedPersonId(null);
     setSelectedImageId(null);
@@ -127,11 +129,13 @@ export const handleCanvasNodeClick = ({
   if (node.data.entityKind === "category") {
     if (isMobile) {
       if (isMobileDoubleTap(node.id, lastMobileTapRef)) {
+        markSelected();
         setSelectedNodeId(null);
         setSelectedProcessId(parseProcessFlowId(node.id));
       }
       return;
     }
+    markSelected();
     setSelectedNodeId(null);
     setSelectedSystemId(null);
     setSelectedProcessComponentId(null);
@@ -149,6 +153,7 @@ export const handleCanvasNodeClick = ({
   if (node.data.entityKind === "process_component") {
     if (isMobile) {
       if (isMobileDoubleTap(node.id, lastMobileTapRef)) {
+        markSelected();
         setSelectedNodeId(null);
         setSelectedProcessId(null);
         setSelectedSystemId(null);
@@ -158,6 +163,7 @@ export const handleCanvasNodeClick = ({
       }
       return;
     }
+    markSelected();
     setSelectedNodeId(null);
     setSelectedProcessId(null);
     setSelectedSystemId(null);
@@ -175,6 +181,7 @@ export const handleCanvasNodeClick = ({
   if (node.data.entityKind === "system_circle") {
     if (isMobile) {
       if (isMobileDoubleTap(node.id, lastMobileTapRef)) {
+        markSelected();
         setSelectedNodeId(null);
         setSelectedProcessId(null);
         setSelectedPersonId(null);
@@ -182,6 +189,7 @@ export const handleCanvasNodeClick = ({
       }
       return;
     }
+    markSelected();
     setSelectedNodeId(null);
     setSelectedProcessId(null);
     setSelectedProcessComponentId(null);
@@ -199,6 +207,7 @@ export const handleCanvasNodeClick = ({
   if (node.data.entityKind === "person") {
     if (isMobile) {
       if (isMobileDoubleTap(node.id, lastMobileTapRef)) {
+        markSelected();
         setSelectedNodeId(null);
         setSelectedProcessId(null);
         setSelectedSystemId(null);
@@ -211,6 +220,7 @@ export const handleCanvasNodeClick = ({
       }
       return;
     }
+    markSelected();
     setSelectedNodeId(null);
     setSelectedProcessId(null);
     setSelectedSystemId(null);
@@ -230,6 +240,7 @@ export const handleCanvasNodeClick = ({
     if (!clickedGroupingHandle) return;
     if (isMobile) {
       if (isMobileDoubleTap(node.id, lastMobileTapRef)) {
+        markSelected();
         setSelectedNodeId(null);
         setSelectedProcessId(null);
         setSelectedSystemId(null);
@@ -238,6 +249,7 @@ export const handleCanvasNodeClick = ({
       }
       return;
     }
+    markSelected();
     setSelectedNodeId(null);
     setSelectedProcessId(null);
     setSelectedSystemId(null);
@@ -254,6 +266,7 @@ export const handleCanvasNodeClick = ({
   if (node.data.entityKind === "image_asset") {
     if (isMobile) {
       if (isMobileDoubleTap(node.id, lastMobileTapRef)) {
+        markSelected();
         setSelectedNodeId(null);
         setSelectedProcessId(null);
         setSelectedSystemId(null);
@@ -268,6 +281,7 @@ export const handleCanvasNodeClick = ({
       }
       return;
     }
+    markSelected();
     setSelectedNodeId(null);
     setSelectedProcessId(null);
     setSelectedSystemId(null);
@@ -285,6 +299,7 @@ export const handleCanvasNodeClick = ({
   if (node.data.entityKind === "text_box") {
     if (isMobile) {
       if (isMobileDoubleTap(node.id, lastMobileTapRef)) {
+        markSelected();
         setSelectedNodeId(null);
         setSelectedProcessId(null);
         setSelectedSystemId(null);
@@ -299,6 +314,7 @@ export const handleCanvasNodeClick = ({
       }
       return;
     }
+    markSelected();
     setSelectedNodeId(null);
     setSelectedProcessId(null);
     setSelectedSystemId(null);
@@ -316,6 +332,7 @@ export const handleCanvasNodeClick = ({
   if (node.data.entityKind === "table") {
     if (isMobile) {
       if (isMobileDoubleTap(node.id, lastMobileTapRef)) {
+        markSelected();
         setSelectedNodeId(null);
         setSelectedProcessId(null);
         setSelectedSystemId(null);
@@ -330,6 +347,7 @@ export const handleCanvasNodeClick = ({
       }
       return;
     }
+    markSelected();
     setSelectedNodeId(null);
     setSelectedProcessId(null);
     setSelectedSystemId(null);
@@ -354,6 +372,7 @@ export const handleCanvasNodeClick = ({
   ) {
     if (isMobile) {
       if (isMobileDoubleTap(node.id, lastMobileTapRef)) {
+        markSelected();
         setSelectedNodeId(null);
         setSelectedProcessId(null);
         setSelectedSystemId(null);
@@ -369,6 +388,7 @@ export const handleCanvasNodeClick = ({
       }
       return;
     }
+    markSelected();
     setSelectedNodeId(null);
     setSelectedProcessId(null);
     setSelectedSystemId(null);
@@ -387,6 +407,7 @@ export const handleCanvasNodeClick = ({
   if (isBowtieKind) {
     if (isMobile) {
       if (isMobileDoubleTap(node.id, lastMobileTapRef)) {
+        markSelected();
         setSelectedNodeId(null);
         setSelectedProcessId(null);
         setSelectedSystemId(null);
@@ -401,6 +422,7 @@ export const handleCanvasNodeClick = ({
       }
       return;
     }
+    markSelected();
     setSelectedNodeId(null);
     setSelectedProcessId(null);
     setSelectedSystemId(null);
@@ -416,6 +438,7 @@ export const handleCanvasNodeClick = ({
   }
 
   if (node.data.entityKind === "sticky_note") {
+    markSelected();
     setSelectedNodeId(null);
     setSelectedProcessId(null);
     setSelectedSystemId(null);
@@ -432,11 +455,13 @@ export const handleCanvasNodeClick = ({
 
   if (isMobile) {
     if (isMobileDoubleTap(node.id, lastMobileTapRef)) {
+      markSelected();
       setMobileNodeMenuId(node.id);
     }
     return;
   }
 
+  markSelected();
   setSelectedProcessId(null);
   setSelectedSystemId(null);
   setSelectedProcessComponentId(null);

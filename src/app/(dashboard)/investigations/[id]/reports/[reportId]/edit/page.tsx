@@ -8,6 +8,13 @@ import DashboardTableFooter from "@/components/dashboard/DashboardTableFooter";
 import shellStyles from "@/components/dashboard/DashboardShell.module.css";
 import editStyles from "../EditReportPage.module.css";
 import { ReportProgressLoadingView } from "@/components/loading/ReportProgressLoadingView";
+import {
+  DEFAULT_REPORT_SECTION_HEADING_COLOR,
+  DEFAULT_REPORT_TABLE_HEADING_COLOR,
+  type OrganisationBranding,
+  type ResolvedOrganisationBranding,
+  normalizeOrganisationBranding,
+} from "@/lib/organisationBranding";
 import { accessBlocksInvestigationEntry, accessCanUseReportGeneration, accessRequiresSelection, fetchAccessState } from "@/lib/access";
 import {
   buildDraftReportText,
@@ -70,7 +77,8 @@ type SectionId =
   | "incident_outcomes"
   | "people_involved"
   | "incident_timeline"
-  | "factors_and_system_factors"
+  | "incident_factors"
+  | "incident_system_factors"
   | "predisposing_factors"
   | "controls_and_barriers"
   | "incident_findings"
@@ -145,9 +153,16 @@ const sectionDefinitions: SectionDefinition[] = [
     canHideInPdf: true,
   },
   {
-    id: "factors_and_system_factors",
-    label: "Factors & System Factors",
-    description: "Read-only node-backed table used in the report.",
+    id: "incident_factors",
+    label: "Factors",
+    description: "Read-only factor node table used in the report.",
+    mode: "read_only",
+    canHideInPdf: true,
+  },
+  {
+    id: "incident_system_factors",
+    label: "System Factors",
+    description: "Read-only system factor node table used in the report.",
     mode: "read_only",
     canHideInPdf: true,
   },
@@ -202,13 +217,47 @@ const sectionDefinitions: SectionDefinition[] = [
   },
 ];
 
-const hideableSectionIds = sectionDefinitions
-  .filter((section) => section.canHideInPdf)
-  .map((section) => section.id as Exclude<SectionId, "document_branding">);
+type PdfVisibleSectionId = keyof NonNullable<InvestigationSavedReportPayload["report"]["section_visibility"]>;
+type EditablePdfVisibleSectionId = Extract<SectionId, PdfVisibleSectionId>;
+
+const hideableSectionIds: PdfVisibleSectionId[] = [
+  "executive_summary",
+  "long_description",
+  "response_and_recovery",
+  "task_and_conditions",
+  "incident_outcomes",
+  "people_involved",
+  "incident_timeline",
+  "factors_and_system_factors",
+  "predisposing_factors",
+  "controls_and_barriers",
+  "incident_findings",
+  "recommendations",
+  "preliminary_facts",
+  "evidence",
+  "signatures",
+];
+
+const sectionVisibilityAliases: Partial<Record<SectionId, PdfVisibleSectionId>> = {
+  incident_factors: "factors_and_system_factors",
+  incident_system_factors: "factors_and_system_factors",
+};
+
+function isPdfVisibleSectionId(sectionId: SectionId): sectionId is EditablePdfVisibleSectionId {
+  return hideableSectionIds.includes((sectionVisibilityAliases[sectionId] ?? sectionId) as PdfVisibleSectionId);
+}
+
+function getPdfVisibilitySectionId(sectionId: SectionId): PdfVisibleSectionId | null {
+  const resolvedSectionId = sectionVisibilityAliases[sectionId] ?? sectionId;
+  return hideableSectionIds.includes(resolvedSectionId as PdfVisibleSectionId)
+    ? (resolvedSectionId as PdfVisibleSectionId)
+    : null;
+}
 
 function isSectionVisibleInPdf(report: InvestigationSavedReportPayload, sectionId: SectionId) {
-  if (!hideableSectionIds.includes(sectionId as Exclude<SectionId, "document_branding">)) return true;
-  return report.report.section_visibility?.[sectionId as Exclude<SectionId, "document_branding">] !== false;
+  const visibleSectionId = getPdfVisibilitySectionId(sectionId);
+  if (!visibleSectionId) return true;
+  return report.report.section_visibility?.[visibleSectionId] !== false;
 }
 
 function getSectionValue(report: InvestigationSavedReportPayload, sectionId: SectionId) {
@@ -419,8 +468,8 @@ function normalizeHexColor(value: string, fallback: string) {
   return fallback;
 }
 
-const defaultSectionHeadingColor = "#22344d";
-const defaultTableHeadingColor = "#7c8793";
+const defaultSectionHeadingColor = DEFAULT_REPORT_SECTION_HEADING_COLOR;
+const defaultTableHeadingColor = DEFAULT_REPORT_TABLE_HEADING_COLOR;
 
 type ReportBrandingState = {
   logo_storage_path?: string;
@@ -475,6 +524,21 @@ function applyReportBrandingFallback(
       },
     },
   };
+}
+
+async function loadOrganisationBranding(accessToken: string) {
+  const response = await fetch("/api/account/organisation-branding", {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  const payload = (await response.json().catch(() => null)) as { branding?: OrganisationBranding; error?: string } | null;
+  if (!response.ok) {
+    throw new Error(payload?.error || "Unable to load organisation branding.");
+  }
+
+  return normalizeOrganisationBranding(payload?.branding ?? null);
 }
 
 function autosizePreliminaryFactTextarea(textarea: HTMLTextAreaElement) {
@@ -582,6 +646,145 @@ function renderTaskConditionStatePill(value: string) {
   return <span className={`${shellStyles.statusPill} ${pillClass}`}>{toTitleCaseLabel(trimmed)}</span>;
 }
 
+function renderConfidencePill(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "-";
+
+  let pillClass = shellStyles.factorPillNeutral;
+
+  switch (trimmed.toLowerCase()) {
+    case "high":
+      pillClass = shellStyles.factorPillPresent;
+      break;
+    case "medium":
+      pillClass = shellStyles.factorPillContributing;
+      break;
+    case "low":
+      pillClass = shellStyles.factorPillAbsent;
+      break;
+    default:
+      pillClass = shellStyles.factorPillNeutral;
+      break;
+  }
+
+  return <span className={`${shellStyles.statusPill} ${pillClass}`}>{toTitleCaseLabel(trimmed)}</span>;
+}
+
+function getResponseRecoveryCategoryPillStyle(value: string) {
+  const normalized = value.trim().toLowerCase();
+
+  switch (normalized) {
+    case "emergency_response":
+      return {
+        backgroundColor: "#FEF3C7",
+        color: "#92400E",
+        borderColor: "#FCD34D",
+      };
+    case "make_area_safe":
+      return {
+        backgroundColor: "#F3E8FF",
+        color: "#6B21A8",
+        borderColor: "#D8B4FE",
+      };
+    case "medical_treatment":
+      return {
+        backgroundColor: "#DCFCE7",
+        color: "#166534",
+        borderColor: "#86EFAC",
+      };
+    case "scene_preservation":
+      return {
+        backgroundColor: "#E0E7FF",
+        color: "#3730A3",
+        borderColor: "#A5B4FC",
+      };
+    default:
+      return {
+        backgroundColor: "#FCE7F3",
+        color: "#9D174D",
+        borderColor: "#F9A8D4",
+      };
+  }
+}
+
+function renderResponseRecoveryCategoryPill(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "-";
+
+  return (
+    <span
+      className={shellStyles.statusPill}
+      style={getResponseRecoveryCategoryPillStyle(trimmed)}
+    >
+      {toTitleCaseLabel(trimmed)}
+    </span>
+  );
+}
+
+function getOutcomeMatrixPillStyle(value: string) {
+  const normalized = value.trim().toLowerCase();
+
+  switch (normalized) {
+    case "rare":
+    case "insignificant":
+      return {
+        backgroundColor: "#DCFCE7",
+        color: "#166534",
+        borderColor: "#86EFAC",
+      };
+    case "unlikely":
+    case "minor":
+      return {
+        backgroundColor: "#ECFCCB",
+        color: "#3F6212",
+        borderColor: "#BEF264",
+      };
+    case "possible":
+    case "moderate":
+      return {
+        backgroundColor: "#FEF3C7",
+        color: "#92400E",
+        borderColor: "#FCD34D",
+      };
+    case "likely":
+    case "major":
+      return {
+        backgroundColor: "#FED7AA",
+        color: "#9A3412",
+        borderColor: "#FB923C",
+      };
+    case "almost_certain":
+    case "almost certain":
+    case "severe":
+    case "catastrophic":
+      return {
+        backgroundColor: "#FEE2E2",
+        color: "#7F1D1D",
+        borderColor: "#F87171",
+      };
+    default:
+      return {
+        backgroundColor: "#F3F4F6",
+        color: "#374151",
+        borderColor: "#D1D5DB",
+      };
+  }
+}
+
+function renderOutcomeMatrixPill(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "-";
+
+  return (
+    <span
+      className={shellStyles.statusPill}
+      style={getOutcomeMatrixPillStyle(trimmed)}
+    >
+      {toTitleCaseLabel(trimmed)}
+    </span>
+  );
+}
+
 function normalizeMainFactorsTable(columns: string[], rows: string[][]) {
   const normalizedColumns = columns.map(normalizeHeaderKey);
   const findIndex = (...patterns: string[]) => normalizedColumns.findIndex((column) => patterns.some((pattern) => column.includes(pattern)));
@@ -612,33 +815,103 @@ function normalizeMainFactorsTable(columns: string[], rows: string[][]) {
   };
 }
 
-function normalizeControlsTable(columns: string[], rows: string[][]) {
+function normalizePredisposingFactorsTable(columns: string[], rows: string[][]) {
   const normalizedColumns = columns.map(normalizeHeaderKey);
   const findIndex = (...patterns: string[]) => normalizedColumns.findIndex((column) => patterns.some((pattern) => column.includes(pattern)));
-  const itemIndex = findIndex("control", "barrier", "item");
-  const typeIndex = findIndex("type");
-  const stateIndex = findIndex("state", "status", "present", "failed", "absent");
-  const roleIndex = findIndex("role", "classification");
+  const foundItemIndex = findIndex("factor", "item", "name");
+  const itemIndex = foundItemIndex >= 0 ? foundItemIndex : 0;
+  const presenceIndex = findIndex("presence", "status", "present");
   const detailsIndex = findIndex("detail", "support", "description", "definition", "why");
+  const categoryIndex = findIndex("category", "influence", "type");
   const pick = (row: string[], index: number) => (index >= 0 ? row[index] || "" : "");
+
   return {
-    columns: ["Item", "Details", "Type", "State", "Role"],
-    rows: rows.map((row) => [pick(row, itemIndex), pick(row, detailsIndex), pick(row, typeIndex), pick(row, stateIndex), pick(row, roleIndex)]),
+    columns: ["Details", "Presence", "Influence Type"],
+    rows: rows.map((row) => {
+      const rawItem = pick(row, itemIndex);
+      const itemParts = splitBracketedValue(rawItem);
+      const detailText = pick(row, detailsIndex) || itemParts.main || rawItem;
+
+      return [
+        detailText,
+        pick(row, presenceIndex),
+        pick(row, categoryIndex),
+      ];
+    }),
   };
 }
 
-function normalizeRecommendationsTable(columns: string[], rows: string[][]) {
+function buildFactorsTable(elements: CanvasElementRow[], targetType: "incident_factor" | "incident_system_factor") {
+  const firstColumnLabel = targetType === "incident_system_factor" ? "System Factor" : "Factor";
+  const finalColumnLabel = targetType === "incident_system_factor" ? "Category" : "Influence Type";
+
+  return {
+    columns: [firstColumnLabel, "Details", "Presence", "Classification", finalColumnLabel],
+    rows: elements
+      .filter((element) => element.element_type === targetType)
+      .map((element) => [
+        element.heading?.trim() || toTitleCaseLabel(targetType.replace("incident_", "").replaceAll("_", " ")),
+        getConfigValue(element.element_config, "description", "summary", "detail", "details"),
+        getConfigValue(
+          element.element_config,
+          "factor_presence",
+          "factorPresence",
+          "presence",
+          "factor_presence_state",
+          "factorPresenceState",
+        ),
+        getConfigValue(
+          element.element_config,
+          "factor_classification",
+          "factorClassification",
+          "cause_level",
+          "causeLevel",
+          "classification",
+        ),
+        getConfigValue(element.element_config, "category", "influence_type", "influenceType"),
+      ]),
+  };
+}
+
+function buildControlsBarriersTable(elements: CanvasElementRow[]) {
+  return {
+    columns: ["Description", "Barrier State", "Barrier Role", "Control Type", "Owner"],
+    rows: elements
+      .filter((element) => element.element_type === "incident_control_barrier")
+      .map((element) => [
+        getConfigValue(element.element_config, "description", "summary", "detail", "details") || element.heading?.trim() || "",
+        getConfigValue(element.element_config, "barrier_state", "barrierState", "state", "status"),
+        getConfigValue(element.element_config, "barrier_role", "barrierRole", "role"),
+        getConfigValue(element.element_config, "control_type", "controlType", "type"),
+        getConfigValue(element.element_config, "owner_text", "ownerText", "owner"),
+      ]),
+  };
+}
+
+function buildRecommendationsTable(elements: CanvasElementRow[]) {
+  return {
+    columns: ["Description", "Action Type", "Owner", "Due Date"],
+    rows: elements
+      .filter((element) => element.element_type === "incident_recommendation")
+      .map((element) => [
+        getConfigValue(element.element_config, "description", "summary", "detail", "details") || element.heading?.trim() || "",
+        getConfigValue(element.element_config, "action_type", "actionType", "type"),
+        getConfigValue(element.element_config, "owner_text", "ownerText", "owner"),
+        getConfigValue(element.element_config, "due_date", "dueDate", "date"),
+      ]),
+  };
+}
+
+function normalizeResponseRecoveryTable(columns: string[], rows: string[][]) {
   const normalizedColumns = columns.map(normalizeHeaderKey);
   const findIndex = (...patterns: string[]) => normalizedColumns.findIndex((column) => patterns.some((pattern) => column.includes(pattern)));
-  const recommendationIndex = findIndex("recommendation", "action", "item");
-  const descriptionIndex = findIndex("description", "detail", "summary", "why");
-  const actionTypeIndex = findIndex("action type", "type");
-  const ownerIndex = findIndex("owner", "responsible");
-  const dueDateIndex = findIndex("due", "date");
+  const categoryIndex = findIndex("category", "type", "classification");
+  const detailsIndex = findIndex("description", "detail", "summary", "action", "response", "recovery");
   const pick = (row: string[], index: number) => (index >= 0 ? row[index] || "" : "");
+
   return {
-    columns: ["Recommendation", "Description", "Action Type", "Owner", "Due Date"],
-    rows: rows.map((row) => [pick(row, recommendationIndex), pick(row, descriptionIndex), pick(row, actionTypeIndex), pick(row, ownerIndex), pick(row, dueDateIndex)]),
+    columns: ["Response Or Recovery Action", "Category"],
+    rows: rows.map((row) => [pick(row, detailsIndex), pick(row, categoryIndex)]),
   };
 }
 
@@ -652,6 +925,35 @@ function buildTaskConditionsTable(elements: CanvasElementRow[]) {
         getConfigValue(element.element_config, "state") || "normal",
         getConfigValue(element.element_config, "environmental_context", "environmentalContext", "context"),
       ]),
+  };
+}
+
+function buildIncidentOutcomesTable(elements: CanvasElementRow[]) {
+  return {
+    columns: ["Outcome", "Description", "Category", "Likelihood", "Consequence", "Reporting Outcome"],
+    rows: elements
+      .filter((element) => element.element_type === "incident_outcome")
+      .map((element) => [
+        element.heading?.trim() || "Outcome",
+        getConfigValue(element.element_config, "description", "summary", "detail", "details"),
+        getConfigValue(element.element_config, "consequence_category"),
+        getConfigValue(element.element_config, "likelihood"),
+        getConfigValue(element.element_config, "consequence"),
+        getConfigValue(element.element_config, "reporting_consequence"),
+      ]),
+  };
+}
+
+function normalizeFindingsTable(columns: string[], rows: string[][]) {
+  const normalizedColumns = columns.map(normalizeHeaderKey);
+  const findIndex = (...patterns: string[]) => normalizedColumns.findIndex((column) => patterns.some((pattern) => column.includes(pattern)));
+  const findingIndex = findIndex("finding", "description", "detail", "summary", "item");
+  const confidenceIndex = findIndex("confidence");
+  const pick = (row: string[], index: number) => (index >= 0 ? row[index] || "" : "");
+
+  return {
+    columns: ["Finding", "Confidence"],
+    rows: rows.map((row) => [pick(row, findingIndex), pick(row, confidenceIndex)]),
   };
 }
 
@@ -787,7 +1089,8 @@ export default function EditInvestigationReportPage() {
     incident_outcomes: false,
     people_involved: false,
     incident_timeline: false,
-    factors_and_system_factors: false,
+    incident_factors: false,
+    incident_system_factors: false,
     predisposing_factors: false,
     controls_and_barriers: false,
     incident_findings: false,
@@ -804,6 +1107,11 @@ export default function EditInvestigationReportPage() {
   const [brandingLogoUrl, setBrandingLogoUrl] = useState<string | null>(null);
   const [brandingUploading, setBrandingUploading] = useState(false);
   const [brandingResetFlash, setBrandingResetFlash] = useState(false);
+  const [brandingDefaults, setBrandingDefaults] = useState<ResolvedOrganisationBranding>({
+    logo_storage_path: "",
+    section_heading_color: defaultSectionHeadingColor,
+    table_heading_color: defaultTableHeadingColor,
+  });
   const editorScrollTopRef = useRef(0);
   const shouldRestoreEditorScrollRef = useRef(false);
   const brandingResetTimeoutRef = useRef<number | null>(null);
@@ -812,9 +1120,7 @@ export default function EditInvestigationReportPage() {
   const [imageLayoutsReady, setImageLayoutsReady] = useState(false);
   const [loadingPhase, setLoadingPhase] = useState(0);
   const [displayLoadingPhase, setDisplayLoadingPhase] = useState(0);
-  const sidebarCardRef = useRef<HTMLElement | null>(null);
   const editorCardRef = useRef<HTMLDivElement | null>(null);
-  const [syncedSidebarHeight, setSyncedSidebarHeight] = useState<number | null>(null);
 
   const activeSection = sectionDefinitions.find((section) => section.id === activeSectionId) ?? sectionDefinitions[0];
   const personElements = useMemo(() => elements.filter((element) => element.element_type === "person"), [elements]);
@@ -851,46 +1157,36 @@ export default function EditInvestigationReportPage() {
         .map(({ id, date, time, location, description }) => ({ id, date, time, location, description })),
     [elements],
   );
-  const normalizedFactorsTable = useMemo(
-    () =>
-      normalizeMainFactorsTable(
-        report?.report.sections.factors_and_system_factors.columns ?? [],
-        report?.report.sections.factors_and_system_factors.rows ?? [],
-      ),
-    [report],
-  );
+  const incidentFactorsTable = useMemo(() => buildFactorsTable(elements, "incident_factor"), [elements]);
+  const incidentSystemFactorsTable = useMemo(() => buildFactorsTable(elements, "incident_system_factor"), [elements]);
   const normalizedPredisposingFactorsTable = useMemo(
     () =>
-      normalizeMainFactorsTable(
+      normalizePredisposingFactorsTable(
         report?.report.sections.predisposing_factors.columns ?? [],
         report?.report.sections.predisposing_factors.rows ?? [],
       ),
     [report],
   );
-  const normalizedControlsTable = useMemo(
+  const controlsBarriersTable = useMemo(() => buildControlsBarriersTable(elements), [elements]);
+  const normalizedFindingsTable = useMemo(
     () =>
-      normalizeControlsTable(
-        report?.report.sections.controls_and_barriers.columns ?? [],
-        report?.report.sections.controls_and_barriers.rows ?? [],
+      normalizeFindingsTable(
+        report?.report.sections.incident_findings.columns ?? [],
+        report?.report.sections.incident_findings.rows ?? [],
       ),
     [report],
   );
   const normalizedResponseRecoveryTable = useMemo(
-    () => ({
-      columns: report?.report.sections.response_and_recovery.columns ?? [],
-      rows: report?.report.sections.response_and_recovery.rows ?? [],
-    }),
-    [report],
-  );
-  const normalizedRecommendationsTable = useMemo(
     () =>
-      normalizeRecommendationsTable(
-        report?.report.sections.recommendations.columns ?? [],
-        report?.report.sections.recommendations.rows ?? [],
+      normalizeResponseRecoveryTable(
+        report?.report.sections.response_and_recovery.columns ?? [],
+        report?.report.sections.response_and_recovery.rows ?? [],
       ),
     [report],
   );
+  const recommendationsTable = useMemo(() => buildRecommendationsTable(elements), [elements]);
   const taskConditionsTable = useMemo(() => buildTaskConditionsTable(elements), [elements]);
+  const incidentOutcomesTable = useMemo(() => buildIncidentOutcomesTable(elements), [elements]);
   const dirtySectionCount = useMemo(() => {
     if (!report || !lastSavedReport) return 0;
 
@@ -954,9 +1250,7 @@ export default function EditInvestigationReportPage() {
         : [],
     [report],
   );
-  const evidencePreviewReady = signedUrlsReady && pdfLayoutsReady && imageLayoutsReady;
-  const needsDataLoading = loading || (!!report && !!map && !evidencePreviewReady);
-  const showLoadingExperience = needsDataLoading || displayLoadingPhase < loadingPhase;
+  const showLoadingExperience = loading;
 
   useEffect(() => {
     const hasCoreData = Boolean(report && map);
@@ -1019,67 +1313,6 @@ export default function EditInvestigationReportPage() {
     shouldRestoreEditorScrollRef.current = false;
   }, [activeSectionId]);
 
-  useLayoutEffect(() => {
-    const editorNode = editorCardRef.current;
-    if (!editorNode || typeof window === "undefined" || typeof ResizeObserver === "undefined") return;
-
-    const syncHeight = () => {
-      setSyncedSidebarHeight(editorNode.getBoundingClientRect().height);
-    };
-
-    syncHeight();
-    const rafId = window.requestAnimationFrame(() => syncHeight());
-    const timeoutIds = [
-      window.setTimeout(() => syncHeight(), 0),
-      window.setTimeout(() => syncHeight(), 80),
-      window.setTimeout(() => syncHeight(), 180),
-      window.setTimeout(() => syncHeight(), 320),
-    ];
-    const resizeObserver = new ResizeObserver(() => syncHeight());
-    resizeObserver.observe(editorNode);
-    const mutationObserver = new MutationObserver(() => syncHeight());
-    mutationObserver.observe(editorNode, { childList: true, subtree: true, characterData: true });
-    window.addEventListener("resize", syncHeight);
-
-    return () => {
-      window.cancelAnimationFrame(rafId);
-      timeoutIds.forEach((timeoutId) => window.clearTimeout(timeoutId));
-      resizeObserver.disconnect();
-      mutationObserver.disconnect();
-      window.removeEventListener("resize", syncHeight);
-    };
-  }, [activeSectionId, report]);
-
-  useEffect(() => {
-    if (showLoadingExperience || typeof window === "undefined") return;
-
-    const editorNode = editorCardRef.current;
-    if (!editorNode) return;
-
-    let runs = 0;
-    let stableRuns = 0;
-    let lastHeight = 0;
-
-    const intervalId = window.setInterval(() => {
-      const nextHeight = Math.ceil(editorNode.getBoundingClientRect().height);
-      setSyncedSidebarHeight(nextHeight);
-
-      if (nextHeight === lastHeight) {
-        stableRuns += 1;
-      } else {
-        stableRuns = 0;
-        lastHeight = nextHeight;
-      }
-
-      runs += 1;
-      if (stableRuns >= 3 || runs >= 20) {
-        window.clearInterval(intervalId);
-      }
-    }, 50);
-
-    return () => window.clearInterval(intervalId);
-  }, [showLoadingExperience, activeSectionId, report]);
-
   useEffect(() => {
     const load = async () => {
       setLoading(true);
@@ -1112,6 +1345,13 @@ export default function EditInvestigationReportPage() {
         router.push("/dashboard?mapAccess=blocked");
         return;
       }
+
+      const organisationBranding = await loadOrganisationBranding(session.access_token).catch(() => ({
+        logo_storage_path: "",
+        section_heading_color: defaultSectionHeadingColor,
+        table_heading_color: defaultTableHeadingColor,
+      }));
+      setBrandingDefaults(organisationBranding);
 
       const [{ data: mapRow, error: mapError }, { data: reportRow, error: reportError }, { data: elementRows, error: elementsError }] = await Promise.all([
         supabase.schema("ms").from("system_maps").select("id,title").eq("id", params.id).single(),
@@ -1164,9 +1404,14 @@ export default function EditInvestigationReportPage() {
           ?.map((row) => extractReportBranding(row.ai_output_json))
           .find((branding): branding is ReportBrandingState => branding !== null) ?? null;
 
+      const combinedFallbackBranding: ReportBrandingState = {
+        ...organisationBranding,
+        ...(fallbackBranding ?? {}),
+      };
+
       const reportWithBrandingFallback = applyReportBrandingFallback(
         (reportRow.ai_output_json ?? {}) as InvestigationSavedReportPayload,
-        fallbackBranding,
+        combinedFallbackBranding,
       );
 
       const normalizedReport = {
@@ -1411,7 +1656,8 @@ export default function EditInvestigationReportPage() {
   };
 
   const handleSectionVisibilityToggle = (sectionId: SectionId, checked: boolean) => {
-    if (!report || !hideableSectionIds.includes(sectionId as Exclude<SectionId, "document_branding">)) return;
+    const visibleSectionId = getPdfVisibilitySectionId(sectionId);
+    if (!report || !visibleSectionId) return;
 
     setReport((current) => {
       if (!current) return current;
@@ -1421,7 +1667,7 @@ export default function EditInvestigationReportPage() {
           ...current.report,
           section_visibility: {
             ...(current.report.section_visibility ?? {}),
-            [sectionId]: checked,
+            [visibleSectionId]: checked,
           },
         },
       };
@@ -1454,7 +1700,7 @@ export default function EditInvestigationReportPage() {
       if (!current) return current;
       const nextColor = normalizeHexColor(
         value,
-        target === "section_heading_color" ? defaultSectionHeadingColor : defaultTableHeadingColor,
+        target === "section_heading_color" ? brandingDefaults.section_heading_color : brandingDefaults.table_heading_color,
       );
 
       return {
@@ -1480,9 +1726,9 @@ export default function EditInvestigationReportPage() {
           ...current.report,
           branding: {
             ...(current.report.branding ?? {}),
-            logo_storage_path: "",
-            section_heading_color: defaultSectionHeadingColor,
-            table_heading_color: defaultTableHeadingColor,
+            logo_storage_path: brandingDefaults.logo_storage_path,
+            section_heading_color: brandingDefaults.section_heading_color,
+            table_heading_color: brandingDefaults.table_heading_color,
           },
         },
       };
@@ -1678,7 +1924,7 @@ export default function EditInvestigationReportPage() {
   const continueExportToPdf = async () => {
     const saved = await saveReport();
     if (!saved) return;
-    router.push(`/investigations/${params.id}/generated-report?reportId=${params.reportId}`);
+    window.location.assign(`/investigations/${params.id}/generated-report?reportId=${params.reportId}`);
   };
 
   const handleExportToPdf = async () => {
@@ -1752,21 +1998,42 @@ export default function EditInvestigationReportPage() {
             )}
           </div>
         );
-      case "factors_and_system_factors":
+      case "incident_factors":
         return (
           <div className={editStyles.previewStack}>
             {note}
             <ReadOnlyTable
-              columns={normalizedFactorsTable.columns}
-              rows={normalizedFactorsTable.rows}
+              columns={incidentFactorsTable.columns}
+              rows={incidentFactorsTable.rows}
               renderCell={(value, _rowIndex, cellIndex) => {
-                if (cellIndex === 1 || cellIndex === 2) return renderPill(value);
-                if (cellIndex === 3) return value ? toTitleCaseLabel(value) : "-";
+                if (cellIndex === 2) return renderPresencePill(value);
+                if (cellIndex === 3) return renderPill(value);
+                if (cellIndex === 4) return value ? toTitleCaseLabel(value) : "-";
                 return value || "-";
               }}
               pageSize={10}
               paginationLabel="factors"
-              columnWidths={["46%", "16%", "20%", "18%"]}
+              columnWidths={["20%", "36%", "14%", "15%", "15%"]}
+              tableClassName={editStyles.factorsCompactTable}
+            />
+          </div>
+        );
+      case "incident_system_factors":
+        return (
+          <div className={editStyles.previewStack}>
+            {note}
+            <ReadOnlyTable
+              columns={incidentSystemFactorsTable.columns}
+              rows={incidentSystemFactorsTable.rows}
+              renderCell={(value, _rowIndex, cellIndex) => {
+                if (cellIndex === 2) return renderPresencePill(value);
+                if (cellIndex === 3) return renderPill(value);
+                if (cellIndex === 4) return value ? toTitleCaseLabel(value) : "-";
+                return value || "-";
+              }}
+              pageSize={10}
+              paginationLabel="system factors"
+              columnWidths={["20%", "36%", "14%", "15%", "15%"]}
               tableClassName={editStyles.factorsCompactTable}
             />
           </div>
@@ -1780,11 +2047,10 @@ export default function EditInvestigationReportPage() {
               rows={normalizedPredisposingFactorsTable.rows}
               renderCell={(value, _rowIndex, cellIndex) => {
                 if (cellIndex === 1) return renderPresencePill(value);
-                if (cellIndex === 2) return renderPill(value);
-                if (cellIndex === 3) return value ? toTitleCaseLabel(value) : "-";
+                if (cellIndex === 2) return value ? toTitleCaseLabel(value) : "-";
                 return value || "-";
               }}
-              columnWidths={["40%", "20%", "20%", "20%"]}
+              columnWidths={["56%", "20%", "24%"]}
               tableClassName={editStyles.predisposingCompactTable}
             />
           </div>
@@ -1794,14 +2060,14 @@ export default function EditInvestigationReportPage() {
           <div className={editStyles.previewStack}>
             {note}
             <ReadOnlyTable
-              columns={normalizedControlsTable.columns}
-              rows={normalizedControlsTable.rows}
+              columns={controlsBarriersTable.columns}
+              rows={controlsBarriersTable.rows}
               renderCell={(value, _rowIndex, cellIndex) => {
-                if (cellIndex === 2) return value ? toTitleCaseLabel(value) : "-";
-                if (cellIndex === 3 || cellIndex === 4) return renderPill(value);
+                if (cellIndex === 1 || cellIndex === 2) return renderPill(value);
+                if (cellIndex === 3) return value ? toTitleCaseLabel(value) : "-";
                 return value || "-";
               }}
-              columnWidths={["20%", "40%", "13.333%", "13.333%", "13.334%"]}
+              columnWidths={["40%", "14%", "14%", "16%", "16%"]}
             />
           </div>
         );
@@ -1820,6 +2086,23 @@ export default function EditInvestigationReportPage() {
             />
           </div>
         );
+      case "incident_outcomes":
+        return (
+          <div className={editStyles.previewStack}>
+            {note}
+            <ReadOnlyTable
+              columns={incidentOutcomesTable.columns}
+              rows={incidentOutcomesTable.rows}
+              renderCell={(value, _rowIndex, cellIndex) => {
+                if (!value) return "-";
+                if (cellIndex === 3 || cellIndex === 4) return renderOutcomeMatrixPill(value);
+                if (cellIndex === 2 || cellIndex === 5) return toTitleCaseLabel(value);
+                return value || "-";
+              }}
+              columnWidths={["18%", "38%", "12%", "10%", "10%", "12%"]}
+            />
+          </div>
+        );
       case "response_and_recovery":
         return (
           <div className={editStyles.previewStack}>
@@ -1827,7 +2110,11 @@ export default function EditInvestigationReportPage() {
             <ReadOnlyTable
               columns={normalizedResponseRecoveryTable.columns}
               rows={normalizedResponseRecoveryTable.rows}
-              renderCell={(value) => (value ? value : "-")}
+              renderCell={(value, _rowIndex, cellIndex) => {
+                if (cellIndex === 1) return renderResponseRecoveryCategoryPill(value);
+                return value ? value : "-";
+              }}
+              columnWidths={["80%", "20%"]}
             />
           </div>
         );
@@ -1836,12 +2123,13 @@ export default function EditInvestigationReportPage() {
           <div className={editStyles.previewStack}>
             {note}
             <ReadOnlyTable
-              columns={report.report.sections.incident_findings.columns}
-              rows={report.report.sections.incident_findings.rows}
+              columns={normalizedFindingsTable.columns}
+              rows={normalizedFindingsTable.rows}
               renderCell={(value, _rowIndex, cellIndex) => {
-                if (cellIndex === 2) return renderPill(value);
+                if (cellIndex === 1) return renderConfidencePill(value);
                 return value || "-";
               }}
+              columnWidths={["80%", "20%"]}
             />
           </div>
         );
@@ -1850,14 +2138,14 @@ export default function EditInvestigationReportPage() {
           <div className={editStyles.previewStack}>
             {note}
             <ReadOnlyTable
-              columns={[...normalizedRecommendationsTable.columns, "Approved"]}
-              rows={normalizedRecommendationsTable.rows.map((row, rowIndex) => [
+              columns={[...recommendationsTable.columns, "Approved"]}
+              rows={recommendationsTable.rows.map((row, rowIndex) => [
                 ...row,
                 report.report.sections.recommendations.endorsed?.[rowIndex] ? "true" : "false",
               ])}
               renderCell={(value, rowIndex, cellIndex) => {
-                if (cellIndex === 2) return renderPill(value, shellStyles.factorPillPredisposing);
-                if (cellIndex === 5) {
+                if (cellIndex === 1) return renderPill(value, shellStyles.factorPillPredisposing);
+                if (cellIndex === 4) {
                   return (
                     <label className={editStyles.checkboxLabel}>
                       <input
@@ -1871,6 +2159,7 @@ export default function EditInvestigationReportPage() {
                 }
                 return value || "-";
               }}
+              columnWidths={["40%", "15%", "15%", "15%", "15%"]}
             />
           </div>
         );
@@ -2348,11 +2637,7 @@ export default function EditInvestigationReportPage() {
           </div>
 
           <div className={editStyles.layout}>
-            <aside
-              ref={sidebarCardRef}
-              className={editStyles.sidebarCard}
-              style={syncedSidebarHeight ? { height: `${Math.ceil(syncedSidebarHeight)}px` } : undefined}
-            >
+            <aside className={editStyles.sidebarCard}>
               <h2 className={editStyles.sidebarTitle}>Report Sections</h2>
               <p className={editStyles.sidebarMeta}>
                 Version {report.saved_report.version_number}. Click each tab to review report information and uncheck any
@@ -2453,7 +2738,7 @@ export default function EditInvestigationReportPage() {
                   <p className={editStyles.helperText}>
                     Paragraph breaks are preserved in the saved report and carried into the PDF output where applicable.
                   </p>
-                  {activeSection.id === "task_and_conditions" || activeSection.id === "response_and_recovery" || activeSection.id === "incident_findings" || activeSection.id === "recommendations"
+                  {activeSection.id === "task_and_conditions" || activeSection.id === "incident_outcomes" || activeSection.id === "response_and_recovery" || activeSection.id === "incident_findings" || activeSection.id === "recommendations"
                     ? renderReadOnlySection()
                     : null}
                 </>

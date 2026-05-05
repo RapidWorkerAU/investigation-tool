@@ -28,6 +28,10 @@ type AuthTemplateArgs = GreetingArgs & {
   actionUrl: string;
 };
 
+type OrganisationInviteTemplateArgs = AuthTemplateArgs & {
+  organisationName: string;
+};
+
 type AccessTemplateArgs = GreetingArgs & {
   endsAt?: string | null;
   actionUrl?: string;
@@ -362,6 +366,24 @@ export const emailTemplates = {
       ],
       ctaLabel: "Go to sign in",
       ctaUrl: actionUrl,
+    });
+  },
+
+  organisationInvite({ firstName, organisationName, actionUrl }: OrganisationInviteTemplateArgs): TemplateResult {
+    return renderTemplate({
+      preheader: `${organisationName} has invited you to Investigation Tool.`,
+      title: "You have been invited",
+      intro: [
+        greeting(firstName),
+        `${organisationName} has invited you to join their Investigation Tool organisation workspace.`,
+      ],
+      highlights: [
+        "Use the secure link below to set your password.",
+        "After setting your password, sign in again to access the organisation workspace.",
+      ],
+      ctaLabel: "Set password",
+      ctaUrl: actionUrl,
+      note: "For security, use the latest invite email in your inbox if you receive more than one.",
     });
   },
 

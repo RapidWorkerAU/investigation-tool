@@ -92,6 +92,42 @@ const formatBowtieConfigLabel = (value: string) =>
 
 const formatIncidentOptionLabel = (value: string) => formatBowtieConfigLabel(value.trim());
 
+const incidentResponseRecoveryPaletteByCategory = (categoryRaw: string) => {
+  const normalized = categoryRaw.trim().toLowerCase();
+  switch (normalized) {
+    case "emergency_response":
+      return {
+        background: "#FEF3C7",
+        text: "#92400E",
+        border: "#FCD34D",
+      };
+    case "make_area_safe":
+      return {
+        background: "#F3E8FF",
+        text: "#6B21A8",
+        border: "#D8B4FE",
+      };
+    case "medical_treatment":
+      return {
+        background: "#DCFCE7",
+        text: "#166534",
+        border: "#86EFAC",
+      };
+    case "scene_preservation":
+      return {
+        background: "#E0E7FF",
+        text: "#3730A3",
+        border: "#A5B4FC",
+      };
+    default:
+      return {
+        background: "#FCE7F3",
+        text: "#9D174D",
+        border: "#F9A8D4",
+      };
+  }
+};
+
 const calculateIncidentRiskLevel = (likelihoodRaw: string, consequenceRaw: string) => {
   const likelihoodScoreByKey: Record<string, number> = {
     rare: 1,
@@ -146,14 +182,38 @@ const methodologyDefaultLabelByType: Partial<Record<CanvasElementRow["element_ty
   incident_recommendation: "Recommendation",
 };
 
+const getMethodologyCustomLabel = (
+  elementType: CanvasElementRow["element_type"],
+  headingRaw: string | null | undefined
+) => {
+  const defaultLabel = methodologyDefaultLabelByType[elementType] ?? "Node";
+  const legacyDefaultLabel = elementType === "incident_outcome" ? "Outcome" : defaultLabel;
+  const heading = String(headingRaw ?? "").trim();
+  if (!heading || heading === defaultLabel || heading === legacyDefaultLabel) return "";
+  return heading;
+};
+
+const getMethodologyBodyDisplayMode = (
+  labelRaw: string | null | undefined,
+  descriptionRaw: string | null | undefined,
+  modeRaw: unknown
+) => {
+  if (modeRaw === "label" || modeRaw === "description") return modeRaw;
+  const label = String(labelRaw ?? "").trim();
+  const description = String(descriptionRaw ?? "").trim();
+  if (description) return "description";
+  if (label) return "label";
+  return "description";
+};
+
 const getMethodologyNodeText = (element: CanvasElementRow) => {
   const defaultLabel = methodologyDefaultLabelByType[element.element_type] ?? "Node";
-  const legacyDefaultLabel = element.element_type === "incident_outcome" ? "Outcome" : defaultLabel;
   const config = (element.element_config as Record<string, unknown> | null) ?? {};
-  const heading = String(element.heading ?? "").trim();
+  const label = getMethodologyCustomLabel(element.element_type, element.heading);
   const description = String(config.description ?? "").trim();
-  if (heading && heading !== defaultLabel && heading !== legacyDefaultLabel) return heading;
-  return description || heading || defaultLabel;
+  const bodyDisplayMode = getMethodologyBodyDisplayMode(label, description, config.body_display_mode);
+  if (bodyDisplayMode === "label") return label || description || defaultLabel;
+  return description || label || defaultLabel;
 };
 
 const buildIncidentTag = (
@@ -181,6 +241,7 @@ const compactIncidentTags = (
   tags: Array<ReturnType<typeof buildIncidentTag>>
 ): NonNullable<ReturnType<typeof buildIncidentTag>>[] => tags.filter((tag): tag is NonNullable<ReturnType<typeof buildIncidentTag>> => tag !== null);
 const incidentExpandedHeight = incidentCardHeight;
+const incidentOpenDetailZIndex = 120;
 
 const incidentIconByValue = (value: string) => {
   const normalized = value.trim().toLowerCase();
@@ -1520,7 +1581,7 @@ export const buildSecondaryElementFlowNode = (params: {
       id: flowId,
       type: "incidentSequenceStep",
       position: { x: el.pos_x, y: el.pos_y },
-      zIndex: 30,
+      zIndex: detailOpen ? incidentOpenDetailZIndex : 30,
       selected: isMarked,
       draggable: canEditThis,
       selectable: canWriteMap,
@@ -1624,7 +1685,7 @@ export const buildSecondaryElementFlowNode = (params: {
       id: flowId,
       type: "incidentOutcome",
       position: { x: el.pos_x, y: el.pos_y },
-      zIndex: 30,
+      zIndex: detailOpen ? incidentOpenDetailZIndex : 30,
       selected: isMarked,
       draggable: canEditThis,
       selectable: canWriteMap,
@@ -1686,7 +1747,7 @@ export const buildSecondaryElementFlowNode = (params: {
       id: flowId,
       type: "incidentTaskCondition",
       position: { x: el.pos_x, y: el.pos_y },
-      zIndex: 30,
+      zIndex: detailOpen ? incidentOpenDetailZIndex : 30,
       selected: isMarked,
       draggable: canEditThis,
       selectable: canWriteMap,
@@ -1771,7 +1832,7 @@ export const buildSecondaryElementFlowNode = (params: {
       id: flowId,
       type: "incidentFactor",
       position: { x: el.pos_x, y: el.pos_y },
-      zIndex: 30,
+      zIndex: detailOpen ? incidentOpenDetailZIndex : 30,
       selected: isMarked,
       draggable: canEditThis,
       selectable: canWriteMap,
@@ -1846,7 +1907,7 @@ export const buildSecondaryElementFlowNode = (params: {
       id: flowId,
       type: "incidentSystemFactor",
       position: { x: el.pos_x, y: el.pos_y },
-      zIndex: 30,
+      zIndex: detailOpen ? incidentOpenDetailZIndex : 30,
       selected: isMarked,
       draggable: canEditThis,
       selectable: canWriteMap,
@@ -1920,7 +1981,7 @@ export const buildSecondaryElementFlowNode = (params: {
       id: flowId,
       type: "incidentControlBarrier",
       position: { x: el.pos_x, y: el.pos_y },
-      zIndex: 30,
+      zIndex: detailOpen ? incidentOpenDetailZIndex : 30,
       selected: isMarked,
       draggable: canEditThis,
       selectable: canWriteMap,
@@ -1993,7 +2054,7 @@ export const buildSecondaryElementFlowNode = (params: {
       id: flowId,
       type: "incidentEvidence",
       position: { x: el.pos_x, y: el.pos_y },
-      zIndex: 30,
+      zIndex: detailOpen ? incidentOpenDetailZIndex : 30,
       selected: isMarked,
       draggable: canEditThis,
       selectable: canWriteMap,
@@ -2034,6 +2095,7 @@ export const buildSecondaryElementFlowNode = (params: {
   if (el.element_type === "incident_response_recovery") {
     const cfg = (el.element_config as Record<string, unknown> | null) ?? {};
     const categoryRaw = String(cfg.category ?? "").trim();
+    const categoryPalette = incidentResponseRecoveryPaletteByCategory(categoryRaw);
     return {
       id: flowId,
       type: "incidentResponseRecovery",
@@ -2058,9 +2120,9 @@ export const buildSecondaryElementFlowNode = (params: {
         title: "Response / Recovery",
         description: getMethodologyNodeText(el),
         metaLabel: categoryRaw ? formatIncidentOptionLabel(categoryRaw) : undefined,
-        metaLabelBg: "#fbcfe8",
-        metaLabelText: "#831843",
-        metaLabelBorder: "transparent",
+        metaLabelBg: categoryPalette.background,
+        metaLabelText: categoryPalette.text,
+        metaLabelBorder: categoryPalette.border,
         userGroup: "",
         disciplineKeys: [],
         bannerBg: "#ec4899",
@@ -2073,11 +2135,6 @@ export const buildSecondaryElementFlowNode = (params: {
   if (el.element_type === "incident_finding") {
     const cfg = (el.element_config as Record<string, unknown> | null) ?? {};
     const description = getMethodologyNodeText(el);
-    const lineCount = description
-      ? description.split(/\r?\n/).reduce((count, line) => count + Math.max(1, Math.ceil(line.length / 24)), 0)
-      : 1;
-    const descriptionHeight = Math.max(minorGridSize, lineCount * 14 + 10);
-    const autoHeight = minorGridSize * 2 + descriptionHeight + 8;
     const minimumFindingHeight = minorGridSize * 6;
     return {
       id: flowId,
@@ -2089,7 +2146,7 @@ export const buildSecondaryElementFlowNode = (params: {
       selectable: canWriteMap,
       style: {
         width: Math.max(incidentCardWidth, el.width || incidentCardWidth),
-        height: Math.max(minimumFindingHeight, autoHeight, el.height || autoHeight),
+        height: Math.max(minimumFindingHeight, el.height || minimumFindingHeight),
         borderRadius: 0,
         border: "none",
         background: "transparent",
@@ -2128,7 +2185,7 @@ export const buildSecondaryElementFlowNode = (params: {
       id: flowId,
       type: "incidentRecommendation",
       position: { x: el.pos_x, y: el.pos_y },
-      zIndex: 30,
+      zIndex: detailOpen ? incidentOpenDetailZIndex : 30,
       selected: isMarked,
       draggable: canEditThis,
       selectable: canWriteMap,

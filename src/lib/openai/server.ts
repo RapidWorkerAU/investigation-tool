@@ -6,6 +6,8 @@ let cachedClient: OpenAI | null = null;
 
 export const investigationReportModel =
   process.env.OPENAI_INVESTIGATION_REPORT_MODEL?.trim() || "gpt-5.2";
+export const investigationSuggestionsModel =
+  process.env.OPENAI_INVESTIGATION_SUGGESTIONS_MODEL?.trim() || investigationReportModel;
 
 export function getOpenAIClient() {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
