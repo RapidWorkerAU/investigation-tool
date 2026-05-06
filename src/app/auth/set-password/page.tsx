@@ -34,7 +34,8 @@ export default function SetPasswordPage() {
     async function checkRecoveryState() {
       const hashParams =
         typeof window !== "undefined" ? new URLSearchParams(window.location.hash.slice(1)) : null;
-      const recoveryInHash = hashParams?.get("type") === "recovery";
+      const linkType = hashParams?.get("type");
+      const passwordSetupInHash = linkType === "recovery" || linkType === "invite";
 
       const {
         data: { session },
@@ -42,14 +43,14 @@ export default function SetPasswordPage() {
 
       if (!mounted) return;
 
-      if (recoveryInHash || session) {
+      if (passwordSetupInHash || session) {
         setReady(true);
         setNotice(null);
       } else {
         setReady(false);
         setNotice({
           type: "info",
-          text: "This password reset link is missing or has expired. Request a new reset email to continue.",
+          text: "This password setup link is missing or has expired. Request a new password email or ask your administrator to resend the invite.",
         });
       }
 
@@ -63,7 +64,7 @@ export default function SetPasswordPage() {
     } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
 
-      if (event === "PASSWORD_RECOVERY" || session) {
+      if (event === "PASSWORD_RECOVERY" || event === "SIGNED_IN" || session) {
         setReady(true);
         setCheckingRecovery(false);
         setNotice(null);
@@ -125,7 +126,7 @@ export default function SetPasswordPage() {
     setConfirmPassword("");
     setNotice({
       type: "success",
-      text: "Password reset complete. Use your new password to sign in.",
+      text: "Password setup complete. Use your new password to sign in.",
     });
     setLoading(false);
   }
@@ -160,10 +161,10 @@ export default function SetPasswordPage() {
           {resetComplete ? (
             <div className={styles.signupSuccess}>
               <div className={styles.signupSuccessIcon} aria-hidden="true">
-                <span>✓</span>
+                <span>OK</span>
               </div>
               <div className={styles.signupSuccessCopy}>
-                <h2>Password reset complete</h2>
+                <h2>Password setup complete</h2>
                 <p>Your password has been updated successfully.</p>
                 <p>You have not been signed in. Continue to login and enter your new password.</p>
               </div>
@@ -228,13 +229,13 @@ export default function SetPasswordPage() {
               ) : null}
 
               <button type="submit" disabled={loading} className={styles.submitButton}>
-                {loading ? "Please wait..." : "Reset password"}
+                {loading ? "Please wait..." : "Set password"}
               </button>
             </form>
           ) : (
             <div className={styles.notice}>
               <p className={styles.noticeText}>
-                Request a new password reset email and open the latest link from your inbox.
+                Request a new password email or ask your administrator to resend your organisation invite.
               </p>
             </div>
           )}
@@ -250,7 +251,7 @@ export default function SetPasswordPage() {
           ) : null}
 
           <p className={styles.authPrompt}>
-            Need another reset link? <Link href="/forgot-password">Reset by email</Link>
+            Need another password link? <Link href="/forgot-password">Send password email</Link>
           </p>
 
           <p className={styles.footnote}>
@@ -262,7 +263,7 @@ export default function SetPasswordPage() {
           <div className={styles.visualGlow} />
           <div className={styles.visualLines} />
           <div className={styles.visualBadge}>
-            Reset access securely and return to your investigation workflow with your new password.
+            Set access securely and return to your investigation workflow with your new password.
           </div>
         </aside>
       </div>

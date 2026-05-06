@@ -12,6 +12,34 @@ export async function GET(request: NextRequest) {
 
   const supabase = createServiceRoleClient();
 
+  const { data: orgMemberships, error: orgMembershipsError } = await supabase
+    .from("organisation_memberships")
+    .select("organisation_id")
+    .eq("user_id", user.userId)
+    .eq("invite_status", "active");
+
+  if (orgMembershipsError) {
+    return NextResponse.json({ error: orgMembershipsError.message }, { status: 500 });
+  }
+
+  let orgManagedAccess = false;
+  const organisationIds = Array.from(new Set((orgMemberships ?? []).map((membership) => membership.organisation_id)));
+
+  if (organisationIds.length) {
+    const { data: activeOrganisations, error: organisationsError } = await supabase
+      .from("organisations")
+      .select("id")
+      .in("id", organisationIds)
+      .eq("status", "active")
+      .limit(1);
+
+    if (organisationsError) {
+      return NextResponse.json({ error: organisationsError.message }, { status: 500 });
+    }
+
+    orgManagedAccess = Boolean(activeOrganisations?.length);
+  }
+
   const { data: refreshed, error: refreshError } = await supabase.rpc("refresh_billing_profile_state", {
     p_user_id: user.userId,
   });
@@ -44,20 +72,21 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     userId: row.user_id,
     stripeCustomerId: row.stripe_customer_id ?? null,
-    accessSelectionRequired: Boolean(row.access_selection_required),
-    currentAccessType: row.current_access_type ?? null,
-    currentAccessStatus: row.current_access_status,
+    orgManagedAccess,
+    accessSelectionRequired: orgManagedAccess ? false : Boolean(row.access_selection_required),
+    currentAccessType: orgManagedAccess ? "subscription_monthly" : row.current_access_type ?? null,
+    currentAccessStatus: orgManagedAccess ? "active" : row.current_access_status,
     currentAccessPeriodId: row.current_access_period_id ?? null,
     currentStripeSubscriptionId: row.current_stripe_subscription_id ?? null,
     currentStripePriceId: row.current_stripe_price_id ?? null,
     cancellationScheduled,
     currentPeriodStartsAt: row.current_period_starts_at ?? null,
     currentPeriodEndsAt: row.current_period_ends_at ?? null,
-    readOnlyReason: row.read_only_reason ?? null,
-    canCreateMaps: Boolean(row.can_create_maps),
-    canEditMaps: Boolean(row.can_edit_maps),
-    canExport: Boolean(row.can_export),
-    canShareMaps: Boolean(row.can_share_maps),
-    canDuplicateMaps: Boolean(row.can_duplicate_maps),
+    readOnlyReason: orgManagedAccess ? null : row.read_only_reason ?? null,
+    canCreateMaps: orgManagedAccess ? true : Boolean(row.can_create_maps),
+    canEditMaps: orgManagedAccess ? true : Boolean(row.can_edit_maps),
+    canExport: orgManagedAccess ? true : Boolean(row.can_export),
+    canShareMaps: orgManagedAccess ? true : Boolean(row.can_share_maps),
+    canDuplicateMaps: orgManagedAccess ? true : Boolean(row.can_duplicate_maps),
   });
 }

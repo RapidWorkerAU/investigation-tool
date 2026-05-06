@@ -584,24 +584,52 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Access state not found." }, { status: 404 });
   }
 
+  const { data: orgMemberships, error: orgMembershipsError } = await serviceSupabase
+    .from("organisation_memberships")
+    .select("organisation_id")
+    .eq("user_id", user.userId)
+    .eq("invite_status", "active");
+
+  if (orgMembershipsError) {
+    return NextResponse.json({ error: orgMembershipsError.message }, { status: 500 });
+  }
+
+  let orgManagedAccess = false;
+  const organisationIds = Array.from(new Set((orgMemberships ?? []).map((membership) => membership.organisation_id)));
+
+  if (organisationIds.length) {
+    const { data: activeOrganisations, error: organisationsError } = await serviceSupabase
+      .from("organisations")
+      .select("id")
+      .in("id", organisationIds)
+      .eq("status", "active")
+      .limit(1);
+
+    if (organisationsError) {
+      return NextResponse.json({ error: organisationsError.message }, { status: 500 });
+    }
+
+    orgManagedAccess = Boolean(activeOrganisations?.length);
+  }
+
   const accessState = {
     userId: accessStateRow.user_id,
     stripeCustomerId: accessStateRow.stripe_customer_id ?? null,
-    accessSelectionRequired: Boolean(accessStateRow.access_selection_required),
-    currentAccessType: accessStateRow.current_access_type ?? null,
-    currentAccessStatus: accessStateRow.current_access_status,
+    accessSelectionRequired: orgManagedAccess ? false : Boolean(accessStateRow.access_selection_required),
+    currentAccessType: orgManagedAccess ? "subscription_monthly" : accessStateRow.current_access_type ?? null,
+    currentAccessStatus: orgManagedAccess ? "active" : accessStateRow.current_access_status,
     currentAccessPeriodId: accessStateRow.current_access_period_id ?? null,
     currentStripeSubscriptionId: accessStateRow.current_stripe_subscription_id ?? null,
     currentStripePriceId: accessStateRow.current_stripe_price_id ?? null,
     cancellationScheduled: false,
     currentPeriodStartsAt: accessStateRow.current_period_starts_at ?? null,
     currentPeriodEndsAt: accessStateRow.current_period_ends_at ?? null,
-    readOnlyReason: accessStateRow.read_only_reason ?? null,
-    canCreateMaps: Boolean(accessStateRow.can_create_maps),
-    canEditMaps: Boolean(accessStateRow.can_edit_maps),
-    canExport: Boolean(accessStateRow.can_export),
-    canShareMaps: Boolean(accessStateRow.can_share_maps),
-    canDuplicateMaps: Boolean(accessStateRow.can_duplicate_maps),
+    readOnlyReason: orgManagedAccess ? null : accessStateRow.read_only_reason ?? null,
+    canCreateMaps: orgManagedAccess ? true : Boolean(accessStateRow.can_create_maps),
+    canEditMaps: orgManagedAccess ? true : Boolean(accessStateRow.can_edit_maps),
+    canExport: orgManagedAccess ? true : Boolean(accessStateRow.can_export),
+    canShareMaps: orgManagedAccess ? true : Boolean(accessStateRow.can_share_maps),
+    canDuplicateMaps: orgManagedAccess ? true : Boolean(accessStateRow.can_duplicate_maps),
   };
 
   if (!accessCanUseReportGeneration(accessState)) {

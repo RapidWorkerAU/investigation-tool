@@ -20,7 +20,7 @@ export default function HashRedirector() {
     const onSetPassword = pathname.startsWith("/auth/set-password");
     const onConfirmAccount = pathname.startsWith("/confirm-account");
 
-    if (type === "recovery" && !onSetPassword) {
+    if ((type === "recovery" || type === "invite") && !onSetPassword) {
       window.location.replace("/auth/set-password" + window.location.search + window.location.hash);
       return;
     }

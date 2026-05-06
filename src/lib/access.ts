@@ -23,6 +23,7 @@ export type BillingAccessState = {
   canExport: boolean;
   canShareMaps: boolean;
   canDuplicateMaps: boolean;
+  orgManagedAccess?: boolean;
 };
 
 export function accessRequiresSelection(state: BillingAccessState | null | undefined) {
