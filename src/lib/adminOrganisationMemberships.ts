@@ -34,6 +34,13 @@ type UpdateMembershipInput = AssignmentValidationInput & {
   inviteStatus: OrganisationMembershipStatus;
 };
 
+type ResendOrganisationInviteInput = {
+  supabase: AdminSupabaseClient;
+  adminUserId: string;
+  organisationId: string;
+  userId: string;
+};
+
 const allowedRoles = new Set<OrganisationMembershipRole>(["org_admin", "general_user"]);
 const allowedStatuses = new Set<OrganisationMembershipStatus>(["draft", "invited", "active", "suspended"]);
 
@@ -231,6 +238,171 @@ export const inviteOrganisationUser = async ({
   return {
     organisationName: organisation.name,
     invitedUserId,
+    invitedAt,
+  };
+};
+
+const generatePasswordSetupLink = async (
+  supabase: AdminSupabaseClient,
+  email: string,
+  fullName: string | null
+) => {
+  const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/+$/, "");
+  const redirectTo = `${siteUrl}/auth/set-password`;
+  const inviteResult = await supabase.auth.admin.generateLink({
+    type: "invite",
+    email,
+    options: {
+      redirectTo,
+      data: {
+        full_name: fullName ?? "",
+        name: fullName ?? "",
+      },
+    },
+  });
+
+  if (!inviteResult.error && inviteResult.data.properties?.action_link) {
+    return {
+      userId: inviteResult.data.user?.id ?? null,
+      actionLink: inviteResult.data.properties.action_link,
+    };
+  }
+
+  const recoveryResult = await supabase.auth.admin.generateLink({
+    type: "recovery",
+    email,
+    options: {
+      redirectTo,
+    },
+  });
+
+  if (recoveryResult.error || !recoveryResult.data.properties?.action_link) {
+    throw new Error(
+      recoveryResult.error?.message ||
+        inviteResult.error?.message ||
+        "Unable to generate a new invite link."
+    );
+  }
+
+  return {
+    userId: recoveryResult.data.user?.id ?? null,
+    actionLink: recoveryResult.data.properties.action_link,
+  };
+};
+
+export const resendOrganisationInvite = async ({
+  supabase,
+  adminUserId,
+  organisationId,
+  userId,
+}: ResendOrganisationInviteInput) => {
+  const [{ data: membership, error: membershipError }, { data: organisation, error: organisationError }, { data: profile, error: profileError }] =
+    await Promise.all([
+      supabase
+        .from("organisation_memberships")
+        .select("role,invite_status,department_id,site_id,leader_user_id")
+        .eq("organisation_id", organisationId)
+        .eq("user_id", userId)
+        .maybeSingle(),
+      supabase.from("organisations").select("id,name").eq("id", organisationId).maybeSingle(),
+      supabase.from("profiles").select("id,email,full_name").eq("id", userId).maybeSingle(),
+    ]);
+
+  if (membershipError) {
+    throw new Error(membershipError.message);
+  }
+
+  if (organisationError) {
+    throw new Error(organisationError.message);
+  }
+
+  if (profileError) {
+    throw new Error(profileError.message);
+  }
+
+  if (!membership) {
+    throw new Error("Membership not found.");
+  }
+
+  if (!organisation) {
+    throw new Error("Organisation not found.");
+  }
+
+  if (!profile?.email) {
+    throw new Error("User email not found.");
+  }
+
+  if (membership.invite_status !== "invited" && membership.invite_status !== "draft") {
+    throw new Error("Only draft or invited memberships can be resent.");
+  }
+
+  const normalizedEmail = profile.email.trim().toLowerCase();
+  const fullName = profile.full_name ?? null;
+  const { actionLink } = await generatePasswordSetupLink(supabase, normalizedEmail, fullName);
+  const invitedAt = new Date().toISOString();
+
+  await supabase
+    .from("organisation_invites")
+    .update({
+      status: "revoked",
+      revoked_at: invitedAt,
+    })
+    .eq("organisation_id", organisationId)
+    .eq("email", normalizedEmail)
+    .eq("status", "pending");
+
+  const { error: inviteError } = await supabase.from("organisation_invites").insert({
+    organisation_id: organisationId,
+    email: normalizedEmail,
+    full_name: fullName,
+    role: membership.role,
+    department_id: membership.department_id ?? null,
+    site_id: membership.site_id ?? null,
+    leader_user_id: membership.leader_user_id ?? null,
+    invited_by_user_id: adminUserId,
+    auth_user_id: userId,
+    invited_at: invitedAt,
+  });
+
+  if (inviteError) {
+    throw new Error(inviteError.message);
+  }
+
+  const { error: membershipUpdateError } = await supabase
+    .from("organisation_memberships")
+    .update({
+      invite_status: "invited",
+      invited_at: invitedAt,
+      joined_at: null,
+      suspended_at: null,
+    })
+    .eq("organisation_id", organisationId)
+    .eq("user_id", userId);
+
+  if (membershipUpdateError) {
+    throw new Error(membershipUpdateError.message);
+  }
+
+  const emailTemplate = emailTemplates.organisationInvite({
+    firstName: fullName,
+    organisationName: organisation.name,
+    actionUrl: actionLink,
+  });
+
+  await sendResendEmail({
+    to: normalizedEmail,
+    subject: emailTemplate.subject,
+    html: emailTemplate.html,
+    text: emailTemplate.text,
+    tags: [
+      { name: "category", value: "organisation" },
+      { name: "template", value: "organisation-invite-resend" },
+    ],
+  });
+
+  return {
+    email: normalizedEmail,
+    organisationName: organisation.name,
     invitedAt,
   };
 };

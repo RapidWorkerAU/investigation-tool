@@ -78,6 +78,8 @@ export default function AdminUserDetailPage() {
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [detail, setDetail] = useState<UserDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [resendingInviteFor, setResendingInviteFor] = useState<string | null>(null);
   const [linkModalOpen, setLinkModalOpen] = useState(false);
   const [linkOptionsLoading, setLinkOptionsLoading] = useState(false);
   const [linkSubmitting, setLinkSubmitting] = useState(false);
@@ -349,6 +351,44 @@ export default function AdminUserDetailPage() {
     }
   };
 
+  const handleResendInvite = async (membership: EditableMembership) => {
+    setResendingInviteFor(membership.organisationId);
+    setError(null);
+    setStatusMessage(null);
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        throw new Error("You are no longer signed in.");
+      }
+
+      const response = await fetch(
+        `/api/admin/organisations/${membership.organisationId}/members/${params.userId}/resend-invite`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        }
+      );
+
+      const payload = (await response.json()) as { email?: string; error?: string };
+      if (!response.ok) {
+        throw new Error(payload.error || "Unable to resend invite.");
+      }
+
+      await loadDetail(session.access_token);
+      setStatusMessage(`Invite resent to ${payload.email || detail?.user.email || "this user"}.`);
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Unable to resend invite.");
+    } finally {
+      setResendingInviteFor(null);
+    }
+  };
+
   if (loading) {
     return (
       <DashboardPageSkeleton
@@ -395,6 +435,7 @@ export default function AdminUserDetailPage() {
     >
       <section className={shellStyles.accountCard}>
         {error ? <p className={`${shellStyles.message} ${shellStyles.messageError}`}>{error}</p> : null}
+        {statusMessage ? <p className={`${shellStyles.message} ${shellStyles.messageSuccess}`}>{statusMessage}</p> : null}
         {!authorized ? (
           <p className={`${shellStyles.message} ${shellStyles.messageError}`}>This page is restricted to the admin account.</p>
         ) : detail ? (
@@ -500,6 +541,18 @@ export default function AdminUserDetailPage() {
                               >
                                 <Image src="/icons/edit.svg" alt="" width={16} height={16} className={shellStyles.actionIcon} />
                               </button>
+                              {membership.inviteStatus === "invited" || membership.inviteStatus === "draft" ? (
+                                <button
+                                  type="button"
+                                  className={shellStyles.actionButton}
+                                  onClick={() => void handleResendInvite(membership)}
+                                  disabled={resendingInviteFor === membership.organisationId}
+                                  aria-label="Resend invite email"
+                                  title="Resend invite email"
+                                >
+                                  <Image src="/icons/send.svg" alt="" width={16} height={16} className={shellStyles.actionIcon} />
+                                </button>
+                              ) : null}
                             </div>
                           </td>
                         </tr>
