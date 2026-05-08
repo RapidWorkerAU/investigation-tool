@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Background,
   BackgroundVariant,
@@ -13,18 +13,14 @@ import {
   type Viewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { accessBlocksInvestigationEntry, accessRequiresSelection, fetchAccessState, type BillingAccessState } from "@/lib/access";
+import { type BillingAccessState } from "@/lib/access";
 import {
   hasActiveTemplateAccess,
-  listInvestigationTemplates,
   templateAccessDisabledReason,
   type InvestigationTemplateVisibility,
-  type InvestigationTemplateSnapshot,
 } from "@/lib/investigationTemplates";
 import { supabaseBrowser } from "@/lib/supabase/client";
-import { ensurePortalSupabaseUser } from "@/lib/supabase/portalSession";
 import {
-  A4_RATIO,
   bowtieControlHeight,
   bowtieDefaultWidth,
   bowtieHazardHeight,
@@ -39,22 +35,17 @@ import {
   incidentThreeTwoHeight,
   type CanvasElementRow,
   categoryColorOptions,
-  ccw,
   clamp,
-  defaultCategoryColor,
   defaultHeight,
   defaultWidth,
   type DisciplineKey,
   disciplineKeySet,
   disciplineLabelByKey,
-  disciplineLetterByKey,
   disciplineOptions,
   getElementDisplayName,
-  getElementRelationshipTypeLabel,
   getElementRelationshipDisplayLabel,
   type DocumentNodeRow,
   type DocumentTypeRow,
-  fallbackHierarchy,
   getCanonicalTypeName,
   getDisplayRelationType,
   getDisplayTypeName,
@@ -64,24 +55,19 @@ import {
   getDefaultRelationshipCategoryForMap,
   normalizeRelationshipCategoryForMap,
   getRelationshipDisciplineLetters,
-  getTypeBannerStyle,
   groupingDefaultHeight,
   groupingDefaultWidth,
   groupingMinHeight,
   groupingMinHeightSquares,
   groupingMinWidth,
   groupingMinWidthSquares,
-  hashString,
   isAbortLikeError,
   isLandscapeTypeName,
-  laneHeight,
   landscapeDefaultHeight,
   landscapeDefaultWidth,
-  lineIntersectsRect,
   majorGridSize,
   minorGridSize,
   type FlowData,
-  normalizeTypeRanks,
   type NodeRelationRow,
   type OutlineItemRow,
   parseDisciplines,
@@ -90,9 +76,7 @@ import {
   parseOrgChartPersonConfig,
   orgChartDepartmentOptions,
   parseProcessFlowId,
-  processComponentBodyHeight,
   processComponentElementHeight,
-  processComponentLabelHeight,
   processComponentWidth,
   processFlowId,
   processHeadingHeight,
@@ -101,10 +85,8 @@ import {
   processMinHeightSquares,
   processMinWidth,
   processMinWidthSquares,
-  type Rect,
   type RelationshipCategory,
   type SelectionMarquee,
-  segmentsIntersect,
   serializeDisciplines,
   stickyDefaultSize,
   stickyMinSize,
@@ -137,18 +119,12 @@ import {
   shapeDefaultFillColor,
   systemCircleDiameter,
   systemCircleElementHeight,
-  systemCircleLabelHeight,
-  tileGridSpan,
   type SystemMap,
   type MapMemberProfileRow,
   type SystemMapCanvasSnapshot,
   unconfiguredDocumentTitle,
   userGroupOptions,
   boxesOverlap,
-  pointInRect,
-  personIconSize,
-  personRoleLabelHeight,
-  personDepartmentLabelHeight,
   personElementWidth,
   personElementHeight,
   orgChartPersonWidth,
@@ -178,7 +154,20 @@ import { useCanvasPaneSelectionActions } from "./useCanvasPaneSelectionActions";
 import { useCanvasNodeDragStop } from "./useCanvasNodeDragStop";
 import { useCanvasRelationshipDerived } from "./useCanvasRelationshipDerived";
 import { useCanvasImageUpload } from "./useCanvasImageUpload";
+import { useCanvasAsideController } from "./useCanvasAsideController";
+import { usePrimaryAsideRegistry } from "./usePrimaryAsideRegistry";
+import { useCanvasRelationshipController } from "./useCanvasRelationshipController";
+import { useMapSuggestions } from "./useMapSuggestions";
+import { useInvestigationTemplates } from "./useInvestigationTemplates";
+import { useMapSessionHistory } from "./useMapSessionHistory";
+import { useCanvasPrintController } from "./useCanvasPrintController";
+import { useCanvasSearch } from "./useCanvasSearch";
+import { useSystemMapBootstrap } from "./useSystemMapBootstrap";
+import { formatShortAuDate } from "./dateFormatters";
+import { resolveMapSessionHistorySnapshotState, type MapSessionHistorySnapshot } from "./mapSnapshotUtils";
+import { useOutsidePointerDismiss, useStackedOutsidePointerDismiss } from "./useOutsidePointerDismiss";
 import { handleCanvasNodeClick } from "./canvasNodeClickHandler";
+import { syncCanvasSelectionFromFlowNode, type CanvasSelectionSetters } from "./canvasSelection";
 import {
   SystemMapWizardModal,
   type SystemMapWizardCommitPayload,
@@ -189,15 +178,10 @@ import {
   buildPrimaryElementFlowNode,
   buildSecondaryElementFlowNode,
   buildOrgDirectReportCountByPersonNormalizedId,
-  normalizeElementRef,
   sortGroupingElementsForRender,
 } from "./canvasFlowNodeBuilder";
 import {
   PRINT_HEADER_HEIGHT_PX,
-  buildPrintPreviewHtml,
-  cropDataUrl,
-  loadHtml2Canvas,
-  loadHtmlToImage,
 } from "./canvasPrintUtils";
 import { SystemMapLoadingView } from "./SystemMapLoadingView";
 
@@ -256,67 +240,6 @@ const getMethodologyBodyDisplayMode = (
   return "description";
 };
 
-const formatIncidentOptionLabel = (value: string) =>
-  value
-    .split("_")
-    .map((part) => (part ? `${part[0].toUpperCase()}${part.slice(1)}` : part))
-    .join(" ");
-
-const getSearchElementTypeLabel = (element: CanvasElementRow) => {
-  if (element.element_type !== "incident_outcome") {
-    return getElementRelationshipTypeLabel(element.element_type);
-  }
-  const cfg = (element.element_config as Record<string, unknown> | null) ?? {};
-  const consequenceCategory = String(cfg.consequence_category ?? "actual").trim().toLowerCase() || "actual";
-  const reportingConsequence = String(cfg.reporting_consequence ?? "").trim().toLowerCase();
-  if (consequenceCategory === "maximum_reasonable") return "Potential Outcome";
-  if (consequenceCategory === "actual") return "Actual Outcome";
-  if (consequenceCategory === "reporting") {
-    if (reportingConsequence === "externally_reported") return "External Report";
-    if (reportingConsequence === "internally_reported") return "Internal Report";
-    if (reportingConsequence === "reported_to_regulator") return "Regulator Report";
-    if (reportingConsequence === "reported_elsewhere") return "Report Elsewhere";
-    return "Reporting Outcome";
-  }
-  return formatIncidentOptionLabel(consequenceCategory) || "Outcome";
-};
-
-const getSearchElementTypeStyle = (element: CanvasElementRow) => {
-  if (element.element_type === "grouping_container") {
-    return {
-      kindColor: null,
-      kindTextColor: "#475569",
-      kindBorderColor: "#94a3b8",
-    };
-  }
-  if (element.color_hex) {
-    return {
-      kindColor: element.color_hex,
-      kindTextColor: null,
-      kindBorderColor: null,
-    };
-  }
-  if (element.element_type === "incident_sequence_step") {
-    return {
-      kindColor: "#bfdbfe",
-      kindTextColor: "#111827",
-      kindBorderColor: null,
-    };
-  }
-  if (element.element_type === "incident_task_condition") {
-    return {
-      kindColor: "#fb923c",
-      kindTextColor: "#111827",
-      kindBorderColor: null,
-    };
-  }
-  return {
-    kindColor: null,
-    kindTextColor: null,
-    kindBorderColor: null,
-  };
-};
-
 type CanvasElementInsertPayload = {
   map_id: string;
   element_type: string;
@@ -335,65 +258,12 @@ type CanvasElementUpdatePayload = {
   fields: Partial<Pick<CanvasElementRow, "heading" | "element_config" | "pos_x" | "pos_y" | "width" | "height">>;
 };
 
-type MapSuggestionItem = {
-  id: string;
-  title: string;
-  question: string;
-  rationale: string;
-  priority: "low" | "medium" | "high";
-  category:
-    | "chronology"
-    | "evidence"
-    | "people"
-    | "factors"
-    | "controls"
-    | "outcomes"
-    | "response"
-    | "recommendations"
-    | "relationships"
-    | "scope"
-    | "quality"
-    | "other";
-};
-
-type MapSuggestionApiResponse = {
-  overview: string;
-  suggestions: MapSuggestionItem[];
-  generatedAt?: string;
-};
-
-type PersistedMapSuggestionRunRow = {
-  id: string;
-  overview: string;
-  created_at: string;
-};
-
-type PersistedMapSuggestionRow = {
-  id: string;
-  title: string;
-  question: string;
-  rationale: string;
-  priority: "low" | "medium" | "high";
-  category: MapSuggestionItem["category"];
-};
-
 type OrgAccessCandidate = {
   userId: string;
   fullName: string;
   email: string;
   organisations: string[];
   currentRole: "read" | "partial_write" | "full_write" | null;
-};
-
-type MapSessionHistorySnapshot = InvestigationTemplateSnapshot & {
-  map: Pick<SystemMap, "title" | "description" | "map_code" | "map_category">;
-};
-
-type MapSessionHistoryEntry = {
-  id: string;
-  position: number;
-  snapshotHash: string;
-  snapshot: MapSessionHistorySnapshot;
 };
 
 type BowtieDraftState = Record<string, string | boolean | string[]>;
@@ -424,56 +294,11 @@ const stepElementTypesByWizardStep: Record<SystemMapWizardCommitPayload["step"],
   recommendation: ["incident_recommendation"],
 };
 
-function trimSuggestionText(value: unknown, maxLength = 220) {
-  if (typeof value !== "string") return "";
-  const normalized = value.replace(/\s+/g, " ").trim();
-  if (!normalized) return "";
-  return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 1)}…` : normalized;
-}
-
-function formatSuggestionTimestamp(value: string | null | undefined) {
-  if (!value) return null;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed.toLocaleString("en-AU", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function summarizeConfigForSuggestions(config: Record<string, unknown> | null | undefined) {
-  if (!config) return {};
-  const summaryEntries: Array<[string, string | number | boolean | string[]]> = [];
-  Object.entries(config).forEach(([key, value]) => {
-      if (typeof value === "string") {
-        const normalized = trimSuggestionText(value, 180);
-        if (normalized) summaryEntries.push([key, normalized]);
-        return;
-      }
-      if (typeof value === "number" || typeof value === "boolean") {
-        summaryEntries.push([key, value]);
-        return;
-      }
-      if (Array.isArray(value)) {
-        const normalized = value
-          .map((item) => trimSuggestionText(item, 80))
-          .filter(Boolean)
-          .slice(0, 8);
-        if (normalized.length) summaryEntries.push([key, normalized]);
-      }
-    });
-
-  return Object.fromEntries(summaryEntries.slice(0, 16));
-}
-
 function SystemMapCanvasInner({
   mapId,
   showWelcomeOnLoad,
   templateEditorTemplateId,
   templateEditorTemplateName,
-  templateEditorIsGlobal,
   templateEditorVisibility,
   entrySource,
   viewerMode,
@@ -499,7 +324,6 @@ function SystemMapCanvasInner({
   const templateMenuRef = useRef<HTMLDivElement | null>(null);
   const searchMenuRef = useRef<HTMLDivElement | null>(null);
   const printMenuRef = useRef<HTMLDivElement | null>(null);
-  const printPreviewFrameRef = useRef<HTMLIFrameElement | null>(null);
   const mapInfoAsideRef = useRef<HTMLDivElement | null>(null);
   const mapInfoButtonRef = useRef<HTMLButtonElement | null>(null);
   const disciplineMenuRef = useRef<HTMLDivElement | null>(null);
@@ -512,15 +336,6 @@ function SystemMapCanvasInner({
   const clipboardPasteCountRef = useRef(1);
   const isNodeDragActiveRef = useRef(false);
   const imagePathPairsRef = useRef<Array<{ id: string; path: string }>>([]);
-  const historySessionIdRef = useRef(
-    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-  );
-  const historyPersistTimerRef = useRef<number | null>(null);
-  const historyApplyingRef = useRef(false);
-  const historyInitializedRef = useRef(false);
-
   const [userId, setUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string>("");
   const [mapRole, setMapRole] = useState<"read" | "partial_write" | "full_write" | null>(null);
@@ -577,64 +392,51 @@ function SystemMapCanvasInner({
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [wizardSaving, setWizardSaving] = useState(false);
   const [isNodeDragActive, setIsNodeDragActive] = useState(false);
-  const [showTemplateMenu, setShowTemplateMenu] = useState(false);
-  const [templateQuery, setTemplateQuery] = useState("");
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
-  const [templateResults, setTemplateResults] = useState<
-    Array<{ id: string; name: string; updatedAt: string; isGlobal: boolean; visibility: InvestigationTemplateVisibility }>
-  >([]);
-  const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
-  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
-  const [templateSaveMessage, setTemplateSaveMessage] = useState<string | null>(null);
-  const [templateVisibility, setTemplateVisibility] = useState<InvestigationTemplateVisibility>(
-    templateEditorVisibility
-  );
-  const [templateEditorStatus, setTemplateEditorStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [showSearchMenu, setShowSearchMenu] = useState(false);
-  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
-  const [suggestionProgress, setSuggestionProgress] = useState(0);
-  const [suggestionOverview, setSuggestionOverview] = useState("");
-  const [mapSuggestions, setMapSuggestions] = useState<MapSuggestionItem[]>([]);
-  const [suggestionError, setSuggestionError] = useState<string | null>(null);
-  const [suggestionsLastUpdatedAt, setSuggestionsLastUpdatedAt] = useState<string | null>(null);
-  const [historyEntries, setHistoryEntries] = useState<MapSessionHistoryEntry[]>([]);
-  const [historyCursor, setHistoryCursor] = useState(-1);
-  const [isApplyingHistory, setIsApplyingHistory] = useState(false);
-  const [showPrintMenu, setShowPrintMenu] = useState(false);
-  const [isPreparingPrint, setIsPreparingPrint] = useState(false);
-  const [showPrintPreview, setShowPrintPreview] = useState(false);
-  const [printPreviewImageDataUrl, setPrintPreviewImageDataUrl] = useState<string | null>(null);
-  const [printOrientation, setPrintOrientation] = useState<"portrait" | "landscape">("portrait");
-  const [printSelectionMode, setPrintSelectionMode] = useState(false);
-  const [isCopyingPrintImage, setIsCopyingPrintImage] = useState(false);
-  const [printSelectionCopyMessage, setPrintSelectionCopyMessage] = useState<string | null>(null);
-  const [printSelectionDraft, setPrintSelectionDraft] = useState<{
-    active: boolean;
-    startX: number;
-    startY: number;
-    currentX: number;
-    currentY: number;
-  } | null>(null);
-  const [printSelectionRect, setPrintSelectionRect] = useState<{
-    left: number;
-    top: number;
-    width: number;
-    height: number;
-  } | null>(null);
-  const [showPrintSelectionConfirm, setShowPrintSelectionConfirm] = useState(false);
   const [hasCurrentPassAssignment, setHasCurrentPassAssignment] = useState(true);
-  const printPreviewHtml = useMemo(
-    () =>
-      printPreviewImageDataUrl
-        ? buildPrintPreviewHtml({
-            mapTitle: map?.title || "System Map",
-            imageDataUrl: printPreviewImageDataUrl,
-            orientation: printOrientation,
-          })
-        : null,
-    [map?.title, printOrientation, printPreviewImageDataUrl]
-  );
-  const [searchQuery, setSearchQuery] = useState("");
+  const {
+    printPreviewFrameRef,
+    showPrintMenu,
+    setShowPrintMenu,
+    isPreparingPrint,
+    showPrintPreview,
+    printPreviewHtml,
+    printOrientation,
+    setPrintOrientation,
+    printSelectionMode,
+    isCopyingPrintImage,
+    printSelectionCopyMessage,
+    activePrintSelectionRect,
+    showPrintSelectionConfirm,
+    setShowPrintPreview,
+    exitPrintSelectionMode,
+    handlePrintCurrentView,
+    handlePrintSelectArea,
+    handleConfirmPrintArea,
+    handleCopyPrintAreaImageToClipboard,
+    handlePrintOverlayPointerDown,
+    handlePrintOverlayPointerMove,
+    handlePrintOverlayPointerUp,
+  } = useCanvasPrintController({
+    canvasRef,
+    mapTitle: map?.title || "System Map",
+    setError,
+  });
+  const {
+    showSearchMenu,
+    setShowSearchMenu,
+    searchQuery,
+    setSearchQuery,
+    searchCatalog,
+    searchResults,
+    handleSelectSearchResult,
+  } = useCanvasSearch({
+    rf,
+    canvasRef,
+    types,
+    nodes,
+    elements,
+    outlineItems,
+  });
   const snapToMinorGrid = useCallback((v: number) => Math.round(v / minorGridSize) * minorGridSize, []);
   const getCanvasFlowCenter = useCallback(() => {
     if (!rf || !canvasRef.current) return null;
@@ -663,8 +465,26 @@ function SystemMapCanvasInner({
   const allowedNodeKinds = useMemo(() => getAllowedNodeKindsForCategory(mapCategoryId), [mapCategoryId]);
   const canUseWizard = canWriteMap && allowedNodeKinds.some((kind) => kind.startsWith("incident_"));
   const canUseSuggestionCheck = !isGuestViewer && !!map;
-  const canUndoSessionMapChanges = canWriteMap && historyCursor > 0 && !isApplyingHistory;
-  const canRedoSessionMapChanges = canWriteMap && historyCursor >= 0 && historyCursor < historyEntries.length - 1 && !isApplyingHistory;
+  const {
+    isLoadingSuggestions,
+    suggestionProgress,
+    mapSuggestions,
+    suggestionError,
+    suggestionsLastUpdatedAt,
+    loadPersistedMapSuggestions,
+    handleDismissMapSuggestion,
+    handleRunSuggestionCheck,
+  } = useMapSuggestions({
+    canUseSuggestionCheck,
+    map,
+    mapId,
+    mapCategoryId,
+    types,
+    nodes,
+    elements,
+    relations,
+    userId,
+  });
   const readOnlyActionReason = !accessAllowsEditing
     ? passScopedWriteBlocked
       ? "This map belongs to an older 30 Day Access period. Start monthly access to restore full editing across older pass maps."
@@ -703,16 +523,37 @@ function SystemMapCanvasInner({
     if (normalized === "partial_write") return "Partial write";
     return "Read";
   }, []);
-  const formatStickyDate = useCallback((value: string | null | undefined) => {
-    if (!value) return "";
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "";
-    return date.toLocaleDateString("en-AU", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  }, []);
+  const formatStickyDate = useCallback(formatShortAuDate, []);
+  const {
+    showTemplateMenu,
+    setShowTemplateMenu,
+    templateQuery,
+    templateResults,
+    isLoadingTemplates,
+    isSavingTemplate,
+    templateSaveMessage,
+    templateVisibility,
+    handleTemplateQueryChange,
+    handleSelectTemplateResult,
+    handleSetTemplateVisibility,
+    handleSaveTemplate,
+  } = useInvestigationTemplates({
+    canSaveTemplate,
+    formatStickyDate,
+    setError,
+    initialTemplateVisibility: templateEditorVisibility,
+    isTemplateEditor,
+    templateEditorTemplateId,
+    templateEditorTemplateName,
+    templateEditorVisibility,
+    loading,
+    map,
+    types,
+    nodes,
+    elements,
+    relations,
+    outlineItems,
+  });
   const memberDisplayNameByUserId = useMemo(() => {
     const m = new Map<string, string>();
     mapMembers.forEach((member) => {
@@ -721,640 +562,43 @@ function SystemMapCanvasInner({
     });
     return m;
   }, [mapMembers]);
-  const activePrintSelectionRect = useMemo(() => {
-    if (printSelectionDraft) {
-      const left = Math.min(printSelectionDraft.startX, printSelectionDraft.currentX);
-      const top = Math.min(printSelectionDraft.startY, printSelectionDraft.currentY);
-      const width = Math.abs(printSelectionDraft.currentX - printSelectionDraft.startX);
-      const height = Math.abs(printSelectionDraft.currentY - printSelectionDraft.startY);
-      return { left, top, width, height };
-    }
-    return printSelectionRect;
-  }, [printSelectionDraft, printSelectionRect]);
-  const exitPrintSelectionMode = useCallback(() => {
-    setPrintSelectionMode(false);
-    setPrintSelectionDraft(null);
-    setPrintSelectionRect(null);
-    setShowPrintSelectionConfirm(false);
-    setPrintSelectionCopyMessage(null);
-  }, []);
-  const loadTemplateResults = useCallback(
-    async (query: string) => {
-      if (!canSaveTemplate) return;
-
-      try {
-        setIsLoadingTemplates(true);
-        const results = await listInvestigationTemplates(supabaseBrowser, query, 24);
-        setTemplateResults(
-          results
-            .filter((item) => item.can_edit)
-            .map((item) => ({
-            id: item.id,
-            name: item.name,
-            updatedAt: formatStickyDate(item.updated_at) || "Recently saved",
-            isGlobal: item.is_global,
-            visibility: item.visibility ?? (item.is_global ? "global" : "private"),
-          }))
-        );
-      } catch (templateError) {
-        setError(templateError instanceof Error ? templateError.message : "Unable to load templates.");
-      } finally {
-        setIsLoadingTemplates(false);
-      }
-    },
-    [canSaveTemplate, formatStickyDate]
-  );
-
-  const handleTemplateQueryChange = useCallback(
-    (value: string) => {
-      setTemplateQuery(value);
-      setSelectedTemplateId(null);
-      setTemplateSaveMessage(null);
-      if (!canSaveTemplate) return;
-      if (value.trim().length >= 4) {
-        setShowTemplateMenu(true);
-        void loadTemplateResults(value);
-      }
-    },
-    [canSaveTemplate, loadTemplateResults]
-  );
-
-  const handleSelectTemplateResult = useCallback((id: string, name: string, visibility: InvestigationTemplateVisibility) => {
-    setSelectedTemplateId(id);
-    setTemplateQuery(name);
-    setTemplateSaveMessage(null);
-    setTemplateVisibility(visibility);
-  }, []);
-
-  const handleSetTemplateVisibility = useCallback((visibility: InvestigationTemplateVisibility) => {
-    setSelectedTemplateId(null);
-    setTemplateSaveMessage(null);
-    setTemplateVisibility(visibility);
-  }, []);
-
-  const buildTemplateSnapshot = useCallback(async () => {
-    const snapshot: InvestigationTemplateSnapshot = {
-      types: types.map((item) => ({
-        id: item.id,
-        map_id: item.map_id,
-        name: item.name,
-        level_rank: item.level_rank,
-        band_y_min: item.band_y_min,
-        band_y_max: item.band_y_max,
-        is_active: item.is_active,
-      })),
-      nodes: nodes.map((item) => ({
-        id: item.id,
-        type_id: item.type_id,
-        title: item.title,
-        document_number: item.document_number,
-        discipline: item.discipline,
-        owner_user_id: item.owner_user_id,
-        owner_name: item.owner_name,
-        user_group: item.user_group,
-        pos_x: item.pos_x,
-        pos_y: item.pos_y,
-        width: item.width,
-        height: item.height,
-        is_archived: item.is_archived,
-      })),
-      elements: elements.map((item) => ({
-        id: item.id,
-        element_type: item.element_type,
-        heading: item.heading,
-        color_hex: item.color_hex,
-        element_config: item.element_config,
-        pos_x: item.pos_x,
-        pos_y: item.pos_y,
-        width: item.width,
-        height: item.height,
-      })),
-      relations: relations.map((item) => ({
-        id: item.id,
-        from_node_id: item.from_node_id,
-        to_node_id: item.to_node_id,
-        source_grouping_element_id: item.source_grouping_element_id,
-        target_grouping_element_id: item.target_grouping_element_id,
-        source_system_element_id: item.source_system_element_id,
-        target_system_element_id: item.target_system_element_id,
-        relation_type: item.relation_type,
-        relationship_description: item.relationship_description,
-        relationship_disciplines: item.relationship_disciplines,
-        relationship_category: item.relationship_category,
-        relationship_custom_type: item.relationship_custom_type,
-      })),
-      outlineItems: outlineItems.map((item) => ({
-        id: item.id,
-        node_id: item.node_id,
-        kind: item.kind,
-        heading_level: item.heading_level,
-        parent_heading_id: item.parent_heading_id,
-        heading_id: item.heading_id,
-        title: item.title,
-        content_text: item.content_text,
-        sort_order: item.sort_order,
-      })),
-    };
-
-    return snapshot;
-  }, [elements, nodes, outlineItems, relations, types]);
-
-  const buildMapSessionHistorySnapshot = useCallback((): MapSessionHistorySnapshot | null => {
-    if (!map) return null;
-    return {
-      map: {
-        title: map.title,
-        description: map.description,
-        map_code: map.map_code,
-        map_category: map.map_category ?? defaultMapCategoryId,
-      },
-      types: types.map((item) => ({
-        id: item.id,
-        map_id: item.map_id,
-        name: item.name,
-        level_rank: item.level_rank,
-        band_y_min: item.band_y_min,
-        band_y_max: item.band_y_max,
-        is_active: item.is_active,
-      })),
-      nodes: nodes.map((item) => ({
-        id: item.id,
-        type_id: item.type_id,
-        title: item.title,
-        document_number: item.document_number,
-        discipline: item.discipline,
-        owner_user_id: item.owner_user_id,
-        owner_name: item.owner_name,
-        user_group: item.user_group,
-        pos_x: item.pos_x,
-        pos_y: item.pos_y,
-        width: item.width,
-        height: item.height,
-        is_archived: item.is_archived,
-      })),
-      elements: elements.map((item) => ({
-        id: item.id,
-        element_type: item.element_type,
-        heading: item.heading,
-        color_hex: item.color_hex,
-        created_by_user_id: item.created_by_user_id,
-        element_config: item.element_config,
-        pos_x: item.pos_x,
-        pos_y: item.pos_y,
-        width: item.width,
-        height: item.height,
-      })),
-      relations: relations.map((item) => ({
-        id: item.id,
-        from_node_id: item.from_node_id,
-        to_node_id: item.to_node_id,
-        source_grouping_element_id: item.source_grouping_element_id,
-        target_grouping_element_id: item.target_grouping_element_id,
-        source_system_element_id: item.source_system_element_id,
-        target_system_element_id: item.target_system_element_id,
-        relation_type: item.relation_type,
-        relationship_description: item.relationship_description,
-        relationship_disciplines: item.relationship_disciplines,
-        relationship_category: item.relationship_category,
-        relationship_custom_type: item.relationship_custom_type,
-      })),
-      outlineItems: outlineItems.map((item) => ({
-        id: item.id,
-        node_id: item.node_id,
-        kind: item.kind,
-        heading_level: item.heading_level,
-        parent_heading_id: item.parent_heading_id,
-        heading_id: item.heading_id,
-        title: item.title,
-        content_text: item.content_text,
-        sort_order: item.sort_order,
-      })),
-    };
-  }, [elements, map, nodes, outlineItems, relations, types]);
-
-  const buildSuggestionSnapshot = useCallback(() => {
-    const typeNameById = new Map(types.map((typeRow) => [typeRow.id, typeRow.name]));
-    const relationCountByTargetId = new Map<string, number>();
-    relations.forEach((relation) => {
-      [
-        relation.from_node_id,
-        relation.to_node_id,
-        relation.source_grouping_element_id,
-        relation.target_grouping_element_id,
-        relation.source_system_element_id,
-        relation.target_system_element_id,
-      ]
-        .filter((value): value is string => typeof value === "string" && value.length > 0)
-        .forEach((value) => {
-          relationCountByTargetId.set(value, (relationCountByTargetId.get(value) ?? 0) + 1);
-        });
-    });
-
-    const countsByElementType = elements.reduce<Record<string, number>>((acc, element) => {
-      acc[element.element_type] = (acc[element.element_type] ?? 0) + 1;
-      return acc;
-    }, {});
-
-    const nodeLabelById = new Map(
-      nodes.map((node) => [
-        node.id,
-        trimSuggestionText(node.title || getDisplayTypeName(typeNameById.get(node.type_id) || "Document"), 120) || "Document",
-      ]),
-    );
-    const elementLabelById = new Map(
-      elements.map((element) => [
-        element.id,
-        trimSuggestionText(element.heading || getElementDisplayName(element), 120) || getElementDisplayName(element),
-      ]),
-    );
-
-    return {
-      map: {
-        id: map?.id ?? mapId,
-        title: trimSuggestionText(map?.title ?? "Untitled map", 140),
-        description: trimSuggestionText(map?.description ?? "", 220),
-        category: mapCategoryId,
-      },
-      summary: {
-        document_count: nodes.length,
-        element_count: elements.length,
-        relation_count: relations.length,
-        element_type_counts: countsByElementType,
-      },
-      documents: nodes.map((node) => ({
-        id: node.id,
-        title: trimSuggestionText(node.title, 140) || "Untitled document",
-        type: trimSuggestionText(typeNameById.get(node.type_id) || "Document", 80),
-        document_number: trimSuggestionText(node.document_number, 60),
-        discipline: trimSuggestionText(node.discipline, 80),
-        user_group: trimSuggestionText(node.user_group, 80),
-        relation_count: relationCountByTargetId.get(node.id) ?? 0,
-      })),
-      elements: elements.map((element) => ({
-        id: element.id,
-        type: element.element_type,
-        label: trimSuggestionText(element.heading || getElementDisplayName(element), 140) || getElementDisplayName(element),
-        config: summarizeConfigForSuggestions((element.element_config as Record<string, unknown> | null) ?? null),
-        relation_count: relationCountByTargetId.get(element.id) ?? 0,
-      })),
-      relations: relations.map((relation) => ({
-        id: relation.id,
-        source:
-          nodeLabelById.get(relation.from_node_id || "") ||
-          elementLabelById.get(relation.source_system_element_id || relation.source_grouping_element_id || "") ||
-          "Unknown source",
-        target:
-          nodeLabelById.get(relation.to_node_id || "") ||
-          elementLabelById.get(relation.target_system_element_id || relation.target_grouping_element_id || "") ||
-          "Unknown target",
-        relation_type: trimSuggestionText(relation.relation_type, 80),
-        relationship_category: trimSuggestionText(relation.relationship_category, 80),
-        custom_type: trimSuggestionText(relation.relationship_custom_type, 80),
-        description: trimSuggestionText(relation.relationship_description, 180),
-        disciplines: trimSuggestionText(relation.relationship_disciplines, 80),
-      })),
-    };
-  }, [elements, map, mapCategoryId, mapId, nodes, relations, types]);
-
-  const loadPersistedMapSuggestions = useCallback(async () => {
-    if (!canUseSuggestionCheck || !mapId) {
-      setSuggestionOverview("");
-      setMapSuggestions([]);
-      setSuggestionsLastUpdatedAt(null);
-      return;
-    }
-
-    try {
-      setSuggestionError(null);
-      const { data: runRow, error: runError } = await supabaseBrowser
-        .schema("ms")
-        .from("map_suggestion_runs")
-        .select("id,overview,created_at")
-        .eq("map_id", mapId)
-        .eq("is_current", true)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .returns<PersistedMapSuggestionRunRow[]>()
-        .maybeSingle();
-
-      if (runError) throw runError;
-
-      if (!runRow?.id) {
-        setSuggestionOverview("");
-        setMapSuggestions([]);
-        setSuggestionsLastUpdatedAt(null);
-        return;
-      }
-
-      const { data: suggestionRows, error: suggestionLoadError } = await supabaseBrowser
-        .schema("ms")
-        .from("map_suggestions")
-        .select("id,title,question,rationale,priority,category")
-        .eq("map_id", mapId)
-        .eq("run_id", runRow.id)
-        .is("dismissed_at", null)
-        .order("created_at", { ascending: true })
-        .returns<PersistedMapSuggestionRow[]>();
-
-      if (suggestionLoadError) throw suggestionLoadError;
-
-      setSuggestionOverview(runRow.overview || "");
-      setMapSuggestions((suggestionRows ?? []).map((row) => ({ ...row })));
-      setSuggestionsLastUpdatedAt(formatSuggestionTimestamp(runRow.created_at));
-    } catch (loadError) {
-      setSuggestionError(loadError instanceof Error ? loadError.message : "Unable to load saved suggestions.");
-    }
-  }, [canUseSuggestionCheck, mapId]);
-
-  const handleDismissMapSuggestion = useCallback(
-    (suggestionId: string) => {
-      void (async () => {
-        try {
-          setSuggestionError(null);
-          const dismissedAt = new Date().toISOString();
-          const { error: dismissError } = await supabaseBrowser
-            .schema("ms")
-            .from("map_suggestions")
-            .update({
-              dismissed_at: dismissedAt,
-              dismissed_by_user_id: userId,
-            })
-            .eq("id", suggestionId)
-            .eq("map_id", mapId)
-            .is("dismissed_at", null);
-
-          if (dismissError) throw dismissError;
-          setMapSuggestions((prev) => prev.filter((item) => item.id !== suggestionId));
-        } catch (dismissSuggestionError) {
-          setSuggestionError(
-            dismissSuggestionError instanceof Error
-              ? dismissSuggestionError.message
-              : "Unable to dismiss suggestion.",
-          );
-        }
-      })();
-    },
-    [mapId, userId],
-  );
-
-  const handleRunSuggestionCheck = useCallback(async () => {
-    if (!canUseSuggestionCheck || !map) return;
-
-    try {
-      setIsLoadingSuggestions(true);
-      setSuggestionError(null);
-      setSuggestionProgress(8);
-      const {
-        data: { session },
-      } = await supabaseBrowser.auth.getSession();
-      setSuggestionProgress(14);
-
-      if (!session?.access_token) {
-        throw new Error("Your session has expired. Please sign in again.");
-      }
-
-      setSuggestionProgress(22);
-      const response = await fetch("/api/map-suggestions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          mapId,
-          mapSnapshot: buildSuggestionSnapshot(),
-        }),
-      });
-      setSuggestionProgress(88);
-
-      const payload = (await response.json().catch(() => null)) as
-        | (MapSuggestionApiResponse & { error?: string })
-        | { error?: string }
-        | null;
-      setSuggestionProgress(94);
-
-      if (!response.ok) {
-        throw new Error(
-          payload && "error" in payload && typeof payload.error === "string"
-            ? payload.error
-            : "Unable to generate suggestions."
-        );
-      }
-
-      const nextSuggestions = Array.isArray((payload as MapSuggestionApiResponse | null)?.suggestions)
-        ? (payload as MapSuggestionApiResponse).suggestions
-        : [];
-
-      setSuggestionOverview(
-        typeof (payload as MapSuggestionApiResponse | null)?.overview === "string"
-          ? (payload as MapSuggestionApiResponse).overview
-          : ""
-      );
-      setMapSuggestions(nextSuggestions);
-      setSuggestionsLastUpdatedAt(
-        formatSuggestionTimestamp(
-          typeof (payload as MapSuggestionApiResponse | null)?.generatedAt === "string"
-            ? (payload as MapSuggestionApiResponse).generatedAt
-            : new Date().toISOString()
-        )
-      );
-      setSuggestionProgress(100);
-    } catch (suggestionRunError) {
-      setSuggestionError(
-        suggestionRunError instanceof Error ? suggestionRunError.message : "Unable to generate suggestions."
-      );
-      setSuggestionProgress(0);
-    } finally {
-      window.setTimeout(() => {
-        setIsLoadingSuggestions(false);
-      }, 180);
-    }
-  }, [buildSuggestionSnapshot, canUseSuggestionCheck, map, mapId]);
-
   const applyHistorySnapshotLocally = useCallback((snapshot: MapSessionHistorySnapshot) => {
     if (!map) return;
+    const restored = resolveMapSessionHistorySnapshotState(snapshot);
     setMap({
       ...map,
-      title: snapshot.map.title,
-      description: snapshot.map.description ?? null,
-      map_code: snapshot.map.map_code ?? null,
-      map_category: snapshot.map.map_category ?? defaultMapCategoryId,
+      ...restored.mapPatch,
     });
-    setMapTitleDraft(snapshot.map.title);
-    setMapInfoNameDraft(snapshot.map.title);
-    setMapInfoDescriptionDraft(snapshot.map.description ?? "");
-    setMapCodeDraft(snapshot.map.map_code ?? "");
-    setMapCategoryId((snapshot.map.map_category ?? defaultMapCategoryId) as MapCategoryId);
-    setTypes(normalizeTypeRanks(snapshot.types as DocumentTypeRow[]));
-    setNodes(snapshot.nodes as DocumentNodeRow[]);
-    setElements(snapshot.elements as CanvasElementRow[]);
-    setRelations(snapshot.relations as NodeRelationRow[]);
-    setOutlineItems(snapshot.outlineItems as OutlineItemRow[]);
+    setMapTitleDraft(restored.titleDraft);
+    setMapInfoNameDraft(restored.titleDraft);
+    setMapInfoDescriptionDraft(restored.descriptionDraft);
+    setMapCodeDraft(restored.codeDraft);
+    setMapCategoryId(restored.mapCategory);
+    setTypes(restored.types);
+    setNodes(restored.nodes);
+    setElements(restored.elements);
+    setRelations(restored.relations);
+    setOutlineItems(restored.outlineItems);
   }, [map]);
-
-  const persistHistorySnapshot = useCallback(async (snapshot: MapSessionHistorySnapshot, forceInitial = false) => {
-    if (!canWriteMap || !userId) return;
-
-    const snapshotHash = JSON.stringify(snapshot);
-    const activeEntries = historyEntries.slice(0, historyCursor + 1);
-    const currentEntry = historyCursor >= 0 ? historyEntries[historyCursor] : null;
-
-    if (!forceInitial && currentEntry?.snapshotHash === snapshotHash) return;
-    if (forceInitial && historyInitializedRef.current) return;
-
-    const nextPosition = forceInitial ? 0 : activeEntries.length;
-
-    try {
-      if (!forceInitial && historyCursor < historyEntries.length - 1) {
-        const { error: trimError } = await supabaseBrowser
-          .schema("ms")
-          .from("map_session_history")
-          .delete()
-          .eq("map_id", mapId)
-          .eq("user_id", userId)
-          .eq("session_id", historySessionIdRef.current)
-          .gt("position", historyCursor);
-
-        if (trimError) throw trimError;
-      }
-
-      const { data: insertedRow, error: insertError } = await supabaseBrowser
-        .schema("ms")
-        .from("map_session_history")
-        .insert({
-          map_id: mapId,
-          user_id: userId,
-          session_id: historySessionIdRef.current,
-          position: nextPosition,
-          snapshot,
-          snapshot_hash: snapshotHash,
-        })
-        .select("id")
-        .single();
-
-      if (insertError || !insertedRow?.id) throw insertError ?? new Error("Unable to save history snapshot.");
-
-      const nextEntry: MapSessionHistoryEntry = {
-        id: insertedRow.id,
-        position: nextPosition,
-        snapshotHash,
-        snapshot,
-      };
-
-      const nextEntries = forceInitial ? [nextEntry] : [...activeEntries, nextEntry];
-      historyInitializedRef.current = true;
-      setHistoryEntries(nextEntries);
-      setHistoryCursor(nextEntries.length - 1);
-    } catch (historyError) {
-      setError(historyError instanceof Error ? historyError.message : "Unable to save undo history.");
-    }
-  }, [canWriteMap, historyCursor, historyEntries, mapId, userId]);
-
-  const handleUndoSessionChanges = useCallback(async () => {
-    if (!canUndoSessionMapChanges) return;
-    const targetEntry = historyEntries[historyCursor - 1];
-    if (!targetEntry) return;
-
-    try {
-      setIsApplyingHistory(true);
-      historyApplyingRef.current = true;
-      const { error: restoreError } = await supabaseBrowser.rpc("restore_system_map_session_snapshot", {
-        p_map_id: mapId,
-        p_snapshot: targetEntry.snapshot,
-      });
-
-      if (restoreError) throw restoreError;
-      applyHistorySnapshotLocally(targetEntry.snapshot);
-      setHistoryCursor((prev) => Math.max(0, prev - 1));
-    } catch (undoError) {
-      setError(undoError instanceof Error ? undoError.message : "Unable to undo the last change.");
-    } finally {
-      window.setTimeout(() => {
-        historyApplyingRef.current = false;
-        setIsApplyingHistory(false);
-      }, 60);
-    }
-  }, [applyHistorySnapshotLocally, canUndoSessionMapChanges, historyCursor, historyEntries, mapId]);
-
-  const handleRedoSessionChanges = useCallback(async () => {
-    if (!canRedoSessionMapChanges) return;
-    const targetEntry = historyEntries[historyCursor + 1];
-    if (!targetEntry) return;
-
-    try {
-      setIsApplyingHistory(true);
-      historyApplyingRef.current = true;
-      const { error: restoreError } = await supabaseBrowser.rpc("restore_system_map_session_snapshot", {
-        p_map_id: mapId,
-        p_snapshot: targetEntry.snapshot,
-      });
-
-      if (restoreError) throw restoreError;
-      applyHistorySnapshotLocally(targetEntry.snapshot);
-      setHistoryCursor((prev) => Math.min(historyEntries.length - 1, prev + 1));
-    } catch (redoError) {
-      setError(redoError instanceof Error ? redoError.message : "Unable to redo the change.");
-    } finally {
-      window.setTimeout(() => {
-        historyApplyingRef.current = false;
-        setIsApplyingHistory(false);
-      }, 60);
-    }
-  }, [applyHistorySnapshotLocally, canRedoSessionMapChanges, historyCursor, historyEntries, mapId]);
-
-  const handleSaveTemplate = useCallback(async () => {
-    if (!canSaveTemplate) return;
-
-    const normalizedName = templateQuery.trim();
-    if (!normalizedName) {
-      setError("Enter a template name before saving.");
-      return;
-    }
-
-    try {
-      setIsSavingTemplate(true);
-      setTemplateSaveMessage(null);
-      setError(null);
-      const snapshot = await buildTemplateSnapshot();
-
-      const { data, error: saveError } = await supabaseBrowser.rpc("save_investigation_template", {
-        p_name: normalizedName,
-        p_snapshot: snapshot,
-        p_template_id: selectedTemplateId,
-        p_is_global: templateVisibility === "global",
-        p_visibility: templateVisibility,
-      });
-
-      if (saveError) throw saveError;
-
-      const savedRow = Array.isArray(data) ? data[0] : data;
-      if (savedRow?.id) {
-        setSelectedTemplateId(savedRow.id as string);
-      }
-      if (savedRow?.name) {
-        setTemplateQuery(savedRow.name as string);
-      }
-      const savedIsGlobal = Boolean(savedRow?.is_global);
-      setTemplateSaveMessage(
-        savedRow?.was_overwritten
-          ? savedIsGlobal
-            ? "Global template updated."
-            : savedRow?.visibility === "organisation"
-              ? "Organisation template updated."
-              : "Template updated."
-          : savedIsGlobal
-            ? "Global template saved."
-            : savedRow?.visibility === "organisation"
-              ? "Organisation template saved."
-              : "Template saved."
-      );
-      await loadTemplateResults(normalizedName.length >= 4 ? normalizedName : "");
-    } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : "Unable to save template.");
-    } finally {
-      setIsSavingTemplate(false);
-    }
-  }, [buildTemplateSnapshot, canSaveTemplate, templateQuery, selectedTemplateId, templateVisibility, loadTemplateResults]);
+  const {
+    canUndoSessionMapChanges,
+    canRedoSessionMapChanges,
+    handleUndoSessionChanges,
+    handleRedoSessionChanges,
+  } = useMapSessionHistory({
+    canWriteMap,
+    loading,
+    mapId,
+    userId,
+    map,
+    types,
+    nodes,
+    elements,
+    relations,
+    outlineItems,
+    applyHistorySnapshotLocally,
+    setError,
+  });
 
   const handleToggleSuggestionsMenu = useCallback(() => {
     setShowAddMenu(false);
@@ -1362,237 +606,12 @@ function SystemMapCanvasInner({
     setShowSearchMenu(false);
     setShowPrintMenu(false);
     setShowSuggestionsMenu((prev) => !prev);
-  }, []);
+  }, [setShowPrintMenu, setShowSearchMenu, setShowTemplateMenu]);
 
   useEffect(() => {
     if (!canUseSuggestionCheck) return;
     void loadPersistedMapSuggestions();
   }, [canUseSuggestionCheck, loadPersistedMapSuggestions]);
-
-  useEffect(() => {
-    if (!canWriteMap || loading || historyInitializedRef.current || !userId) return;
-    const snapshot = buildMapSessionHistorySnapshot();
-    if (!snapshot) return;
-    void persistHistorySnapshot(snapshot, true);
-  }, [buildMapSessionHistorySnapshot, canWriteMap, loading, persistHistorySnapshot, userId]);
-
-  useEffect(() => {
-    if (!canWriteMap || loading || !historyInitializedRef.current || historyApplyingRef.current) return;
-    const snapshot = buildMapSessionHistorySnapshot();
-    if (!snapshot) return;
-
-    if (historyPersistTimerRef.current) {
-      window.clearTimeout(historyPersistTimerRef.current);
-    }
-
-    historyPersistTimerRef.current = window.setTimeout(() => {
-      void persistHistorySnapshot(snapshot);
-    }, 900);
-
-    return () => {
-      if (historyPersistTimerRef.current) {
-        window.clearTimeout(historyPersistTimerRef.current);
-        historyPersistTimerRef.current = null;
-      }
-    };
-  }, [
-    buildMapSessionHistorySnapshot,
-    canWriteMap,
-    elements,
-    historyCursor,
-    historyEntries,
-    loading,
-    map?.description,
-    map?.map_code,
-    map?.map_category,
-    map?.title,
-    nodes,
-    outlineItems,
-    persistHistorySnapshot,
-    relations,
-    types,
-  ]);
-
-  const openPrintPreviewFromDataUrl = useCallback(
-    (imageDataUrl: string) => {
-      setPrintPreviewImageDataUrl(imageDataUrl);
-      setShowPrintPreview(true);
-    },
-    []
-  );
-  const capturePrintImage = useCallback(
-    async (mode: "current" | "area", options?: { openPreview?: boolean }) => {
-      const root = canvasRef.current as HTMLElement | null;
-      if (!root) {
-        setError("Unable to capture canvas for print.");
-        return null;
-      }
-      const target = (root.querySelector(".react-flow") as HTMLElement | null) ?? root;
-      const targetBounds = target.getBoundingClientRect();
-      const captureWidth = Math.max(1, Math.floor(target.clientWidth || targetBounds.width));
-      const captureHeight = Math.max(1, Math.floor(target.clientHeight || targetBounds.height));
-      let crop: { x: number; y: number; width: number; height: number } | null = null;
-      if (mode === "area") {
-        if (!printSelectionRect || printSelectionRect.width < 12 || printSelectionRect.height < 12) {
-          setError("Please select a larger area to print.");
-          return null;
-        }
-        const x = clamp(printSelectionRect.left - targetBounds.left, 0, targetBounds.width);
-        const y = clamp(printSelectionRect.top - targetBounds.top, 0, targetBounds.height);
-        const width = clamp(printSelectionRect.width, 1, targetBounds.width - x);
-        const height = clamp(printSelectionRect.height, 1, targetBounds.height - y);
-        crop = { x, y, width, height };
-      } else {
-        crop = { x: 0, y: 0, width: captureWidth, height: captureHeight };
-      }
-      setIsPreparingPrint(true);
-      const previousTargetBackgroundColor = target.style.backgroundColor;
-      target.style.backgroundColor = "#ffffff";
-      try {
-        let dataUrl = "";
-        try {
-          const htmlToImage = await loadHtmlToImage();
-          const fullDataUrl = await htmlToImage.toPng(target, {
-            cacheBust: true,
-            pixelRatio: 2,
-            backgroundColor: "#ffffff",
-            width: captureWidth,
-            height: captureHeight,
-            filter: (node: Node) => {
-              const el = node as unknown as HTMLElement;
-              if (!el?.classList) return true;
-              return !(
-                el.classList.contains("react-flow__background") ||
-                el.classList.contains("print-hidden") ||
-                el.dataset?.printIgnore === "true"
-              );
-            },
-          });
-          dataUrl = crop
-            ? await cropDataUrl({
-                dataUrl: fullDataUrl,
-                crop,
-                sourceWidth: captureWidth,
-                sourceHeight: captureHeight,
-              })
-            : fullDataUrl;
-        } catch {
-          const html2canvas = await loadHtml2Canvas();
-          const canvas = await html2canvas(target, {
-            backgroundColor: "#ffffff",
-            useCORS: true,
-            logging: false,
-            scale: 2,
-            x: crop?.x ?? 0,
-            y: crop?.y ?? 0,
-            width: crop?.width ?? captureWidth,
-            height: crop?.height ?? captureHeight,
-            ignoreElements: (element: Element) => {
-              const el = element as HTMLElement;
-              return (
-                el.classList.contains("react-flow__background") ||
-                el.classList.contains("print-hidden") ||
-                el.dataset.printIgnore === "true"
-              );
-            },
-          });
-          dataUrl = canvas.toDataURL("image/png");
-        }
-        if (options?.openPreview !== false) {
-          openPrintPreviewFromDataUrl(dataUrl);
-        }
-        return dataUrl;
-      } catch (e) {
-        setError((e as Error)?.message || "Unable to prepare print preview.");
-        return null;
-      } finally {
-        target.style.backgroundColor = previousTargetBackgroundColor;
-        setIsPreparingPrint(false);
-      }
-    },
-    [openPrintPreviewFromDataUrl, printSelectionRect, setError]
-  );
-  const handlePrintCurrentView = useCallback(async () => {
-    setShowPrintMenu(false);
-    setShowPrintSelectionConfirm(false);
-    setPrintSelectionMode(false);
-    setPrintSelectionDraft(null);
-    setPrintSelectionRect(null);
-    await capturePrintImage("current");
-  }, [capturePrintImage]);
-  const handlePrintSelectArea = useCallback(() => {
-    setShowPrintMenu(false);
-    setShowPrintSelectionConfirm(false);
-    setPrintSelectionDraft(null);
-    setPrintSelectionRect(null);
-    setPrintSelectionCopyMessage(null);
-    setPrintSelectionMode(true);
-  }, []);
-  const handleConfirmPrintArea = useCallback(async () => {
-    setPrintSelectionCopyMessage(null);
-    setShowPrintSelectionConfirm(false);
-    await capturePrintImage("area");
-    setPrintSelectionMode(false);
-  }, [capturePrintImage]);
-  const handleCopyPrintAreaImageToClipboard = useCallback(async () => {
-    setPrintSelectionCopyMessage(null);
-    const dataUrl = await capturePrintImage("area", { openPreview: false });
-    if (!dataUrl) return;
-    if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
-      setPrintSelectionCopyMessage("Clipboard image copy is not supported in this browser.");
-      return;
-    }
-    setIsCopyingPrintImage(true);
-    try {
-      const response = await fetch(dataUrl);
-      const blob = await response.blob();
-      await navigator.clipboard.write([new ClipboardItem({ [blob.type || "image/png"]: blob })]);
-      setPrintSelectionCopyMessage("Image copied to clipboard. You can paste it elsewhere.");
-    } catch (e) {
-      const message = (e as Error)?.message?.trim();
-      setPrintSelectionCopyMessage(message ? `Unable to copy image: ${message}` : "Unable to copy image to clipboard.");
-    } finally {
-      setIsCopyingPrintImage(false);
-    }
-  }, [capturePrintImage]);
-  const handlePrintOverlayPointerDown = useCallback((event: { clientX: number; clientY: number }) => {
-    if (showPrintSelectionConfirm) return;
-    setPrintSelectionCopyMessage(null);
-    setPrintSelectionDraft({
-      active: true,
-      startX: event.clientX,
-      startY: event.clientY,
-      currentX: event.clientX,
-      currentY: event.clientY,
-    });
-  }, [showPrintSelectionConfirm]);
-  const handlePrintOverlayPointerMove = useCallback((event: { clientX: number; clientY: number }) => {
-    setPrintSelectionDraft((prev) =>
-      prev
-        ? {
-            ...prev,
-            currentX: event.clientX,
-            currentY: event.clientY,
-          }
-        : prev
-    );
-  }, []);
-  const handlePrintOverlayPointerUp = useCallback(() => {
-    setPrintSelectionDraft((prev) => {
-      if (!prev) return prev;
-      const left = Math.min(prev.startX, prev.currentX);
-      const top = Math.min(prev.startY, prev.currentY);
-      const width = Math.abs(prev.currentX - prev.startX);
-      const height = Math.abs(prev.currentY - prev.startY);
-      if (width < 12 || height < 12) {
-        setPrintSelectionRect(null);
-        return null;
-      }
-      setPrintSelectionRect({ left, top, width, height });
-      setShowPrintSelectionConfirm(true);
-      return null;
-    });
-  }, []);
 
   const loadMapMembers = useCallback(
     async (ownerId?: string | null) => {
@@ -1635,7 +654,6 @@ function SystemMapCanvasInner({
     },
     [mapId, map?.owner_id]
   );
-
   const loadOrgAccessCandidates = useCallback(async (searchOverride?: string) => {
     if (!canManageMapMetadata) {
       setOrgAccessCandidates([]);
@@ -1738,6 +756,23 @@ function SystemMapCanvasInner({
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
   const [selectedFlowShapeId, setSelectedFlowShapeId] = useState<string | null>(null);
   const [selectedBowtieElementId, setSelectedBowtieElementId] = useState<string | null>(null);
+  const canvasSelectionSetters = useMemo<CanvasSelectionSetters>(
+    () => ({
+      setSelectedNodeId,
+      setSelectedProcessId,
+      setSelectedSystemId,
+      setSelectedProcessComponentId,
+      setSelectedPersonId,
+      setSelectedGroupingId,
+      setSelectedStickyId,
+      setSelectedImageId,
+      setSelectedTextBoxId,
+      setSelectedTableId,
+      setSelectedFlowShapeId,
+      setSelectedBowtieElementId,
+    }),
+    []
+  );
   const [title, setTitle] = useState("");
   const [selectedTypeId, setSelectedTypeId] = useState("");
   const [disciplineSelection, setDisciplineSelection] = useState<DisciplineKey[]>([]);
@@ -1815,27 +850,75 @@ function SystemMapCanvasInner({
   const [imageUrlsByElementId, setImageUrlsByElementId] = useState<Record<string, string>>({});
   const [evidenceUploadFile, setEvidenceUploadFile] = useState<File | null>(null);
   const [evidenceUploadPreviewUrl, setEvidenceUploadPreviewUrl] = useState<string | null>(null);
+  useSystemMapBootstrap({
+    initialSnapshot,
+    isGuestViewer,
+    mapId,
+    canvasElementSelectColumns,
+    loadMapMembers,
+    savedPos,
+    setLoading,
+    setLoadingProgress,
+    setLoadingMessage,
+    setError,
+    setUserId,
+    setMapRole,
+    setAccessState,
+    setHasCurrentPassAssignment,
+    setMapMembers,
+    setMap,
+    setMapTitleDraft,
+    setMapInfoNameDraft,
+    setMapInfoDescriptionDraft,
+    setMapCodeDraft,
+    setMapCategoryId,
+    setTypes,
+    setNodes,
+    setElements,
+    setRelations,
+    setImageUrlsByElementId,
+    setHasStoredViewport,
+    setPendingViewport,
+  });
 
-  const [desktopNodeAction, setDesktopNodeAction] = useState<"configure" | "relationship" | "structure" | null>(null);
   const [mobileNodeMenuId, setMobileNodeMenuId] = useState<string | null>(null);
-  const [showAddRelationship, setShowAddRelationship] = useState(false);
-  const [relationshipSourceNodeId, setRelationshipSourceNodeId] = useState<string | null>(null);
-  const [relationshipSourceSystemId, setRelationshipSourceSystemId] = useState<string | null>(null);
-  const [relationshipSourceGroupingId, setRelationshipSourceGroupingId] = useState<string | null>(null);
-  const [relationshipDocumentQuery, setRelationshipDocumentQuery] = useState("");
-  const [relationshipSystemQuery, setRelationshipSystemQuery] = useState("");
-  const [relationshipGroupingQuery, setRelationshipGroupingQuery] = useState("");
-  const [relationshipTargetDocumentId, setRelationshipTargetDocumentId] = useState("");
-  const [relationshipTargetSystemId, setRelationshipTargetSystemId] = useState("");
-  const [relationshipTargetGroupingId, setRelationshipTargetGroupingId] = useState("");
-  const [showRelationshipDocumentOptions, setShowRelationshipDocumentOptions] = useState(false);
-  const [showRelationshipSystemOptions, setShowRelationshipSystemOptions] = useState(false);
-  const [showRelationshipGroupingOptions, setShowRelationshipGroupingOptions] = useState(false);
-  const [relationshipDescription, setRelationshipDescription] = useState("");
-  const [relationshipDisciplineSelection, setRelationshipDisciplineSelection] = useState<DisciplineKey[]>([]);
-  const [showRelationshipDisciplineMenu, setShowRelationshipDisciplineMenu] = useState(false);
-  const [relationshipCategory, setRelationshipCategory] = useState<RelationshipCategory>(getDefaultRelationshipCategoryForMap(defaultMapCategoryId));
-  const [relationshipCustomType, setRelationshipCustomType] = useState("");
+  const {
+    showAddRelationship,
+    setShowAddRelationship,
+    relationshipSourceNodeId,
+    relationshipSourceSystemId,
+    relationshipSourceGroupingId,
+    relationshipDocumentQuery,
+    setRelationshipDocumentQuery,
+    relationshipSystemQuery,
+    setRelationshipSystemQuery,
+    relationshipGroupingQuery,
+    setRelationshipGroupingQuery,
+    relationshipTargetDocumentId,
+    setRelationshipTargetDocumentId,
+    relationshipTargetSystemId,
+    setRelationshipTargetSystemId,
+    relationshipTargetGroupingId,
+    setRelationshipTargetGroupingId,
+    showRelationshipDocumentOptions,
+    setShowRelationshipDocumentOptions,
+    showRelationshipSystemOptions,
+    setShowRelationshipSystemOptions,
+    showRelationshipGroupingOptions,
+    setShowRelationshipGroupingOptions,
+    relationshipDescription,
+    setRelationshipDescription,
+    relationshipDisciplineSelection,
+    setRelationshipDisciplineSelection,
+    showRelationshipDisciplineMenu,
+    setShowRelationshipDisciplineMenu,
+    relationshipCategory,
+    setRelationshipCategory,
+    relationshipCustomType,
+    setRelationshipCustomType,
+    closeAddRelationshipModal,
+    openAddRelationshipFromSource: openRelationshipStateFromSource,
+  } = useCanvasRelationshipController({ mapCategoryId });
   const [editingRelationId, setEditingRelationId] = useState<string | null>(null);
   const [editingRelationDescription, setEditingRelationDescription] = useState("");
   const [editingRelationCategory, setEditingRelationCategory] = useState<RelationshipCategory>(getDefaultRelationshipCategoryForMap(defaultMapCategoryId));
@@ -1843,7 +926,6 @@ function SystemMapCanvasInner({
   const [editingRelationDisciplines, setEditingRelationDisciplines] = useState<DisciplineKey[]>([]);
   const [showEditingRelationDisciplineMenu, setShowEditingRelationDisciplineMenu] = useState(false);
   useEffect(() => {
-    setRelationshipCategory((prev) => normalizeRelationshipCategoryForMap(prev, mapCategoryId));
     setEditingRelationCategory((prev) => normalizeRelationshipCategoryForMap(prev, mapCategoryId));
   }, [mapCategoryId]);
   const [confirmDeleteNodeId, setConfirmDeleteNodeId] = useState<string | null>(null);
@@ -1888,12 +970,6 @@ function SystemMapCanvasInner({
     currentClientY: 0,
   });
   const [showDeleteSelectionConfirm, setShowDeleteSelectionConfirm] = useState(false);
-  const [leftAsideSlideIn, setLeftAsideSlideIn] = useState(false);
-  const activePrimaryLeftAsideKeyRef = useRef<string | null>(null);
-  const autosavePointerLockRef = useRef(false);
-  const suppressNextPaneClearRef = useRef(false);
-  const suppressNextPaneClearFrameRef = useRef<number | null>(null);
-  const suppressPaneClearUntilRef = useRef(0);
   const [collapsedHeadingIds, setCollapsedHeadingIds] = useState<Set<string>>(new Set());
   const [newHeadingTitle, setNewHeadingTitle] = useState("");
   const [newHeadingLevel, setNewHeadingLevel] = useState<1 | 2 | 3>(1);
@@ -1911,24 +987,12 @@ function SystemMapCanvasInner({
     };
   }, [evidenceUploadPreviewUrl]);
   useEffect(() => {
+    const objectUrls = convertedMediaObjectUrlsRef.current;
     return () => {
-      if (suppressNextPaneClearFrameRef.current !== null) {
-        cancelAnimationFrame(suppressNextPaneClearFrameRef.current);
-      }
-      convertedMediaObjectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
-      convertedMediaObjectUrlsRef.current.clear();
+      objectUrls.forEach((url) => URL.revokeObjectURL(url));
+      objectUrls.clear();
     };
-  }, []);
-  const armPaneClearSuppression = useCallback(() => {
-    suppressNextPaneClearRef.current = true;
-    if (suppressNextPaneClearFrameRef.current !== null) {
-      cancelAnimationFrame(suppressNextPaneClearFrameRef.current);
-    }
-    suppressNextPaneClearFrameRef.current = requestAnimationFrame(() => {
-      suppressNextPaneClearRef.current = false;
-      suppressNextPaneClearFrameRef.current = null;
-    });
-  }, []);
+  }, [setShowPrintMenu, setShowSearchMenu, setShowTemplateMenu]);
   useEffect(() => {
     if (!canvasInteractionLocked) return;
     setSelectedFlowIds(new Set());
@@ -2040,7 +1104,6 @@ function SystemMapCanvasInner({
     flowShapeOutlineWidthDraft,
     flowShapeDirectionDraft,
     flowShapeRotationDraft,
-    shapeDefaultFillColor,
     normalizePreviewHex,
   ]);
   const canvasPreviewElements = useMemo(() => {
@@ -2267,18 +1330,6 @@ function SystemMapCanvasInner({
     flowShapeOutlineWidthDraft,
     flowShapeDirectionDraft,
     flowShapeRotationDraft,
-    shapeArrowDefaultWidth,
-    shapeArrowDefaultHeight,
-    shapeArrowMinWidth,
-    shapeArrowMinHeight,
-    tableMinRows,
-    tableMinColumns,
-    tableMinWidth,
-    tableMinHeight,
-    tableDefaultWidth,
-    tableDefaultHeight,
-    shapeMinWidth,
-    shapeMinHeight,
     normalizePreviewHex,
   ]);
 
@@ -2309,32 +1360,6 @@ function SystemMapCanvasInner({
       .sort((a, b) => a.level_rank - b.level_rank || getDisplayTypeName(a.name).localeCompare(getDisplayTypeName(b.name)));
   }, [types, mapId]);
 
-  const ranks = useMemo(() => {
-    const values = new Set<number>();
-    nodes.forEach((n) => {
-      const t = typesById.get(n.type_id);
-      if (t) values.add(t.level_rank);
-    });
-    if (!values.size) types.forEach((t) => values.add(t.level_rank));
-    return [...values].sort((a, b) => a - b);
-  }, [nodes, types, typesById]);
-
-  const rankLane = useMemo(() => {
-    const m = new Map<number, { min: number; max: number }>();
-    ranks.forEach((rank, i) => {
-      m.set(rank, { min: i * laneHeight + 20, max: i * laneHeight + laneHeight - 20 });
-    });
-    return m;
-  }, [ranks]);
-
-  const getClampRange = useCallback((typeId: string) => {
-    const t = typesById.get(typeId);
-    if (!t) return { min: 0, max: 3000 };
-    if (t.band_y_min !== null || t.band_y_max !== null) {
-      return { min: t.band_y_min ?? 0, max: t.band_y_max ?? 3000 };
-    }
-    return rankLane.get(t.level_rank) ?? { min: 0, max: 3000 };
-  }, [typesById, rankLane]);
   const getNodeSize = useCallback((node: DocumentNodeRow) => {
     const rawTypeName = typesById.get(node.type_id)?.name ?? "Document";
     const isLandscape = isLandscapeTypeName(rawTypeName);
@@ -2841,10 +1866,12 @@ function SystemMapCanvasInner({
   ]);
 
   useEffect(() => {
+    const resizeTimers = resizePersistTimersRef.current;
+    const resizeValues = resizePersistValuesRef.current;
     return () => {
-      resizePersistTimersRef.current.forEach((timer) => clearTimeout(timer));
-      resizePersistTimersRef.current.clear();
-      resizePersistValuesRef.current.clear();
+      resizeTimers.forEach((timer) => clearTimeout(timer));
+      resizeTimers.clear();
+      resizeValues.clear();
     };
   }, []);
 
@@ -2885,7 +1912,7 @@ function SystemMapCanvasInner({
       }
       if (e) setError(e.message || "Unable to save table cell.");
     },
-    [elements, canEditElement, canWriteMap, mapId, setElements, setError, canvasElementSelectColumns]
+    [elements, canEditElement, canWriteMap, mapId, setElements, setError]
   );
 
   const handleTableCellStyleCommit = useCallback(
@@ -3004,6 +2031,43 @@ function SystemMapCanvasInner({
     [canEditElement, canWriteMap, mapId, setElements, setError]
   );
 
+  const orgDirectReportCountByPersonId = useMemo(() => {
+    const counts = new Map<string, number>();
+    if (mapCategoryId !== "org_chart") return counts;
+    const normalizeRef = (value: string | null | undefined) => {
+      if (!value) return "";
+      const trimmed = String(value).replace(/^process:/i, "").trim().toLowerCase();
+      const uuidMatch = trimmed.match(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i);
+      return uuidMatch ? uuidMatch[0].toLowerCase() : trimmed;
+    };
+    const peopleByNormalizedId = new Map(
+      elements
+        .filter((el) => el.element_type === "person")
+        .map((el) => [normalizeRef(el.id), el] as const)
+    );
+    const resolvePersonByAnyRef = (refs: Array<string | null | undefined>) => {
+      for (const ref of refs) {
+        const normalized = normalizeRef(ref ?? "");
+        if (!normalized) continue;
+        const person = peopleByNormalizedId.get(normalized);
+        if (person) return person;
+      }
+      return null;
+    };
+    peopleByNormalizedId.forEach((person) => counts.set(person.id, 0));
+    relations.forEach((r) => {
+      const relationType = String(r.relation_type ?? "").trim().toLowerCase();
+      if (relationType !== "reports_to") return;
+      const source = resolvePersonByAnyRef([r.source_system_element_id, r.from_node_id]);
+      const target = resolvePersonByAnyRef([r.target_system_element_id, r.to_node_id]);
+      if (!source || !target) return;
+      if (source.id === target.id) return;
+      const leaderId = source.pos_y <= target.pos_y ? source.id : target.id;
+      counts.set(leaderId, (counts.get(leaderId) ?? 0) + 1);
+    });
+    return counts;
+  }, [elements, mapCategoryId, relations]);
+
   useEffect(() => {
     if (isNodeDragActiveRef.current) return;
     const directReportCountByPersonNormalizedId = buildOrgDirectReportCountByPersonNormalizedId({
@@ -3076,7 +2140,7 @@ function SystemMapCanvasInner({
       },
     }));
     setFlowNodes(nextNodes);
-  }, [nodes, canvasPreviewElements, typesById, setFlowNodes, getNodeSize, selectedFlowIds, selectedTableId, canManipulateCanvasElements, canEditElement, selectedFlowShapeId, hasUnsavedFlowShapeDraftChanges, mapCategoryId, memberDisplayNameByUserId, userEmail, userId, formatStickyDate, imageUrlsByElementId, handleTableCellCommit, handleTableCellStyleCommit, handleOpenEvidenceMediaOverlay, handleToggleIncidentDetail, canvasInteractionLocked]);
+  }, [nodes, canvasPreviewElements, typesById, setFlowNodes, getNodeSize, selectedFlowIds, selectedTableId, canManipulateCanvasElements, canEditElement, selectedFlowShapeId, hasUnsavedFlowShapeDraftChanges, mapCategoryId, memberDisplayNameByUserId, userEmail, userId, formatStickyDate, imageUrlsByElementId, handleTableCellCommit, handleTableCellStyleCommit, handleOpenEvidenceMediaOverlay, handleToggleIncidentDetail, canvasInteractionLocked, orgDirectReportCountByPersonId, relations]);
 
   const highlightedRelatedDocumentIds = useMemo(() => {
     if (isNodeDragActive) return new Set<string>();
@@ -3367,166 +2431,38 @@ function SystemMapCanvasInner({
       return !hasCollapsedAncestor(item.heading_id);
     });
   }, [outlineItems, hasCollapsedAncestor]);
-  const activePrimaryLeftAsideKey = useMemo(() => {
-    if (isMobile) return null;
-    if (desktopNodeAction !== "configure" && desktopNodeAction !== "relationship") return null;
-    if (selectedStickyId) return `sticky:${selectedStickyId}`;
-    if (selectedImageId) return `image:${selectedImageId}`;
-    if (selectedTextBoxId) return `textbox:${selectedTextBoxId}`;
-    if (selectedTableId) return `table:${selectedTableId}`;
-    if (selectedFlowShapeId) return `shape:${selectedFlowShapeId}`;
-    if (selectedProcessId) return `category:${selectedProcessId}`;
-    if (selectedSystemId) return `system:${selectedSystemId}`;
-    if (selectedProcessComponentId) return `process:${selectedProcessComponentId}`;
-    if (selectedPersonId) return `person:${selectedPersonId}`;
-    if (selectedBowtieElementId) return `bowtie:${selectedBowtieElementId}`;
-    if (selectedGroupingId) return `grouping:${selectedGroupingId}`;
-    if (selectedNodeId) return `document:${selectedNodeId}`;
-    return null;
-  }, [
+  const {
     desktopNodeAction,
+    setDesktopNodeAction,
+    leftAsideSlideIn,
+    activePrimaryLeftAsideKey,
+    shouldShowDesktopStructurePanel,
+    isPrimaryLeftAsideOpen,
+    autosavePointerLockRef,
+    armPaneClearSuppression,
+    consumePaneClearSuppression,
+    beginNodeDrag,
+    beginNodeDragStop,
+    finishNodeDragStop,
+  } = useCanvasAsideController({
     isMobile,
+    selectedNodeId,
+    selectedProcessId,
+    selectedSystemId,
+    selectedProcessComponentId,
+    selectedPersonId,
+    selectedGroupingId,
     selectedStickyId,
     selectedImageId,
     selectedTextBoxId,
     selectedTableId,
     selectedFlowShapeId,
-    selectedProcessId,
-    selectedSystemId,
-    selectedProcessComponentId,
-    selectedPersonId,
     selectedBowtieElementId,
-    selectedGroupingId,
-    selectedNodeId,
-  ]);
-  const isPrimaryLeftAsideOpen = useCallback(
-    (key: string | null) => Boolean(!isMobile && key && activePrimaryLeftAsideKey === key),
-    [activePrimaryLeftAsideKey, isMobile]
-  );
-  const shouldShowDesktopStructurePanel =
-    !isMobile && !!selectedNodeId && desktopNodeAction === "structure" && !!outlineNodeId && outlineNodeId === selectedNodeId;
-  const searchCatalog = useMemo(() => {
-    const collectConfigText = (value: unknown): string[] => {
-      if (typeof value === "string") return [value];
-      if (Array.isArray(value)) return value.flatMap(collectConfigText);
-      if (value && typeof value === "object") return Object.values(value).flatMap(collectConfigText);
-      return [];
-    };
-    const outlineTextByNodeId = new Map<string, string>();
-    outlineItems.forEach((item) => {
-      const segments = [item.title ?? "", item.content_text ?? ""].filter(Boolean);
-      if (!segments.length) return;
-      const current = outlineTextByNodeId.get(item.node_id) ?? "";
-      outlineTextByNodeId.set(item.node_id, current ? `${current} ${segments.join(" ")}` : segments.join(" "));
-    });
-    const nodeEntries = nodes.map((node) => {
-      const t = typesById.get(node.type_id);
-      const displayTypeName = getDisplayTypeName(t?.name || "Document");
-      const isLandscape = isLandscapeTypeName(t?.name || "");
-      const size = getNormalizedDocumentSize(isLandscape, node.width, node.height);
-      const typeBanner = getTypeBannerStyle(displayTypeName);
-      return {
-        id: node.id,
-        label: node.title,
-        documentNumber: node.document_number ?? null,
-        kind: displayTypeName,
-        description: outlineTextByNodeId.get(node.id) ?? "",
-        kindColor: typeBanner.bg,
-        kindTextColor: typeBanner.text,
-        kindBorderColor: null,
-        x: node.pos_x,
-        y: node.pos_y,
-        width: size.width,
-        height: size.height,
-      };
-    });
-    const elementEntries = elements.map((el) => {
-      const kind = getSearchElementTypeLabel(el);
-      const configText = collectConfigText(el.element_config).join(" ");
-      const kindStyle = getSearchElementTypeStyle(el);
-      return {
-        id: `process:${el.id}`,
-        label: el.heading || kind,
-        documentNumber: null,
-        kind,
-        description: configText,
-        kindColor: kindStyle.kindColor,
-        kindTextColor: kindStyle.kindTextColor,
-        kindBorderColor: kindStyle.kindBorderColor,
-        x: el.pos_x,
-        y: el.pos_y,
-        width: el.width,
-        height: el.height,
-      };
-    });
-    return [...nodeEntries, ...elementEntries];
-  }, [nodes, elements, typesById, outlineItems]);
-  const searchResults = useMemo(() => {
-    const term = searchQuery.trim().toLowerCase();
-    if (!term) return [];
-    return searchCatalog
-      .filter((item) =>
-        item.label.toLowerCase().includes(term) ||
-        (item.documentNumber ?? "").toLowerCase().includes(term) ||
-        item.kind.toLowerCase().includes(term) ||
-        (item.description ?? "").toLowerCase().includes(term)
-      )
-      .slice(0, 100)
-      .map((item) => ({
-        id: item.id,
-        label: item.label,
-        documentNumber: item.documentNumber,
-        kind: item.kind,
-        description: item.description,
-        kindColor: item.kindColor,
-        kindTextColor: item.kindTextColor,
-        kindBorderColor: item.kindBorderColor,
-      }));
-  }, [searchCatalog, searchQuery]);
-  const handleSelectSearchResult = useCallback((id: string) => {
-    if (!rf) return;
-    const match = searchCatalog.find((entry) => entry.id === id);
-    if (!match) return;
-    const centerX = match.x + match.width / 2;
-    const centerY = match.y + match.height / 2;
-    const viewportWidth = canvasRef.current?.clientWidth ?? window.innerWidth;
-    const viewportHeight = canvasRef.current?.clientHeight ?? window.innerHeight;
-    const zoom = 1.6;
-    rf.setViewport(
-      {
-        x: viewportWidth / 2 - centerX * zoom,
-        y: viewportHeight / 2 - centerY * zoom,
-        zoom,
-      },
-      { duration: 320 }
-    );
-    setShowSearchMenu(false);
-    setSearchQuery("");
-  }, [rf, searchCatalog]);
-
-  const shouldPreservePrimaryLeftAside = useCallback(
-    () =>
-      isNodeDragActiveRef.current ||
-      Boolean(currentSpecificSelectedFlowId) ||
-      Boolean(selectedSingleFlowId) ||
-      Date.now() < suppressPaneClearUntilRef.current,
-    [currentSpecificSelectedFlowId, selectedSingleFlowId]
-  );
-
-  useLayoutEffect(() => {
-    if (!activePrimaryLeftAsideKey) {
-      if (activePrimaryLeftAsideKeyRef.current && shouldPreservePrimaryLeftAside()) return;
-      activePrimaryLeftAsideKeyRef.current = null;
-      setLeftAsideSlideIn(false);
-      return;
-    }
-    if (activePrimaryLeftAsideKeyRef.current === activePrimaryLeftAsideKey) return;
-    activePrimaryLeftAsideKeyRef.current = activePrimaryLeftAsideKey;
-    setLeftAsideSlideIn(false);
-    const raf = requestAnimationFrame(() => setLeftAsideSlideIn(true));
-    return () => cancelAnimationFrame(raf);
-  }, [activePrimaryLeftAsideKey, shouldPreservePrimaryLeftAside]);
-
+    selectedSingleFlowId,
+    currentSpecificSelectedFlowId,
+    outlineNodeId,
+    isNodeDragActiveRef,
+  });
   const loadOutline = useCallback(async (nodeId: string) => {
     const { data, error: e } = await supabaseBrowser
       .schema("ms")
@@ -3541,296 +2477,6 @@ function SystemMapCanvasInner({
     }
     setOutlineItems((data ?? []) as OutlineItemRow[]);
   }, []);
-
-  useEffect(() => {
-    if (!isTemplateEditor || !templateEditorTemplateId || loading || !canSaveTemplate) return;
-
-    setTemplateEditorStatus("saving");
-    const timer = window.setTimeout(() => {
-      void (async () => {
-        try {
-          const snapshot = await buildTemplateSnapshot();
-          const { error: saveError } = await supabaseBrowser.rpc("save_investigation_template", {
-            p_name: templateEditorTemplateName?.trim() || map?.title || "Untitled Template",
-            p_snapshot: snapshot,
-            p_template_id: templateEditorTemplateId,
-            p_is_global: templateEditorVisibility === "global",
-            p_visibility: templateEditorVisibility,
-          });
-
-          if (saveError) throw saveError;
-          setTemplateEditorStatus("saved");
-        } catch (templateSyncError) {
-          setTemplateEditorStatus("error");
-          setError(templateSyncError instanceof Error ? templateSyncError.message : "Unable to sync template changes.");
-        }
-      })();
-    }, 900);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [
-    buildTemplateSnapshot,
-    canSaveTemplate,
-    isTemplateEditor,
-    loading,
-    map?.title,
-    nodes,
-    elements,
-    relations,
-    types,
-    outlineItems,
-    templateEditorTemplateId,
-    templateEditorTemplateName,
-    templateEditorVisibility,
-  ]);
-
-  useEffect(() => {
-    let cancelled = false;
-    let retryTimer: ReturnType<typeof setTimeout> | null = null;
-
-    const run = async (attempt: number) => {
-      const setLoadingStage = (progress: number, message: string) => {
-        if (cancelled) return;
-        setLoadingProgress((current) => {
-          const next = Math.max(current, progress);
-          if (next > current) {
-            setLoadingMessage(message);
-          }
-          return next;
-        });
-      };
-      let shouldRetry = false;
-
-      if (cancelled) return;
-      if (attempt === 0) {
-        setLoading(true);
-        setError(null);
-        setLoadingStage(25, "Checking workspace access...");
-      }
-      try {
-        if (isGuestViewer) {
-          if (!initialSnapshot) {
-            setError("Unable to load this map.");
-            return;
-          }
-          setLoadingStage(40, "Loading read-only map...");
-          setUserId(null);
-          setMapRole("read");
-          setAccessState(null);
-          setHasCurrentPassAssignment(false);
-          setMapMembers([]);
-          setMap(initialSnapshot.map);
-          setMapTitleDraft(initialSnapshot.map.title);
-          setMapInfoNameDraft(initialSnapshot.map.title);
-          setMapInfoDescriptionDraft(initialSnapshot.map.description ?? "");
-          setMapCodeDraft(initialSnapshot.map.map_code ?? "");
-          const nextCategory = (initialSnapshot.map.map_category || defaultMapCategoryId) as MapCategoryId;
-          setMapCategoryId(nextCategory);
-          setTypes(normalizeTypeRanks(initialSnapshot.types));
-          setNodes(initialSnapshot.nodes);
-          setElements(initialSnapshot.elements);
-          setRelations(initialSnapshot.relations);
-          setImageUrlsByElementId(initialSnapshot.imageUrlsByElementId ?? {});
-          const nextSaved: Record<string, { x: number; y: number }> = {};
-          initialSnapshot.nodes.forEach((node) => {
-            nextSaved[node.id] = { x: node.pos_x, y: node.pos_y };
-          });
-          savedPos.current = nextSaved;
-          setHasStoredViewport(false);
-          setPendingViewport(null);
-          setLoadingStage(100, "Canvas ready.");
-          return;
-        }
-        const user = await ensurePortalSupabaseUser();
-        if (cancelled) return;
-        if (!user) {
-          window.location.assign(`/login?returnTo=${encodeURIComponent(`/system-maps/${mapId}`)}`);
-          return;
-        }
-        setUserId(user.id);
-        setLoadingStage(25, "Confirming your account session...");
-
-        const {
-          data: { session },
-        } = await supabaseBrowser.auth.getSession();
-
-        if (!session?.access_token) {
-          window.location.assign(`/login?returnTo=${encodeURIComponent(`/system-maps/${mapId}`)}`);
-          return;
-        }
-
-        setLoadingStage(25, "Checking billing and map permissions...");
-        const nextAccessState = await fetchAccessState(session.access_token);
-        if (cancelled) return;
-        setAccessState(nextAccessState);
-
-        if (accessRequiresSelection(nextAccessState)) {
-          window.location.assign("/subscribe");
-          return;
-        }
-
-        if (accessBlocksInvestigationEntry(nextAccessState)) {
-          window.location.assign("/dashboard?mapAccess=blocked");
-          return;
-        }
-
-        setLoadingStage(50, "Loading map shell, nodes, and canvas data...");
-        const [memberRes, mapRes, typeRes, nodeRes, elementRes, relRes, viewRes] = await Promise.all([
-          supabaseBrowser.schema("ms").from("map_members").select("role").eq("map_id", mapId).eq("user_id", user.id).maybeSingle(),
-          supabaseBrowser.schema("ms").from("system_maps").select("id,title,description,owner_id,updated_by_user_id,map_code,map_category,updated_at,created_at").eq("id", mapId).maybeSingle(),
-          supabaseBrowser.schema("ms").from("document_types").select("id,map_id,name,level_rank,band_y_min,band_y_max,is_active").eq("is_active", true).or(`map_id.eq.${mapId},map_id.is.null`).order("level_rank", { ascending: true }),
-          supabaseBrowser.schema("ms").from("document_nodes").select("id,map_id,type_id,title,document_number,discipline,owner_user_id,owner_name,user_group,pos_x,pos_y,width,height,is_archived").eq("map_id", mapId).eq("is_archived", false),
-          supabaseBrowser.schema("ms").from("canvas_elements").select(canvasElementSelectColumns).eq("map_id", mapId).order("created_at", { ascending: true }),
-          supabaseBrowser
-            .schema("ms")
-            .from("node_relations")
-            .select("*")
-            .eq("map_id", mapId),
-          supabaseBrowser.schema("ms").from("map_view_state").select("pan_x,pan_y,zoom").eq("map_id", mapId).eq("user_id", user.id).maybeSingle(),
-        ]);
-        if (cancelled) return;
-
-        if (mapRes.error || !mapRes.data) {
-          setError("Unable to load this map. You may not have access.");
-          return;
-        }
-        if (nodeRes.error) {
-          setError("Unable to load map documents.");
-          return;
-        }
-
-        const loadedMap = mapRes.data as SystemMap;
-        const resolvedMapRole =
-          loadedMap.owner_id === user.id
-            ? "full_write"
-            : ((memberRes.data?.role as "read" | "partial_write" | "full_write" | undefined) ?? "read");
-        setMapRole(resolvedMapRole);
-        setMap(loadedMap);
-        const nextCategory = (loadedMap.map_category || defaultMapCategoryId) as MapCategoryId;
-        setMapCategoryId(nextCategory);
-        setLoadingStage(75, "Loading collaborators and investigation structure...");
-        await loadMapMembers(loadedMap.owner_id);
-        if (nextAccessState.currentAccessStatus === "active" && nextAccessState.currentAccessType === "pass_30d" && nextAccessState.currentAccessPeriodId) {
-          const { data: assignment, error: assignmentError } = await supabaseBrowser
-            .from("map_access_assignments")
-            .select("id")
-            .eq("access_period_id", nextAccessState.currentAccessPeriodId)
-            .eq("map_id", mapId)
-            .eq("user_id", user.id)
-            .maybeSingle();
-
-          if (assignmentError) {
-            setError(assignmentError.message || "Unable to confirm this map's current access period.");
-            return;
-          }
-
-          setHasCurrentPassAssignment(Boolean(assignment?.id));
-        } else {
-          setHasCurrentPassAssignment(true);
-        }
-        let loadedTypes = (typeRes.data ?? []) as DocumentTypeRow[];
-        if (!loadedTypes.length) {
-          setLoadingStage(75, "Rebuilding the default investigation structure...");
-          const { data: createdTypes, error: createTypesError } = await supabaseBrowser
-            .schema("ms")
-            .from("document_types")
-            .upsert(
-              fallbackHierarchy.map((item) => ({
-                map_id: mapId,
-                name: item.name,
-                level_rank: item.level_rank,
-                band_y_min: null,
-                band_y_max: null,
-                is_active: true,
-              })),
-              {
-                onConflict: "map_id,name",
-                ignoreDuplicates: true,
-              }
-            )
-            .select("id,map_id,name,level_rank,band_y_min,band_y_max,is_active")
-            .order("level_rank", { ascending: true });
-          if (createTypesError) {
-            setError(createTypesError.message || "No document types were found for this map.");
-          } else {
-            loadedTypes = (createdTypes ?? []) as DocumentTypeRow[];
-          }
-        }
-        const existingCanonicalTypeNames = new Set(loadedTypes.map((t) => getCanonicalTypeName(t.name)));
-        const missingFallback = fallbackHierarchy.filter((item) => !existingCanonicalTypeNames.has(getCanonicalTypeName(item.name)));
-        if (missingFallback.length) {
-          setLoadingStage(75, "Filling in any missing structure labels...");
-          const { data: insertedMissing, error: insertMissingError } = await supabaseBrowser
-            .schema("ms")
-            .from("document_types")
-            .upsert(
-              missingFallback.map((item) => ({
-                map_id: mapId,
-                name: item.name,
-                level_rank: item.level_rank,
-                band_y_min: null,
-                band_y_max: null,
-                is_active: true,
-              })),
-              {
-                onConflict: "map_id,name",
-                ignoreDuplicates: true,
-              }
-            )
-            .select("id,map_id,name,level_rank,band_y_min,band_y_max,is_active");
-          if (insertMissingError) {
-            setError(insertMissingError.message || "Unable to add missing document types.");
-          } else if (insertedMissing?.length) {
-            loadedTypes = [...loadedTypes, ...(insertedMissing as DocumentTypeRow[])].sort((a, b) => a.level_rank - b.level_rank);
-          }
-        }
-        loadedTypes = normalizeTypeRanks(loadedTypes);
-        setTypes(loadedTypes);
-        const loadedNodes = (nodeRes.data ?? []) as DocumentNodeRow[];
-        setNodes(loadedNodes);
-        setElements((elementRes.data ?? []) as CanvasElementRow[]);
-        setRelations((relRes.data ?? []) as NodeRelationRow[]);
-        const nextSaved: Record<string, { x: number; y: number }> = {};
-        loadedNodes.forEach((n) => (nextSaved[n.id] = { x: n.pos_x, y: n.pos_y }));
-        savedPos.current = nextSaved;
-
-        setLoadingStage(75, "Restoring your saved viewport...");
-        if (viewRes.data) {
-          const viewData = viewRes.data;
-          setHasStoredViewport(true);
-          setPendingViewport({ x: viewData.pan_x, y: viewData.pan_y, zoom: viewData.zoom });
-        } else {
-          setHasStoredViewport(false);
-        }
-        setLoadingStage(100, "Straightening lines and sharpening pencils...");
-      } catch (err) {
-        if (cancelled) return;
-        if (isAbortLikeError(err) && attempt < 3) {
-          shouldRetry = true;
-          retryTimer = setTimeout(() => {
-            void run(attempt + 1);
-          }, 250);
-          return;
-        }
-        const message = err instanceof Error ? err.message : String(err);
-        setError(message || "Unable to load map.");
-      } finally {
-        if (!cancelled && !shouldRetry) {
-          setLoadingProgress(100);
-          setLoadingMessage("Canvas ready.");
-          setLoading(false);
-        }
-      }
-    };
-
-    void run(0);
-    return () => {
-      cancelled = true;
-      if (retryTimer) clearTimeout(retryTimer);
-    };
-  }, [initialSnapshot, isGuestViewer, mapId, loadMapMembers]);
 
   useEffect(() => {
     if (!rf || !pendingViewport) return;
@@ -3982,7 +2628,7 @@ function SystemMapCanvasInner({
     setGroupingHeaderColorDraft(typeof cfg.header_bg_color === "string" && /^#[0-9a-fA-F]{6}$/.test(cfg.header_bg_color) ? cfg.header_bg_color.toUpperCase() : "#FFFFFF");
     setGroupingWidthDraft(String(Math.max(groupingMinWidthSquares, Math.round((selectedGrouping.width || groupingDefaultWidth) / minorGridSize))));
     setGroupingHeightDraft(String(Math.max(groupingMinHeightSquares, Math.round((selectedGrouping.height || groupingDefaultHeight) / minorGridSize))));
-  }, [selectedGrouping, groupingDefaultWidth, groupingDefaultHeight, groupingMinWidthSquares, groupingMinHeightSquares, minorGridSize]);
+  }, [selectedGrouping]);
   useEffect(() => {
     if (!selectedSticky) return;
     setStickyTextDraft(selectedSticky.heading ?? "");
@@ -4039,7 +2685,7 @@ function SystemMapCanvasInner({
     setTableAlignDraft(align === "left" || align === "right" ? align : "center");
     const size = Number(cfg.font_size ?? 10);
     setTableFontSizeDraft(String(Number.isFinite(size) ? Math.max(10, Math.min(72, Math.round(size))) : 10));
-  }, [selectedTable, tableMinRows, tableMinColumns]);
+  }, [selectedTable]);
   useEffect(() => {
     if (!selectedFlowShape) {
       hydratedFlowShapeDraftIdRef.current = null;
@@ -4212,7 +2858,7 @@ function SystemMapCanvasInner({
       }
     }
     setEvidenceMediaOverlay(null);
-  }, [evidenceMediaOverlay, elements, mapId, canvasElementSelectColumns, setError, setElements, selectedBowtieElementId]);
+  }, [evidenceMediaOverlay, elements, mapId, setError, setElements, selectedBowtieElementId]);
   useEffect(() => {
     if (!selectedBowtieElement) return;
     const currentConfig = (selectedBowtieElement.element_config as BowtieDraftState | null) ?? {};
@@ -4234,8 +2880,10 @@ function SystemMapCanvasInner({
     });
   }, [selectedBowtieElement]);
   useEffect(() => {
-    if (evidenceUploadPreviewUrl) URL.revokeObjectURL(evidenceUploadPreviewUrl);
-    setEvidenceUploadPreviewUrl(null);
+    setEvidenceUploadPreviewUrl((current) => {
+      if (current) URL.revokeObjectURL(current);
+      return null;
+    });
     setEvidenceUploadFile(null);
   }, [selectedBowtieElementId]);
   const handleClearEvidenceUploadFile = useCallback(() => {
@@ -4306,7 +2954,6 @@ function SystemMapCanvasInner({
   }, [
     selectedBowtieElement,
     mapId,
-    canvasElementSelectColumns,
     setElements,
     setError,
     evidenceUploadPreviewUrl,
@@ -4319,56 +2966,18 @@ function SystemMapCanvasInner({
     setMapCodeDraft(map.map_code ?? "");
   }, [map]);
 
-  useEffect(() => {
-    if (!canSaveTemplate) {
-      setShowTemplateMenu(false);
-      setTemplateResults([]);
-      setSelectedTemplateId(null);
-      setTemplateSaveMessage(null);
-    }
-  }, [canSaveTemplate]);
-
-  useEffect(() => {
-    if (!showTemplateMenu || !canSaveTemplate) return;
-    void loadTemplateResults(templateQuery.trim().length >= 4 ? templateQuery : "");
-  }, [showTemplateMenu, canSaveTemplate, templateQuery, loadTemplateResults]);
-
-  useEffect(() => {
-    if (!isLoadingSuggestions) {
-      if (suggestionProgress !== 100) setSuggestionProgress(0);
-      return;
-    }
-    const timer = window.setInterval(() => {
-      setSuggestionProgress((current) => {
-        if (current >= 86) return current;
-        if (current < 35) return Math.min(35, current + 5);
-        if (current < 60) return Math.min(60, current + 2);
-        if (current < 76) return Math.min(76, current + 1);
-        return Math.min(86, current + 0.5);
-      });
-    }, 700);
-    return () => window.clearInterval(timer);
-  }, [isLoadingSuggestions, suggestionProgress]);
-
-  useEffect(() => {
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as globalThis.Node | null;
-      if (addMenuRef.current && target && addMenuRef.current.contains(target)) return;
-      setShowAddMenu(false);
-      if (suggestionMenuRef.current && target && suggestionMenuRef.current.contains(target)) return;
-      setShowSuggestionsMenu(false);
-      if (templateMenuRef.current && target && templateMenuRef.current.contains(target)) return;
-      setShowTemplateMenu(false);
-      if (searchMenuRef.current && target && searchMenuRef.current.contains(target)) return;
-      setShowSearchMenu(false);
-      if (printMenuRef.current && target && printMenuRef.current.contains(target)) return;
-      setShowPrintMenu(false);
-      if (disciplineMenuRef.current && target && disciplineMenuRef.current.contains(target)) return;
-      setShowDisciplineMenu(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, []);
+  const stackedDismissMenus = useMemo(
+    () => [
+      { ref: addMenuRef, onDismiss: () => setShowAddMenu(false) },
+      { ref: suggestionMenuRef, onDismiss: () => setShowSuggestionsMenu(false) },
+      { ref: templateMenuRef, onDismiss: () => setShowTemplateMenu(false) },
+      { ref: searchMenuRef, onDismiss: () => setShowSearchMenu(false) },
+      { ref: printMenuRef, onDismiss: () => setShowPrintMenu(false) },
+      { ref: disciplineMenuRef, onDismiss: () => setShowDisciplineMenu(false) },
+    ],
+    [setShowPrintMenu, setShowSearchMenu, setShowTemplateMenu]
+  );
+  useStackedOutsidePointerDismiss(stackedDismissMenus);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -4411,35 +3020,30 @@ function SystemMapCanvasInner({
     }
   }, [outlineCreateMode, newContentHeadingId, headingItems]);
 
-  useEffect(() => {
-    if (!relationshipPopup) return;
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as globalThis.Node | null;
-      if (relationshipPopupRef.current && target && relationshipPopupRef.current.contains(target)) return;
-      setRelationshipPopup(null);
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [relationshipPopup]);
-  useEffect(() => {
-    if (!showMapInfoAside) return;
-    const onPointerDown = (event: PointerEvent) => {
-      if (showOrgAccessModal) return;
-      const target = event.target as globalThis.Node | null;
-      if (mapInfoAsideRef.current && target && mapInfoAsideRef.current.contains(target)) return;
-      if (mapInfoButtonRef.current && target && mapInfoButtonRef.current.contains(target)) return;
-      setShowMapInfoAside(false);
-      setShowOrgAccessModal(false);
-      setIsEditingMapInfo(false);
-      if (map) {
-        setMapInfoNameDraft(map.title);
-        setMapInfoDescriptionDraft(map.description ?? "");
-        setMapCodeDraft(map.map_code ?? "");
-      }
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [showMapInfoAside, showOrgAccessModal, map]);
+  const relationshipPopupDismissRefs = useMemo(() => [relationshipPopupRef], []);
+  const dismissRelationshipPopup = useCallback(() => setRelationshipPopup(null), []);
+  useOutsidePointerDismiss({
+    enabled: !!relationshipPopup,
+    refs: relationshipPopupDismissRefs,
+    onDismiss: dismissRelationshipPopup,
+  });
+
+  const mapInfoDismissRefs = useMemo(() => [mapInfoAsideRef, mapInfoButtonRef], []);
+  const dismissMapInfoAside = useCallback(() => {
+    setShowMapInfoAside(false);
+    setShowOrgAccessModal(false);
+    setIsEditingMapInfo(false);
+    if (map) {
+      setMapInfoNameDraft(map.title);
+      setMapInfoDescriptionDraft(map.description ?? "");
+      setMapCodeDraft(map.map_code ?? "");
+    }
+  }, [map]);
+  useOutsidePointerDismiss({
+    enabled: showMapInfoAside && !showOrgAccessModal,
+    refs: mapInfoDismissRefs,
+    onDismiss: dismissMapInfoAside,
+  });
   useEffect(() => {
     if (!showMapInfoAside) {
       setShowOrgAccessModal(false);
@@ -5055,7 +3659,7 @@ function SystemMapCanvasInner({
         ),
       };
     },
-    [groupingMinHeight, groupingMinWidth]
+    []
   );
   const findWizardGroupElements = useCallback(
     (groupElement: CanvasElementRow, step: SystemMapWizardCommitPayload["step"]) => {
@@ -5076,7 +3680,7 @@ function SystemMapCanvasInner({
         })
         .sort((a, b) => (a.pos_y === b.pos_y ? a.pos_x - b.pos_x : a.pos_y - b.pos_y));
     },
-    [elements, groupingDefaultHeight, groupingDefaultWidth]
+    [elements]
   );
   const findExistingWizardGroup = useCallback(
     (heading: string) =>
@@ -5115,7 +3719,7 @@ function SystemMapCanvasInner({
         y: snapToMinorGrid(center.y - groupHeight / 2),
       };
     },
-    [elements, getCanvasFlowCenter, groupingDefaultWidth, majorGridSize, snapToMinorGrid]
+    [elements, getCanvasFlowCenter, snapToMinorGrid]
   );
   const handleWizardCommitStep = useCallback(
     async (payload: SystemMapWizardCommitPayload) => {
@@ -5510,17 +4114,15 @@ function SystemMapCanvasInner({
       }, items.length);
     },
     [
-      bowtieControlHeight,
-      bowtieDefaultWidth,
-      buildPersonHeading,
       buildWizardGroupLayout,
       canUseWizard,
+      findExistingWizardGroup,
+      findWizardGroupElements,
       getNextWizardGroupPosition,
       insertCanvasElements,
       mapId,
-      personElementHeight,
-      personElementWidth,
       snapToMinorGrid,
+      updateCanvasElements,
       userId,
     ]
   );
@@ -5569,48 +4171,6 @@ function SystemMapCanvasInner({
     elements,
     mapCategoryId,
   });
-  const orgDirectReportCountByPersonId = useMemo(() => {
-    const counts = new Map<string, number>();
-    if (mapCategoryId !== "org_chart") return counts;
-    const normalizeRef = (value: string | null | undefined) => {
-      if (!value) return "";
-      const trimmed = String(value).replace(/^process:/i, "").trim().toLowerCase();
-      const uuidMatch = trimmed.match(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/i);
-      return uuidMatch ? uuidMatch[0].toLowerCase() : trimmed;
-    };
-    const peopleByNormalizedId = new Map(
-      elements
-        .filter((el) => el.element_type === "person")
-        .map((el) => [normalizeRef(el.id), el] as const)
-    );
-    const resolvePersonByAnyRef = (refs: Array<string | null | undefined>) => {
-      for (const ref of refs) {
-        const normalized = normalizeRef(ref ?? "");
-        if (!normalized) continue;
-        const person = peopleByNormalizedId.get(normalized);
-        if (person) return person;
-      }
-      return null;
-    };
-    peopleByNormalizedId.forEach((person) => counts.set(person.id, 0));
-    relations.forEach((r) => {
-      const relationType = String(r.relation_type ?? "").trim().toLowerCase();
-      if (relationType !== "reports_to") return;
-      const source = resolvePersonByAnyRef([
-        r.source_system_element_id,
-        r.from_node_id,
-      ]);
-      const target = resolvePersonByAnyRef([
-        r.target_system_element_id,
-        r.to_node_id,
-      ]);
-      if (!source || !target) return;
-      if (source.id === target.id) return;
-      const leaderId = source.pos_y <= target.pos_y ? source.id : target.id;
-      counts.set(leaderId, (counts.get(leaderId) ?? 0) + 1);
-    });
-    return counts;
-  }, [elements, mapCategoryId, relations]);
   useEffect(() => {
     if (mapCategoryId !== "org_chart") return;
     const personElements = elements.filter((el) => el.element_type === "person");
@@ -5687,7 +4247,12 @@ function SystemMapCanvasInner({
         };
       })
       .filter((candidate) => !term || candidate.haystack.includes(term))
-      .map(({ haystack: _ignore, ...candidate }) => candidate)
+      .map((candidate) => ({
+        id: candidate.id,
+        nameLine: candidate.nameLine,
+        detailLine: candidate.detailLine,
+        disabled: candidate.disabled,
+      }))
       .sort((a, b) => a.nameLine.localeCompare(b.nameLine));
   }, [alreadyRelatedSystemTargetIds, elements, mapCategoryId, relationshipSourceSystemId, relationshipSystemQuery]);
   const orgDirectReportSourceLabel = useMemo(() => {
@@ -5860,30 +4425,9 @@ function SystemMapCanvasInner({
     mapId,
     setError,
     setElements,
-    canvasElementSelectColumns,
     evidenceUploadFile,
     evidenceUploadPreviewUrl,
   ]);
-  const closeAddRelationshipModal = useCallback(() => {
-    setShowAddRelationship(false);
-    setRelationshipSourceNodeId(null);
-    setRelationshipSourceSystemId(null);
-    setRelationshipSourceGroupingId(null);
-    setRelationshipTargetDocumentId("");
-    setRelationshipTargetSystemId("");
-    setRelationshipTargetGroupingId("");
-    setRelationshipDocumentQuery("");
-    setRelationshipSystemQuery("");
-    setRelationshipGroupingQuery("");
-    setShowRelationshipDocumentOptions(false);
-    setShowRelationshipSystemOptions(false);
-    setShowRelationshipGroupingOptions(false);
-    setRelationshipDescription("");
-    setRelationshipDisciplineSelection([]);
-    setShowRelationshipDisciplineMenu(false);
-    setRelationshipCategory(getDefaultRelationshipCategoryForMap(mapCategoryId));
-    setRelationshipCustomType("");
-  }, [mapCategoryId]);
   const closeDesktopDrilldownPanels = useCallback(() => {
     setDesktopNodeAction(null);
     closeAddRelationshipModal();
@@ -5898,11 +4442,66 @@ function SystemMapCanvasInner({
     setEditHeadingParentId("");
     setEditContentHeadingId("");
     setEditContentText("");
-  }, [closeAddRelationshipModal]);
+  }, [closeAddRelationshipModal, setDesktopNodeAction]);
   const handleCloseDocumentPropertiesPanel = useCallback(() => {
     setSelectedNodeId(null);
     closeDesktopDrilldownPanels();
   }, [closeDesktopDrilldownPanels]);
+  const { closePrimaryAside, getPrimaryAsideOpen } = usePrimaryAsideRegistry({
+    isMobile,
+    selectionSetters: canvasSelectionSetters,
+    setDesktopNodeAction,
+    handleCloseDocumentPropertiesPanel,
+    isPrimaryLeftAsideOpen,
+  });
+  const closeCategoryAside = useCallback(
+    () => closePrimaryAside("category"),
+    [closePrimaryAside]
+  );
+  const closeSystemAside = useCallback(
+    () => closePrimaryAside("system"),
+    [closePrimaryAside]
+  );
+  const closeProcessComponentAside = useCallback(
+    () => closePrimaryAside("processComponent"),
+    [closePrimaryAside]
+  );
+  const closePersonAside = useCallback(
+    () => closePrimaryAside("person"),
+    [closePrimaryAside]
+  );
+  const closeBowtieElementAside = useCallback(
+    () => closePrimaryAside("bowtieElement"),
+    [closePrimaryAside]
+  );
+  const closeGroupingAside = useCallback(
+    () => closePrimaryAside("grouping"),
+    [closePrimaryAside]
+  );
+  const closeStickyAside = useCallback(
+    () => closePrimaryAside("sticky"),
+    [closePrimaryAside]
+  );
+  const closeImageAside = useCallback(
+    () => closePrimaryAside("image"),
+    [closePrimaryAside]
+  );
+  const closeTextBoxAside = useCallback(
+    () => closePrimaryAside("textBox"),
+    [closePrimaryAside]
+  );
+  const closeTableAside = useCallback(
+    () => closePrimaryAside("table"),
+    [closePrimaryAside]
+  );
+  const closeFlowShapeAside = useCallback(
+    () => closePrimaryAside("flowShape"),
+    [closePrimaryAside]
+  );
+  const closeDocumentAside = useCallback(
+    () => closePrimaryAside("document"),
+    [closePrimaryAside]
+  );
   const closeAllLeftAsides = useCallback(() => {
     setSelectedFlowIds(new Set());
     setSelectedNodeId(null);
@@ -5922,27 +4521,10 @@ function SystemMapCanvasInner({
   }, [closeDesktopDrilldownPanels]);
   const openAddRelationshipFromSource = useCallback(
     (source: { nodeId?: string | null; systemId?: string | null; groupingId?: string | null }, openAddForm = true) => {
-      setRelationshipSourceNodeId(source.nodeId ?? null);
-      setRelationshipSourceSystemId(source.systemId ?? null);
-      setRelationshipSourceGroupingId(source.groupingId ?? null);
-      setRelationshipDocumentQuery("");
-      setRelationshipSystemQuery("");
-      setRelationshipGroupingQuery("");
-      setRelationshipTargetDocumentId("");
-      setRelationshipTargetSystemId("");
-      setRelationshipTargetGroupingId("");
-      setShowRelationshipDocumentOptions(false);
-      setShowRelationshipSystemOptions(false);
-      setShowRelationshipGroupingOptions(false);
-      setRelationshipDescription("");
-      setRelationshipDisciplineSelection([]);
-      setShowRelationshipDisciplineMenu(false);
-      setRelationshipCategory(getDefaultRelationshipCategoryForMap(mapCategoryId));
-      setRelationshipCustomType("");
-      setShowAddRelationship(openAddForm);
+      openRelationshipStateFromSource(source, openAddForm);
       setDesktopNodeAction("relationship");
     },
-    [mapCategoryId]
+    [openRelationshipStateFromSource, setDesktopNodeAction]
   );
   const openRelationshipListFromSource = useCallback(
     (source: { nodeId?: string | null; systemId?: string | null; groupingId?: string | null }) => {
@@ -6016,6 +4598,7 @@ function SystemMapCanvasInner({
     relationshipTargetSystemId,
     relations,
     setError,
+    setDesktopNodeAction,
     setRelations,
   ]);
 
@@ -6187,6 +4770,7 @@ function SystemMapCanvasInner({
     activePrimaryLeftAsideKey,
     saveOpenLeftAside,
     shouldShowDesktopStructurePanel,
+    autosavePointerLockRef,
     isMobile,
     selectedBowtieElementId,
     selectedFlowShapeId,
@@ -6321,8 +4905,6 @@ function SystemMapCanvasInner({
     }),
     [
       cancelEditRelation,
-      disciplineLabelByKey,
-      disciplineOptions,
       editingRelationCategory,
       editingRelationCustomType,
       editingRelationDescription,
@@ -6430,7 +5012,7 @@ function SystemMapCanvasInner({
   const handleOpenToolbarConfigure = useCallback(() => {
     if (!desktopToolbarSelection) return;
     setDesktopNodeAction("configure");
-  }, [desktopToolbarSelection]);
+  }, [desktopToolbarSelection, setDesktopNodeAction]);
   const handleOpenToolbarRelationships = useCallback(() => {
     if (!desktopToolbarSelection?.supportsRelationships) return;
     switch (desktopToolbarSelection.kind) {
@@ -6459,52 +5041,65 @@ function SystemMapCanvasInner({
     }
     setConfirmDeleteElementId(desktopToolbarSelection.id);
   }, [desktopToolbarSelection]);
+  const selectCanvasNode = useCallback(
+    (event: React.MouseEvent, node: Node<FlowData>) => {
+      handleCanvasNodeClick({
+        event,
+        node,
+        mapRole,
+        elements,
+        canEditElement,
+        isMobile,
+        lastMobileTapRef,
+        setSelectedFlowIds,
+        selectionSetters: canvasSelectionSetters,
+        setMobileNodeMenuId,
+      });
+    },
+    [canEditElement, canvasSelectionSetters, elements, isMobile, mapRole, setSelectedFlowIds]
+  );
+  const handleCanvasNodeSingleClick = useCallback(
+    (event: React.MouseEvent, node: Node<FlowData>) => {
+      armPaneClearSuppression();
+      if (!isMobile && event.detail > 1) return;
+      if (!isMobile && desktopNodeAction === "configure" && currentSpecificSelectedFlowId === node.id) return;
+      if (!isMobile && desktopNodeAction !== "configure") closeDesktopDrilldownPanels();
+      selectCanvasNode(event, node);
+    },
+    [
+      armPaneClearSuppression,
+      closeDesktopDrilldownPanels,
+      currentSpecificSelectedFlowId,
+      desktopNodeAction,
+      isMobile,
+      selectCanvasNode,
+    ]
+  );
+  const handleCanvasNodeDoubleClick = useCallback(
+    (event: React.MouseEvent, node: Node<FlowData>) => {
+      if (isMobile) return;
+      event.preventDefault();
+      event.stopPropagation();
+      armPaneClearSuppression();
+      if (desktopNodeAction === "configure" && currentSpecificSelectedFlowId === node.id) return;
+      selectCanvasNode(event, node);
+      setDesktopNodeAction("configure");
+    },
+    [
+      armPaneClearSuppression,
+      currentSpecificSelectedFlowId,
+      desktopNodeAction,
+      isMobile,
+      selectCanvasNode,
+      setDesktopNodeAction,
+    ]
+  );
   useEffect(() => {
     if (isMobile || !selectedSingleFlowId || currentSpecificSelectedFlowId === selectedSingleFlowId) return;
     const flowNode = flowNodes.find((node) => node.id === selectedSingleFlowId);
     if (!flowNode) return;
-    const elementId = flowNode.id.startsWith("process:") ? parseProcessFlowId(flowNode.id) : flowNode.id;
-    setSelectedNodeId(flowNode.data.entityKind === "document" ? flowNode.id : null);
-    setSelectedProcessId(flowNode.data.entityKind === "category" ? elementId : null);
-    setSelectedSystemId(flowNode.data.entityKind === "system_circle" ? elementId : null);
-    setSelectedProcessComponentId(flowNode.data.entityKind === "process_component" ? elementId : null);
-    setSelectedPersonId(flowNode.data.entityKind === "person" ? elementId : null);
-    setSelectedGroupingId(flowNode.data.entityKind === "grouping_container" ? elementId : null);
-    setSelectedStickyId(flowNode.data.entityKind === "sticky_note" ? elementId : null);
-    setSelectedImageId(flowNode.data.entityKind === "image_asset" ? elementId : null);
-    setSelectedTextBoxId(flowNode.data.entityKind === "text_box" ? elementId : null);
-    setSelectedTableId(flowNode.data.entityKind === "table" ? elementId : null);
-    setSelectedFlowShapeId(
-      flowNode.data.entityKind === "shape_rectangle" ||
-        flowNode.data.entityKind === "shape_circle" ||
-        flowNode.data.entityKind === "shape_pill" ||
-        flowNode.data.entityKind === "shape_pentagon" ||
-        flowNode.data.entityKind === "shape_chevron_left" ||
-        flowNode.data.entityKind === "shape_arrow"
-        ? elementId
-        : null
-    );
-    setSelectedBowtieElementId(
-      flowNode.data.entityKind !== "document" &&
-        flowNode.data.entityKind !== "category" &&
-        flowNode.data.entityKind !== "system_circle" &&
-        flowNode.data.entityKind !== "process_component" &&
-        flowNode.data.entityKind !== "person" &&
-        flowNode.data.entityKind !== "grouping_container" &&
-        flowNode.data.entityKind !== "sticky_note" &&
-        flowNode.data.entityKind !== "image_asset" &&
-        flowNode.data.entityKind !== "text_box" &&
-        flowNode.data.entityKind !== "table" &&
-        flowNode.data.entityKind !== "shape_rectangle" &&
-        flowNode.data.entityKind !== "shape_circle" &&
-        flowNode.data.entityKind !== "shape_pill" &&
-        flowNode.data.entityKind !== "shape_pentagon" &&
-        flowNode.data.entityKind !== "shape_chevron_left" &&
-        flowNode.data.entityKind !== "shape_arrow"
-        ? elementId
-        : null
-    );
-  }, [currentSpecificSelectedFlowId, flowNodes, isMobile, selectedSingleFlowId]);
+    syncCanvasSelectionFromFlowNode(canvasSelectionSetters, flowNode, { parseProcessPrefixedIdsOnly: true });
+  }, [canvasSelectionSetters, currentSpecificSelectedFlowId, flowNodes, isMobile, selectedSingleFlowId]);
 
   if (loading) {
     return <SystemMapLoadingView progress={loadingProgress} message={loadingMessage} />;
@@ -6750,68 +5345,8 @@ function SystemMapCanvasInner({
             edgesFocusable={false}
             onInit={(instance) => setRf({ fitView: instance.fitView, screenToFlowPosition: instance.screenToFlowPosition, setViewport: instance.setViewport })}
             onNodesChange={handleFlowNodesChange}
-            onNodeClick={(event, n) =>
-              (() => {
-                armPaneClearSuppression();
-                if (!isMobile && event.detail > 1) return;
-                if (!isMobile && desktopNodeAction === "configure" && currentSpecificSelectedFlowId === n.id) return;
-                if (!isMobile && desktopNodeAction !== "configure") closeDesktopDrilldownPanels();
-                handleCanvasNodeClick({
-                  event,
-                  node: n,
-                  mapRole,
-                  elements,
-                  canEditElement,
-                  isMobile,
-                  lastMobileTapRef,
-                  setSelectedFlowIds,
-                  setSelectedNodeId,
-                  setSelectedProcessId,
-                  setSelectedSystemId,
-                  setSelectedProcessComponentId,
-                  setSelectedPersonId,
-                  setSelectedGroupingId,
-                  setSelectedStickyId,
-                  setSelectedImageId,
-                  setSelectedTextBoxId,
-                  setSelectedTableId,
-                  setSelectedFlowShapeId,
-                  setSelectedBowtieElementId,
-                  setMobileNodeMenuId,
-                });
-              })()
-            }
-            onNodeDoubleClick={(event, n) => {
-              if (isMobile) return;
-              event.preventDefault();
-              event.stopPropagation();
-              armPaneClearSuppression();
-              if (desktopNodeAction === "configure" && currentSpecificSelectedFlowId === n.id) return;
-              handleCanvasNodeClick({
-                event,
-                node: n,
-                mapRole,
-                elements,
-                canEditElement,
-                isMobile,
-                lastMobileTapRef,
-                setSelectedFlowIds,
-                setSelectedNodeId,
-                setSelectedProcessId,
-                setSelectedSystemId,
-                setSelectedProcessComponentId,
-                setSelectedPersonId,
-                setSelectedGroupingId,
-                setSelectedStickyId,
-                setSelectedImageId,
-                setSelectedTextBoxId,
-                setSelectedTableId,
-                setSelectedFlowShapeId,
-                setSelectedBowtieElementId,
-                setMobileNodeMenuId,
-              });
-              setDesktopNodeAction("configure");
-            }}
+            onNodeClick={handleCanvasNodeSingleClick}
+            onNodeDoubleClick={handleCanvasNodeDoubleClick}
             onNodeContextMenu={(e, n) => {
               if (!canUseContextMenu || canvasInteractionLocked) return;
               e.preventDefault();
@@ -6835,15 +5370,7 @@ function SystemMapCanvasInner({
               scheduleHoveredNodeId(null);
               scheduleHoveredEdgeId(null);
               if (isNodeDragActiveRef.current) return;
-              if (suppressNextPaneClearRef.current || Date.now() < suppressPaneClearUntilRef.current) {
-                suppressNextPaneClearRef.current = false;
-                suppressPaneClearUntilRef.current = 0;
-                if (suppressNextPaneClearFrameRef.current !== null) {
-                  cancelAnimationFrame(suppressNextPaneClearFrameRef.current);
-                  suppressNextPaneClearFrameRef.current = null;
-                }
-                return;
-              }
+              if (consumePaneClearSuppression()) return;
               handlePaneClickClearSelection();
             }}
             onPaneContextMenu={(e) => {
@@ -6853,15 +5380,13 @@ function SystemMapCanvasInner({
             onNodeMouseEnter={(_, n) => scheduleHoveredNodeId(n.id)}
             onNodeMouseLeave={() => scheduleHoveredNodeId(null)}
             onNodeDragStart={() => {
-              isNodeDragActiveRef.current = true;
-              suppressPaneClearUntilRef.current = Date.now() + 500;
+              beginNodeDrag();
               setIsNodeDragActive(true);
             }}
             onNodeDragStop={(event, node) => {
-              suppressPaneClearUntilRef.current = Date.now() + 750;
+              beginNodeDragStop();
               void onNodeDragStop(event, node).finally(() => {
-                suppressPaneClearUntilRef.current = Date.now() + 500;
-                isNodeDragActiveRef.current = false;
+                finishNodeDragStop();
                 setIsNodeDragActive(false);
               });
             }}
@@ -7001,24 +5526,7 @@ function SystemMapCanvasInner({
           }}
           onAddRelationship={() => {
             if (!mobileNodeMenuId) return;
-            setRelationshipSourceNodeId(mobileNodeMenuId);
-            setRelationshipSourceSystemId(null);
-            setRelationshipSourceGroupingId(null);
-            setRelationshipDocumentQuery("");
-            setRelationshipSystemQuery("");
-            setRelationshipGroupingQuery("");
-            setRelationshipTargetDocumentId("");
-            setRelationshipTargetSystemId("");
-            setRelationshipTargetGroupingId("");
-            setShowRelationshipDocumentOptions(false);
-            setShowRelationshipSystemOptions(false);
-            setShowRelationshipGroupingOptions(false);
-            setRelationshipDescription("");
-            setRelationshipDisciplineSelection([]);
-            setShowRelationshipDisciplineMenu(false);
-            setRelationshipCategory(getDefaultRelationshipCategoryForMap(mapCategoryId));
-            setRelationshipCustomType("");
-            setShowAddRelationship(true);
+            openRelationshipStateFromSource({ nodeId: mobileNodeMenuId });
             setMobileNodeMenuId(null);
           }}
           onOpenStructure={() => {
@@ -7107,7 +5615,7 @@ function SystemMapCanvasInner({
 
         <CanvasElementPropertyOverlays
           categoryProps={{
-            open: isMobile ? !!selectedProcess : isPrimaryLeftAsideOpen(selectedProcessId ? `category:${selectedProcessId}` : null),
+            open: getPrimaryAsideOpen("category", selectedProcess, selectedProcessId),
             isMobile,
             leftAsideSlideIn,
             processHeadingDraft,
@@ -7129,13 +5637,13 @@ function SystemMapCanvasInner({
             },
             onSave: async () => {
               await handleSaveProcessHeading();
-              isMobile ? setSelectedProcessId(null) : setDesktopNodeAction(null);
+              closeCategoryAside();
             },
-            onClose: () => (isMobile ? setSelectedProcessId(null) : setDesktopNodeAction(null)),
+            onClose: closeCategoryAside,
             actionDisabledReason: readOnlyActionReason,
           }}
           systemProps={{
-            open: isMobile ? !!selectedSystem : isPrimaryLeftAsideOpen(selectedSystemId ? `system:${selectedSystemId}` : null),
+            open: getPrimaryAsideOpen("system", selectedSystem, selectedSystemId),
             isMobile,
             leftAsideSlideIn,
             systemNameDraft,
@@ -7146,9 +5654,9 @@ function SystemMapCanvasInner({
             },
             onSave: async () => {
               await handleSaveSystemName();
-              isMobile ? setSelectedSystemId(null) : setDesktopNodeAction(null);
+              closeSystemAside();
             },
-            onClose: () => (isMobile ? setSelectedSystemId(null) : setDesktopNodeAction(null)),
+            onClose: closeSystemAside,
             onAddRelationship: () => {
               if (!selectedSystem) return;
               openAddRelationshipFromSource({ systemId: selectedSystem.id });
@@ -7159,9 +5667,7 @@ function SystemMapCanvasInner({
             actionDisabledReason: readOnlyActionReason,
           }}
           processProps={{
-            open: isMobile
-              ? !!selectedProcessComponent
-              : isPrimaryLeftAsideOpen(selectedProcessComponentId ? `process:${selectedProcessComponentId}` : null),
+            open: getPrimaryAsideOpen("processComponent", selectedProcessComponent, selectedProcessComponentId),
             isMobile,
             leftAsideSlideIn,
             processComponentLabelDraft,
@@ -7172,9 +5678,9 @@ function SystemMapCanvasInner({
             },
             onSave: async () => {
               await handleSaveProcessComponent();
-              isMobile ? setSelectedProcessComponentId(null) : setDesktopNodeAction(null);
+              closeProcessComponentAside();
             },
-            onClose: () => (isMobile ? setSelectedProcessComponentId(null) : setDesktopNodeAction(null)),
+            onClose: closeProcessComponentAside,
             onAddRelationship: () => {
               if (!selectedProcessComponent) return;
               openAddRelationshipFromSource({ systemId: selectedProcessComponent.id });
@@ -7185,7 +5691,7 @@ function SystemMapCanvasInner({
             actionDisabledReason: readOnlyActionReason,
           }}
           personProps={{
-            open: isMobile ? !!selectedPerson : isPrimaryLeftAsideOpen(selectedPersonId ? `person:${selectedPersonId}` : null),
+            open: getPrimaryAsideOpen("person", selectedPerson, selectedPersonId),
             isMobile,
             leftAsideSlideIn,
             mapCategoryId,
@@ -7218,9 +5724,9 @@ function SystemMapCanvasInner({
             },
             onSave: async () => {
               await handleSavePerson();
-              isMobile ? setSelectedPersonId(null) : setDesktopNodeAction(null);
+              closePersonAside();
             },
-            onClose: () => (isMobile ? setSelectedPersonId(null) : setDesktopNodeAction(null)),
+            onClose: closePersonAside,
             onAddRelationship: () => {
               if (!selectedPerson) return;
               openAddRelationshipFromSource({ systemId: selectedPerson.id });
@@ -7231,9 +5737,7 @@ function SystemMapCanvasInner({
             actionDisabledReason: readOnlyActionReason,
           }}
           bowtieProps={{
-            open: isMobile
-              ? !!selectedBowtieElement
-              : isPrimaryLeftAsideOpen(selectedBowtieElementId ? `bowtie:${selectedBowtieElementId}` : null),
+            open: getPrimaryAsideOpen("bowtieElement", selectedBowtieElement, selectedBowtieElementId),
             isMobile,
             leftAsideSlideIn,
             bowtieElementType:
@@ -7286,9 +5790,9 @@ function SystemMapCanvasInner({
             },
             onSave: async () => {
               await handleSaveBowtieElement(isMobile);
-              isMobile ? setSelectedBowtieElementId(null) : setDesktopNodeAction(null);
+              closeBowtieElementAside();
             },
-            onClose: () => (isMobile ? setSelectedBowtieElementId(null) : setDesktopNodeAction(null)),
+            onClose: closeBowtieElementAside,
             onAddRelationship: () => {
               if (!selectedBowtieElement) return;
               openAddRelationshipFromSource({ systemId: selectedBowtieElement.id });
@@ -7299,7 +5803,7 @@ function SystemMapCanvasInner({
             actionDisabledReason: readOnlyActionReason,
           }}
           groupingProps={{
-            open: isMobile ? !!selectedGrouping : isPrimaryLeftAsideOpen(selectedGroupingId ? `grouping:${selectedGroupingId}` : null),
+            open: getPrimaryAsideOpen("grouping", selectedGrouping, selectedGroupingId),
             isMobile,
             leftAsideSlideIn,
             groupingLabelDraft,
@@ -7312,9 +5816,9 @@ function SystemMapCanvasInner({
             },
             onSave: async () => {
               await handleSaveGroupingContainer();
-              isMobile ? setSelectedGroupingId(null) : setDesktopNodeAction(null);
+              closeGroupingAside();
             },
-            onClose: () => (isMobile ? setSelectedGroupingId(null) : setDesktopNodeAction(null)),
+            onClose: closeGroupingAside,
             onAddRelationship: () => {
               if (!selectedGrouping) return;
               openAddRelationshipFromSource({ groupingId: selectedGrouping.id });
@@ -7325,7 +5829,7 @@ function SystemMapCanvasInner({
             actionDisabledReason: readOnlyActionReason,
           }}
           stickyProps={{
-            open: isMobile ? !!selectedSticky : isPrimaryLeftAsideOpen(selectedStickyId ? `sticky:${selectedStickyId}` : null),
+            open: getPrimaryAsideOpen("sticky", selectedSticky, selectedStickyId),
             isMobile,
             leftAsideSlideIn,
             stickyTextDraft,
@@ -7344,13 +5848,13 @@ function SystemMapCanvasInner({
             },
             onSave: async () => {
               await handleSaveStickyNote();
-              isMobile ? setSelectedStickyId(null) : setDesktopNodeAction(null);
+              closeStickyAside();
             },
-            onClose: () => (isMobile ? setSelectedStickyId(null) : setDesktopNodeAction(null)),
+            onClose: closeStickyAside,
             actionDisabledReason: readOnlyActionReason,
           }}
           imageProps={{
-            open: isMobile ? !!selectedImage : isPrimaryLeftAsideOpen(selectedImageId ? `image:${selectedImageId}` : null),
+            open: getPrimaryAsideOpen("image", selectedImage, selectedImageId),
             isMobile,
             leftAsideSlideIn,
             imageDescriptionDraft,
@@ -7367,9 +5871,9 @@ function SystemMapCanvasInner({
             },
             onSave: async () => {
               await handleSaveImageAsset();
-              isMobile ? setSelectedImageId(null) : setDesktopNodeAction(null);
+              closeImageAside();
             },
-            onClose: () => (isMobile ? setSelectedImageId(null) : setDesktopNodeAction(null)),
+            onClose: closeImageAside,
             onAddRelationship: () => {
               if (!selectedImage) return;
               openAddRelationshipFromSource({ systemId: selectedImage.id });
@@ -7380,7 +5884,7 @@ function SystemMapCanvasInner({
             actionDisabledReason: readOnlyActionReason,
           }}
           textBoxProps={{
-            open: isMobile ? !!selectedTextBox : isPrimaryLeftAsideOpen(selectedTextBoxId ? `textbox:${selectedTextBoxId}` : null),
+            open: getPrimaryAsideOpen("textBox", selectedTextBox, selectedTextBoxId),
             isMobile,
             leftAsideSlideIn,
             textBoxContentDraft,
@@ -7410,13 +5914,13 @@ function SystemMapCanvasInner({
             },
             onSave: async () => {
               await handleSaveTextBox();
-              isMobile ? setSelectedTextBoxId(null) : setDesktopNodeAction(null);
+              closeTextBoxAside();
             },
-            onClose: () => (isMobile ? setSelectedTextBoxId(null) : setDesktopNodeAction(null)),
+            onClose: closeTextBoxAside,
             actionDisabledReason: readOnlyActionReason,
           }}
           tableProps={{
-            open: isMobile ? !!selectedTable : isPrimaryLeftAsideOpen(selectedTableId ? `table:${selectedTableId}` : null),
+            open: getPrimaryAsideOpen("table", selectedTable, selectedTableId),
             isMobile,
             leftAsideSlideIn,
             tableRowsDraft,
@@ -7448,13 +5952,13 @@ function SystemMapCanvasInner({
             },
             onSave: async () => {
               await handleSaveTable();
-              isMobile ? setSelectedTableId(null) : setDesktopNodeAction(null);
+              closeTableAside();
             },
-            onClose: () => (isMobile ? setSelectedTableId(null) : setDesktopNodeAction(null)),
+            onClose: closeTableAside,
             actionDisabledReason: readOnlyActionReason,
           }}
           flowShapeProps={{
-            open: isMobile ? !!selectedFlowShape : isPrimaryLeftAsideOpen(selectedFlowShapeId ? `shape:${selectedFlowShapeId}` : null),
+            open: getPrimaryAsideOpen("flowShape", selectedFlowShape, selectedFlowShapeId),
             isMobile,
             leftAsideSlideIn,
             title:
@@ -7505,15 +6009,15 @@ function SystemMapCanvasInner({
             },
             onSave: async () => {
               await handleSaveFlowShape();
-              isMobile ? setSelectedFlowShapeId(null) : setDesktopNodeAction(null);
+              closeFlowShapeAside();
             },
-            onClose: () => (isMobile ? setSelectedFlowShapeId(null) : setDesktopNodeAction(null)),
+            onClose: closeFlowShapeAside,
             actionDisabledReason: readOnlyActionReason,
           }}
           documentProps={{
-            open: isPrimaryLeftAsideOpen(selectedNodeId ? `document:${selectedNodeId}` : null),
+            open: getPrimaryAsideOpen("document", selectedNode, selectedNodeId),
             leftAsideSlideIn,
-            onClose: () => (isMobile ? handleCloseDocumentPropertiesPanel() : setDesktopNodeAction(null)),
+            onClose: closeDocumentAside,
             onOpenRelationship: () => {
               if (!selectedNode) return;
               openAddRelationshipFromSource({ nodeId: selectedNode.id });
@@ -7558,7 +6062,7 @@ function SystemMapCanvasInner({
             setOwnerName,
             onSaveNode: async () => {
               await handleSaveNode();
-              isMobile ? handleCloseDocumentPropertiesPanel() : setDesktopNodeAction(null);
+              closeDocumentAside();
             },
             relatedRows,
             resolveLabels: resolveDocumentRelationLabels,

@@ -4,6 +4,14 @@ import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import type { Node } from "@xyflow/react";
 import type { CanvasElementRow, FlowData } from "./canvasShared";
 import { parseProcessFlowId } from "./canvasShared";
+import {
+  clearCanvasSelections,
+  isBowtieOrInvestigationKind,
+  isCanvasShapeKind,
+  setCanvasSelection,
+  type CanvasSelectionSetters,
+  type CanvasSelectionTarget,
+} from "./canvasSelection";
 
 type Setter<T> = Dispatch<SetStateAction<T>>;
 
@@ -16,18 +24,7 @@ type HandleCanvasNodeClickParams = {
   isMobile: boolean;
   lastMobileTapRef: MutableRefObject<{ id: string; ts: number } | null>;
   setSelectedFlowIds: Setter<Set<string>>;
-  setSelectedNodeId: Setter<string | null>;
-  setSelectedProcessId: Setter<string | null>;
-  setSelectedSystemId: Setter<string | null>;
-  setSelectedProcessComponentId: Setter<string | null>;
-  setSelectedPersonId: Setter<string | null>;
-  setSelectedGroupingId: Setter<string | null>;
-  setSelectedStickyId: Setter<string | null>;
-  setSelectedImageId: Setter<string | null>;
-  setSelectedTextBoxId: Setter<string | null>;
-  setSelectedTableId: Setter<string | null>;
-  setSelectedFlowShapeId: Setter<string | null>;
-  setSelectedBowtieElementId: Setter<string | null>;
+  selectionSetters: CanvasSelectionSetters;
   setMobileNodeMenuId: Setter<string | null>;
 };
 
@@ -46,27 +43,6 @@ const isMobileDoubleTap = (
   return false;
 };
 
-const isBowtieOrInvestigationKind = (entityKind: FlowData["entityKind"]) =>
-  entityKind === "bowtie_hazard" ||
-  entityKind === "bowtie_top_event" ||
-  entityKind === "bowtie_threat" ||
-  entityKind === "bowtie_consequence" ||
-  entityKind === "bowtie_control" ||
-  entityKind === "bowtie_escalation_factor" ||
-  entityKind === "bowtie_recovery_measure" ||
-  entityKind === "bowtie_degradation_indicator" ||
-  entityKind === "bowtie_risk_rating" ||
-  entityKind === "incident_sequence_step" ||
-  entityKind === "incident_outcome" ||
-  entityKind === "incident_task_condition" ||
-  entityKind === "incident_factor" ||
-  entityKind === "incident_system_factor" ||
-  entityKind === "incident_control_barrier" ||
-  entityKind === "incident_evidence" ||
-  entityKind === "incident_response_recovery" ||
-  entityKind === "incident_finding" ||
-  entityKind === "incident_recommendation";
-
 export const handleCanvasNodeClick = ({
   event,
   node,
@@ -76,161 +52,75 @@ export const handleCanvasNodeClick = ({
   isMobile,
   lastMobileTapRef,
   setSelectedFlowIds,
-  setSelectedNodeId,
-  setSelectedProcessId,
-  setSelectedSystemId,
-  setSelectedProcessComponentId,
-  setSelectedPersonId,
-  setSelectedGroupingId,
-  setSelectedStickyId,
-  setSelectedImageId,
-  setSelectedTextBoxId,
-  setSelectedTableId,
-  setSelectedFlowShapeId,
-  setSelectedBowtieElementId,
+  selectionSetters,
   setMobileNodeMenuId,
 }: HandleCanvasNodeClickParams) => {
   const markSelected = () => setSelectedFlowIds(new Set<string>([node.id]));
-  setSelectedFlowShapeId(null);
+  const selectNodeTarget = (target: CanvasSelectionTarget, id = parseProcessFlowId(node.id)) => {
+    markSelected();
+    setCanvasSelection(selectionSetters, target, id);
+  };
+  const clearAllSelections = () => clearCanvasSelections(selectionSetters);
+  selectionSetters.setSelectedFlowShapeId(null);
 
   if (mapRole === "read") {
     if (node.data.entityKind === "sticky_note") {
       const stickyId = parseProcessFlowId(node.id);
       const sticky = elements.find((el) => el.id === stickyId && el.element_type === "sticky_note");
       if (sticky && canEditElement(sticky)) {
-        markSelected();
-        setSelectedNodeId(null);
-        setSelectedProcessId(null);
-        setSelectedSystemId(null);
-        setSelectedProcessComponentId(null);
-        setSelectedPersonId(null);
-        setSelectedGroupingId(null);
-        setSelectedBowtieElementId(null);
-        setSelectedImageId(null);
-        setSelectedTextBoxId(null);
-        setSelectedTableId(null);
-        setSelectedStickyId(stickyId);
+        selectNodeTarget("sticky", stickyId);
         return;
       }
     }
     markSelected();
-    setSelectedStickyId(null);
-    setSelectedPersonId(null);
-    setSelectedImageId(null);
-    setSelectedTextBoxId(null);
-    setSelectedTableId(null);
-    setSelectedBowtieElementId(null);
+    clearAllSelections();
     return;
   }
 
   const isBowtieKind = isBowtieOrInvestigationKind(node.data.entityKind);
-  if (!isBowtieKind) setSelectedBowtieElementId(null);
+  if (!isBowtieKind) selectionSetters.setSelectedBowtieElementId(null);
 
   if (node.data.entityKind === "category") {
     if (isMobile) {
       if (isMobileDoubleTap(node.id, lastMobileTapRef)) {
-        markSelected();
-        setSelectedNodeId(null);
-        setSelectedProcessId(parseProcessFlowId(node.id));
+        selectNodeTarget("category");
       }
       return;
     }
-    markSelected();
-    setSelectedNodeId(null);
-    setSelectedSystemId(null);
-    setSelectedProcessComponentId(null);
-    setSelectedPersonId(null);
-    setSelectedGroupingId(null);
-    setSelectedStickyId(null);
-    setSelectedImageId(null);
-    setSelectedTextBoxId(null);
-    setSelectedTableId(null);
-    setSelectedBowtieElementId(null);
-    setSelectedProcessId(parseProcessFlowId(node.id));
+    selectNodeTarget("category");
     return;
   }
 
   if (node.data.entityKind === "process_component") {
     if (isMobile) {
       if (isMobileDoubleTap(node.id, lastMobileTapRef)) {
-        markSelected();
-        setSelectedNodeId(null);
-        setSelectedProcessId(null);
-        setSelectedSystemId(null);
-        setSelectedGroupingId(null);
-        setSelectedPersonId(null);
-        setSelectedProcessComponentId(parseProcessFlowId(node.id));
+        selectNodeTarget("processComponent");
       }
       return;
     }
-    markSelected();
-    setSelectedNodeId(null);
-    setSelectedProcessId(null);
-    setSelectedSystemId(null);
-    setSelectedPersonId(null);
-    setSelectedGroupingId(null);
-    setSelectedStickyId(null);
-    setSelectedImageId(null);
-    setSelectedTextBoxId(null);
-    setSelectedTableId(null);
-    setSelectedBowtieElementId(null);
-    setSelectedProcessComponentId(parseProcessFlowId(node.id));
+    selectNodeTarget("processComponent");
     return;
   }
 
   if (node.data.entityKind === "system_circle") {
     if (isMobile) {
       if (isMobileDoubleTap(node.id, lastMobileTapRef)) {
-        markSelected();
-        setSelectedNodeId(null);
-        setSelectedProcessId(null);
-        setSelectedPersonId(null);
-        setSelectedSystemId(parseProcessFlowId(node.id));
+        selectNodeTarget("system");
       }
       return;
     }
-    markSelected();
-    setSelectedNodeId(null);
-    setSelectedProcessId(null);
-    setSelectedProcessComponentId(null);
-    setSelectedPersonId(null);
-    setSelectedGroupingId(null);
-    setSelectedStickyId(null);
-    setSelectedImageId(null);
-    setSelectedTextBoxId(null);
-    setSelectedTableId(null);
-    setSelectedBowtieElementId(null);
-    setSelectedSystemId(parseProcessFlowId(node.id));
+    selectNodeTarget("system");
     return;
   }
 
   if (node.data.entityKind === "person") {
     if (isMobile) {
       if (isMobileDoubleTap(node.id, lastMobileTapRef)) {
-        markSelected();
-        setSelectedNodeId(null);
-        setSelectedProcessId(null);
-        setSelectedSystemId(null);
-        setSelectedProcessComponentId(null);
-        setSelectedGroupingId(null);
-        setSelectedStickyId(null);
-        setSelectedImageId(null);
-        setSelectedTextBoxId(null);
-        setSelectedPersonId(parseProcessFlowId(node.id));
+        selectNodeTarget("person");
       }
       return;
     }
-    markSelected();
-    setSelectedNodeId(null);
-    setSelectedProcessId(null);
-    setSelectedSystemId(null);
-    setSelectedProcessComponentId(null);
-    setSelectedGroupingId(null);
-    setSelectedStickyId(null);
-    setSelectedImageId(null);
-    setSelectedTextBoxId(null);
-    setSelectedBowtieElementId(null);
-    setSelectedPersonId(parseProcessFlowId(node.id));
+    selectNodeTarget("person");
     return;
   }
 
@@ -240,216 +130,71 @@ export const handleCanvasNodeClick = ({
     if (!clickedGroupingHandle) return;
     if (isMobile) {
       if (isMobileDoubleTap(node.id, lastMobileTapRef)) {
-        markSelected();
-        setSelectedNodeId(null);
-        setSelectedProcessId(null);
-        setSelectedSystemId(null);
-        setSelectedPersonId(null);
-        setSelectedGroupingId(parseProcessFlowId(node.id));
+        selectNodeTarget("grouping");
       }
       return;
     }
-    markSelected();
-    setSelectedNodeId(null);
-    setSelectedProcessId(null);
-    setSelectedSystemId(null);
-    setSelectedProcessComponentId(null);
-    setSelectedPersonId(null);
-    setSelectedStickyId(null);
-    setSelectedImageId(null);
-    setSelectedTextBoxId(null);
-    setSelectedBowtieElementId(null);
-    setSelectedGroupingId(parseProcessFlowId(node.id));
+    selectNodeTarget("grouping");
     return;
   }
 
   if (node.data.entityKind === "image_asset") {
     if (isMobile) {
       if (isMobileDoubleTap(node.id, lastMobileTapRef)) {
-        markSelected();
-        setSelectedNodeId(null);
-        setSelectedProcessId(null);
-        setSelectedSystemId(null);
-        setSelectedProcessComponentId(null);
-        setSelectedPersonId(null);
-        setSelectedGroupingId(null);
-        setSelectedStickyId(null);
-        setSelectedTextBoxId(null);
-        setSelectedTableId(null);
-        setSelectedBowtieElementId(null);
-        setSelectedImageId(parseProcessFlowId(node.id));
+        selectNodeTarget("image");
       }
       return;
     }
-    markSelected();
-    setSelectedNodeId(null);
-    setSelectedProcessId(null);
-    setSelectedSystemId(null);
-    setSelectedProcessComponentId(null);
-    setSelectedPersonId(null);
-    setSelectedGroupingId(null);
-    setSelectedStickyId(null);
-    setSelectedTextBoxId(null);
-    setSelectedTableId(null);
-    setSelectedBowtieElementId(null);
-    setSelectedImageId(parseProcessFlowId(node.id));
+    selectNodeTarget("image");
     return;
   }
 
   if (node.data.entityKind === "text_box") {
     if (isMobile) {
       if (isMobileDoubleTap(node.id, lastMobileTapRef)) {
-        markSelected();
-        setSelectedNodeId(null);
-        setSelectedProcessId(null);
-        setSelectedSystemId(null);
-        setSelectedProcessComponentId(null);
-        setSelectedPersonId(null);
-        setSelectedGroupingId(null);
-        setSelectedStickyId(null);
-        setSelectedImageId(null);
-        setSelectedTableId(null);
-        setSelectedBowtieElementId(null);
-        setSelectedTextBoxId(parseProcessFlowId(node.id));
+        selectNodeTarget("textBox");
       }
       return;
     }
-    markSelected();
-    setSelectedNodeId(null);
-    setSelectedProcessId(null);
-    setSelectedSystemId(null);
-    setSelectedProcessComponentId(null);
-    setSelectedPersonId(null);
-    setSelectedGroupingId(null);
-    setSelectedStickyId(null);
-    setSelectedImageId(null);
-    setSelectedTableId(null);
-    setSelectedBowtieElementId(null);
-    setSelectedTextBoxId(parseProcessFlowId(node.id));
+    selectNodeTarget("textBox");
     return;
   }
 
   if (node.data.entityKind === "table") {
     if (isMobile) {
       if (isMobileDoubleTap(node.id, lastMobileTapRef)) {
-        markSelected();
-        setSelectedNodeId(null);
-        setSelectedProcessId(null);
-        setSelectedSystemId(null);
-        setSelectedProcessComponentId(null);
-        setSelectedPersonId(null);
-        setSelectedGroupingId(null);
-        setSelectedStickyId(null);
-        setSelectedImageId(null);
-        setSelectedTextBoxId(null);
-        setSelectedBowtieElementId(null);
-        setSelectedTableId(parseProcessFlowId(node.id));
+        selectNodeTarget("table");
       }
       return;
     }
-    markSelected();
-    setSelectedNodeId(null);
-    setSelectedProcessId(null);
-    setSelectedSystemId(null);
-    setSelectedProcessComponentId(null);
-    setSelectedPersonId(null);
-    setSelectedGroupingId(null);
-    setSelectedStickyId(null);
-    setSelectedImageId(null);
-    setSelectedTextBoxId(null);
-    setSelectedBowtieElementId(null);
-    setSelectedTableId(parseProcessFlowId(node.id));
+    selectNodeTarget("table");
     return;
   }
 
-  if (
-    node.data.entityKind === "shape_rectangle" ||
-    node.data.entityKind === "shape_circle" ||
-    node.data.entityKind === "shape_pill" ||
-    node.data.entityKind === "shape_pentagon" ||
-    node.data.entityKind === "shape_chevron_left" ||
-    node.data.entityKind === "shape_arrow"
-  ) {
+  if (isCanvasShapeKind(node.data.entityKind)) {
     if (isMobile) {
       if (isMobileDoubleTap(node.id, lastMobileTapRef)) {
-        markSelected();
-        setSelectedNodeId(null);
-        setSelectedProcessId(null);
-        setSelectedSystemId(null);
-        setSelectedProcessComponentId(null);
-        setSelectedPersonId(null);
-        setSelectedGroupingId(null);
-        setSelectedStickyId(null);
-        setSelectedImageId(null);
-        setSelectedTextBoxId(null);
-        setSelectedTableId(null);
-        setSelectedBowtieElementId(null);
-        setSelectedFlowShapeId(parseProcessFlowId(node.id));
+        selectNodeTarget("flowShape");
       }
       return;
     }
-    markSelected();
-    setSelectedNodeId(null);
-    setSelectedProcessId(null);
-    setSelectedSystemId(null);
-    setSelectedProcessComponentId(null);
-    setSelectedPersonId(null);
-    setSelectedGroupingId(null);
-    setSelectedStickyId(null);
-    setSelectedImageId(null);
-    setSelectedTextBoxId(null);
-    setSelectedTableId(null);
-    setSelectedBowtieElementId(null);
-    setSelectedFlowShapeId(parseProcessFlowId(node.id));
+    selectNodeTarget("flowShape");
     return;
   }
 
   if (isBowtieKind) {
     if (isMobile) {
       if (isMobileDoubleTap(node.id, lastMobileTapRef)) {
-        markSelected();
-        setSelectedNodeId(null);
-        setSelectedProcessId(null);
-        setSelectedSystemId(null);
-        setSelectedProcessComponentId(null);
-        setSelectedPersonId(null);
-        setSelectedGroupingId(null);
-        setSelectedStickyId(null);
-        setSelectedImageId(null);
-        setSelectedTextBoxId(null);
-        setSelectedTableId(null);
-        setSelectedBowtieElementId(parseProcessFlowId(node.id));
+        selectNodeTarget("bowtieElement");
       }
       return;
     }
-    markSelected();
-    setSelectedNodeId(null);
-    setSelectedProcessId(null);
-    setSelectedSystemId(null);
-    setSelectedProcessComponentId(null);
-    setSelectedPersonId(null);
-    setSelectedGroupingId(null);
-    setSelectedStickyId(null);
-    setSelectedImageId(null);
-    setSelectedTextBoxId(null);
-    setSelectedTableId(null);
-    setSelectedBowtieElementId(parseProcessFlowId(node.id));
+    selectNodeTarget("bowtieElement");
     return;
   }
 
   if (node.data.entityKind === "sticky_note") {
-    markSelected();
-    setSelectedNodeId(null);
-    setSelectedProcessId(null);
-    setSelectedSystemId(null);
-    setSelectedProcessComponentId(null);
-    setSelectedPersonId(null);
-    setSelectedGroupingId(null);
-    setSelectedImageId(null);
-    setSelectedTextBoxId(null);
-    setSelectedTableId(null);
-    setSelectedBowtieElementId(null);
-    setSelectedStickyId(parseProcessFlowId(node.id));
+    selectNodeTarget("sticky");
     return;
   }
 
@@ -462,15 +207,5 @@ export const handleCanvasNodeClick = ({
   }
 
   markSelected();
-  setSelectedProcessId(null);
-  setSelectedSystemId(null);
-  setSelectedProcessComponentId(null);
-  setSelectedPersonId(null);
-  setSelectedGroupingId(null);
-  setSelectedStickyId(null);
-  setSelectedImageId(null);
-  setSelectedTextBoxId(null);
-  setSelectedTableId(null);
-  setSelectedBowtieElementId(null);
-  setSelectedNodeId(node.id);
+  setCanvasSelection(selectionSetters, "document", node.id);
 };
