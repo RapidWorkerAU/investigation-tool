@@ -4243,6 +4243,27 @@ body.mobile-menu-open {
   color: #0d5c75;
 }
 
+.canvas-left-aside[data-read-only="true"] input,
+.canvas-left-aside[data-read-only="true"] select,
+.canvas-left-aside[data-read-only="true"] textarea,
+[data-read-only="true"] input,
+[data-read-only="true"] select,
+[data-read-only="true"] textarea {
+  pointer-events: none;
+  cursor: default;
+}
+
+.canvas-left-aside[data-read-only="true"] button:not(.canvas-left-aside__close),
+[data-read-only="true"] button:not(.canvas-left-aside__close) {
+  pointer-events: none;
+}
+
+.canvas-left-aside[data-read-only="true"] input,
+.canvas-left-aside[data-read-only="true"] select,
+.canvas-left-aside[data-read-only="true"] textarea {
+  background-color: #f8fafc;
+}
+
 .diagnostic-summary-card ul,
 .diagnostic-summary-card ol {
   margin: 0 0 12px 18px;

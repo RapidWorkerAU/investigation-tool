@@ -124,10 +124,7 @@ export default function SetPasswordPage() {
     setReady(false);
     setPassword("");
     setConfirmPassword("");
-    setNotice({
-      type: "success",
-      text: "Password setup complete. Use your new password to sign in.",
-    });
+    setNotice(null);
     setLoading(false);
   }
 
@@ -151,12 +148,14 @@ export default function SetPasswordPage() {
             <span className={styles.brandText}>Investigation Tool</span>
           </div>
 
-          <div className={styles.copyBlock}>
-            <h1>Set your new password.</h1>
-            <p>
-              Choose a new password for your investigation workspace. After saving it, sign in again using the new password.
-            </p>
-          </div>
+          {!resetComplete ? (
+            <div className={styles.copyBlock}>
+              <h1>Set your new password.</h1>
+              <p>
+                Choose a new password for your investigation workspace. After saving it, sign in again using the new password.
+              </p>
+            </div>
+          ) : null}
 
           {resetComplete ? (
             <div className={styles.signupSuccess}>

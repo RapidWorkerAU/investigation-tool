@@ -219,7 +219,7 @@ function ProcessHeadingNode({ data, selected }: NodeProps<Node<FlowData>>) {
       className="relative flex h-full w-full flex-col border px-2 py-1 shadow-[0_6px_20px_rgba(15,23,42,0.18)]"
       style={{ backgroundColor: fillMode === "outline" ? "#ffffff" : categoryColor, borderColor: outlineColor, borderWidth: `${outlineWidth}px`, color: headingTextColor }}
     >
-      {selected ? (
+      {selected && data.canResize !== false ? (
         <>
           <NodeResizeControl
             position={Position.Left}
@@ -332,7 +332,7 @@ function GroupingContainerNode({ data, selected }: NodeProps<Node<FlowData>>) {
       <div className="grouping-select-handle pointer-events-auto absolute inset-x-0 bottom-0" style={{ height: groupingBorderThickness }} />
       <div className="grouping-select-handle pointer-events-auto absolute inset-y-0 left-0" style={{ width: groupingBorderThickness }} />
       <div className="grouping-select-handle pointer-events-auto absolute inset-y-0 right-0" style={{ width: groupingBorderThickness }} />
-      {selected ? (
+      {selected && data.canResize !== false ? (
         <>
           <NodeResizeControl
             className="grouping-select-handle pointer-events-auto"
@@ -1372,7 +1372,7 @@ function StickyNoteNode({ data, selected }: NodeProps<Node<FlowData>>) {
         color: textColor,
       }}
     >
-      {selected && canEdit ? (
+      {selected && canEdit && data.canResize !== false ? (
         <>
           <NodeResizeControl
             position={Position.Right}
@@ -1403,7 +1403,7 @@ function ImageAssetNode({ data, selected }: NodeProps<Node<FlowData>>) {
   return (
     <div className="relative h-full w-full overflow-visible">
       <HiddenEdgeHandles />
-      {selected ? (
+      {selected && data.canResize !== false ? (
         <>
           <NodeResizeControl
             position="top-left"
@@ -1468,7 +1468,7 @@ function TextBoxNode({ data, selected }: NodeProps<Node<FlowData>>) {
   const outlineWidth = Number.isFinite(Number(style.outlineWidth)) ? Math.max(1, Math.min(12, Math.round(Number(style.outlineWidth)))) : 2;
   return (
     <div className="relative h-full w-full overflow-visible">
-      {selected ? (
+      {selected && data.canResize !== false ? (
         <>
           <NodeResizeControl
             position="bottom-right"
@@ -2253,7 +2253,7 @@ function ModernIncidentNode({
   return (
     <div className="relative h-full w-full overflow-visible">
       <HiddenEdgeHandles />
-      {selected ? <IncidentResizeHandles /> : null}
+      {selected && data.canResize !== false ? <IncidentResizeHandles /> : null}
       {!infoOpen ? (
         <button
           type="button"

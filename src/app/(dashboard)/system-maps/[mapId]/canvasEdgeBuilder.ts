@@ -150,11 +150,36 @@ export const buildFlowEdgesBase = (params: {
       const dims = getElementDimensions(el);
       return { id: el.id, x: el.pos_x, y: el.pos_y, width: dims.width, height: dims.height };
     });
+  const documentObstacleRects = nodes.map((n) => {
+    const size = getNodeSize(n);
+    return { id: n.id, x: n.pos_x, y: n.pos_y, width: size.width, height: size.height };
+  });
+  const documentObstacleRectsByExcludedId = new Map<string, Rect[]>();
+  const getDocumentObstacleRectsExcept = (...excludedIds: string[]) => {
+    const key = excludedIds.slice().sort().join("|");
+    const cached = documentObstacleRectsByExcludedId.get(key);
+    if (cached) return cached;
+    const excluded = new Set(excludedIds);
+    const rects = documentObstacleRects
+      .filter((rect) => !excluded.has(rect.id))
+      .map((rect) => ({ x: rect.x, y: rect.y, width: rect.width, height: rect.height }));
+    documentObstacleRectsByExcludedId.set(key, rects);
+    return rects;
+  };
+  const elementObstacleRectsByExcludedId = new Map<string, Rect[]>();
+  const getElementObstacleRectsExcept = (...excludedIds: string[]) => {
+    const key = excludedIds.slice().sort().join("|");
+    const cached = elementObstacleRectsByExcludedId.get(key);
+    if (cached) return cached;
+    const excluded = new Set(excludedIds);
+    const rects = obstacleElementRects
+      .filter((rect) => !excluded.has(rect.id))
+      .map((rect) => ({ x: rect.x, y: rect.y, width: rect.width, height: rect.height }));
+    elementObstacleRectsByExcludedId.set(key, rects);
+    return rects;
+  };
   const labelObstacleRects: Rect[] = [
-    ...nodes.map((n) => {
-      const size = getNodeSize(n);
-      return { x: n.pos_x, y: n.pos_y, width: size.width, height: size.height };
-    }),
+    ...documentObstacleRects.map((rect) => ({ x: rect.x, y: rect.y, width: rect.width, height: rect.height })),
     ...obstacleElementRects.map((rect) => ({ x: rect.x, y: rect.y, width: rect.width, height: rect.height })),
   ];
   return relations.map((r) => {
@@ -222,12 +247,7 @@ export const buildFlowEdgesBase = (params: {
         right: "right-target",
       };
       const blockingRects = [
-        ...nodes
-          .filter((n) => n.id !== from.id && n.id !== to.id)
-          .map((n) => {
-            const size = getNodeSize(n);
-            return { x: n.pos_x, y: n.pos_y, width: size.width, height: size.height };
-          }),
+        ...getDocumentObstacleRectsExcept(from.id, to.id),
         ...obstacleElementRects.map((rect) => ({ x: rect.x, y: rect.y, width: rect.width, height: rect.height })),
       ];
       const pickClosest = (srcNode: DocumentNodeRow, dstNode: DocumentNodeRow) => {
@@ -304,15 +324,8 @@ export const buildFlowEdgesBase = (params: {
         right: "right-target",
       };
       const blockingRects = [
-        ...nodes
-          .filter((n) => n.id !== from.id)
-          .map((n) => {
-            const size = getNodeSize(n);
-            return { x: n.pos_x, y: n.pos_y, width: size.width, height: size.height };
-          }),
-        ...obstacleElementRects
-          .filter((rect) => rect.id !== targetElement.id)
-          .map((rect) => ({ x: rect.x, y: rect.y, width: rect.width, height: rect.height })),
+        ...getDocumentObstacleRectsExcept(from.id),
+        ...getElementObstacleRectsExcept(targetElement.id),
       ];
       const sides: Array<"top" | "bottom" | "left" | "right"> = ["top", "bottom", "left", "right"];
       let best: { sourceHandle: string; targetHandle: string; score: number } | null = null;
@@ -369,15 +382,8 @@ export const buildFlowEdgesBase = (params: {
         right: "right-target",
       };
       const blockingRects = [
-        ...nodes
-          .filter((n) => n.id !== targetDoc.id)
-          .map((n) => {
-            const size = getNodeSize(n);
-            return { x: n.pos_x, y: n.pos_y, width: size.width, height: size.height };
-          }),
-        ...obstacleElementRects
-          .filter((rect) => rect.id !== sourceElement.id)
-          .map((rect) => ({ x: rect.x, y: rect.y, width: rect.width, height: rect.height })),
+        ...getDocumentObstacleRectsExcept(targetDoc.id),
+        ...getElementObstacleRectsExcept(sourceElement.id),
       ];
       const sides: Array<"top" | "bottom" | "left" | "right"> = ["top", "bottom", "left", "right"];
       let best: { sourceHandle: string; targetHandle: string; score: number } | null = null;
@@ -484,13 +490,8 @@ export const buildFlowEdgesBase = (params: {
           right: "right-target",
         };
         const blockingRects = [
-          ...nodes.map((n) => {
-            const size = getNodeSize(n);
-            return { x: n.pos_x, y: n.pos_y, width: size.width, height: size.height };
-          }),
-          ...obstacleElementRects
-            .filter((rect) => rect.id !== sourceElement.id && rect.id !== targetElement.id)
-            .map((rect) => ({ x: rect.x, y: rect.y, width: rect.width, height: rect.height })),
+          ...getDocumentObstacleRectsExcept(),
+          ...getElementObstacleRectsExcept(sourceElement.id, targetElement.id),
         ];
         const sides: Array<"top" | "bottom" | "left" | "right"> = ["top", "bottom", "left", "right"];
         let best: { sourceHandle: string; targetHandle: string; score: number } | null = null;

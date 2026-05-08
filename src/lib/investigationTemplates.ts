@@ -1,11 +1,15 @@
 import type { BillingAccessState } from "@/lib/access";
 
+export type InvestigationTemplateVisibility = "private" | "organisation" | "global";
+
 export type InvestigationTemplateOption = {
   id: string;
   name: string;
   updated_at: string;
   is_global: boolean;
   can_edit: boolean;
+  visibility?: InvestigationTemplateVisibility;
+  organisation_id?: string | null;
 };
 
 export type InvestigationTemplateSnapshot = {
@@ -20,7 +24,10 @@ export const templateAccessDisabledReason = "Saving templates is only available 
 export const templateCreateDisabledReason = "Templates are only available when your account can create investigation maps.";
 
 export function hasActiveTemplateAccess(state: BillingAccessState | null | undefined) {
-  return state?.currentAccessType === "subscription_monthly" && state.currentAccessStatus === "active";
+  return (
+    (state?.currentAccessType === "subscription_monthly" && state.currentAccessStatus === "active") ||
+    state?.orgManagedAccess === true
+  );
 }
 
 export function hasTemplateBrowseAccess(state: BillingAccessState | null | undefined) {

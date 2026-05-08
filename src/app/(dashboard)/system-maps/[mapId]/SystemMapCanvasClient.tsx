@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Background,
   BackgroundVariant,
@@ -18,6 +18,7 @@ import {
   hasActiveTemplateAccess,
   listInvestigationTemplates,
   templateAccessDisabledReason,
+  type InvestigationTemplateVisibility,
   type InvestigationTemplateSnapshot,
 } from "@/lib/investigationTemplates";
 import { supabaseBrowser } from "@/lib/supabase/client";
@@ -473,6 +474,7 @@ function SystemMapCanvasInner({
   templateEditorTemplateId,
   templateEditorTemplateName,
   templateEditorIsGlobal,
+  templateEditorVisibility,
   entrySource,
   viewerMode,
   initialSnapshot,
@@ -483,6 +485,7 @@ function SystemMapCanvasInner({
   templateEditorTemplateId: string | null;
   templateEditorTemplateName: string | null;
   templateEditorIsGlobal: boolean;
+  templateEditorVisibility: InvestigationTemplateVisibility;
   entrySource: "dashboard" | "templates";
   viewerMode: "member" | "guest";
   initialSnapshot: SystemMapCanvasSnapshot | null;
@@ -577,11 +580,15 @@ function SystemMapCanvasInner({
   const [showTemplateMenu, setShowTemplateMenu] = useState(false);
   const [templateQuery, setTemplateQuery] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
-  const [templateResults, setTemplateResults] = useState<Array<{ id: string; name: string; updatedAt: string; isGlobal: boolean }>>([]);
+  const [templateResults, setTemplateResults] = useState<
+    Array<{ id: string; name: string; updatedAt: string; isGlobal: boolean; visibility: InvestigationTemplateVisibility }>
+  >([]);
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
   const [templateSaveMessage, setTemplateSaveMessage] = useState<string | null>(null);
-  const [saveAsGlobalTemplate, setSaveAsGlobalTemplate] = useState(false);
+  const [templateVisibility, setTemplateVisibility] = useState<InvestigationTemplateVisibility>(
+    templateEditorVisibility
+  );
   const [templateEditorStatus, setTemplateEditorStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [showSearchMenu, setShowSearchMenu] = useState(false);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
@@ -746,6 +753,7 @@ function SystemMapCanvasInner({
             name: item.name,
             updatedAt: formatStickyDate(item.updated_at) || "Recently saved",
             isGlobal: item.is_global,
+            visibility: item.visibility ?? (item.is_global ? "global" : "private"),
           }))
         );
       } catch (templateError) {
@@ -771,19 +779,17 @@ function SystemMapCanvasInner({
     [canSaveTemplate, loadTemplateResults]
   );
 
-  const handleSelectTemplateResult = useCallback((id: string, name: string, isGlobal: boolean) => {
+  const handleSelectTemplateResult = useCallback((id: string, name: string, visibility: InvestigationTemplateVisibility) => {
     setSelectedTemplateId(id);
     setTemplateQuery(name);
     setTemplateSaveMessage(null);
-    if (isPlatformAdmin) {
-      setSaveAsGlobalTemplate(isGlobal);
-    }
-  }, [isPlatformAdmin]);
+    setTemplateVisibility(visibility);
+  }, []);
 
-  const handleToggleGlobalTemplateSave = useCallback((updater: (prev: boolean) => boolean) => {
+  const handleSetTemplateVisibility = useCallback((visibility: InvestigationTemplateVisibility) => {
     setSelectedTemplateId(null);
     setTemplateSaveMessage(null);
-    setSaveAsGlobalTemplate((prev) => updater(prev));
+    setTemplateVisibility(visibility);
   }, []);
 
   const buildTemplateSnapshot = useCallback(async () => {
@@ -1101,11 +1107,13 @@ function SystemMapCanvasInner({
       const {
         data: { session },
       } = await supabaseBrowser.auth.getSession();
+      setSuggestionProgress(14);
 
       if (!session?.access_token) {
         throw new Error("Your session has expired. Please sign in again.");
       }
 
+      setSuggestionProgress(22);
       const response = await fetch("/api/map-suggestions", {
         method: "POST",
         headers: {
@@ -1117,11 +1125,13 @@ function SystemMapCanvasInner({
           mapSnapshot: buildSuggestionSnapshot(),
         }),
       });
+      setSuggestionProgress(88);
 
       const payload = (await response.json().catch(() => null)) as
         | (MapSuggestionApiResponse & { error?: string })
         | { error?: string }
         | null;
+      setSuggestionProgress(94);
 
       if (!response.ok) {
         throw new Error(
@@ -1311,7 +1321,8 @@ function SystemMapCanvasInner({
         p_name: normalizedName,
         p_snapshot: snapshot,
         p_template_id: selectedTemplateId,
-        p_is_global: saveAsGlobalTemplate,
+        p_is_global: templateVisibility === "global",
+        p_visibility: templateVisibility,
       });
 
       if (saveError) throw saveError;
@@ -1328,10 +1339,14 @@ function SystemMapCanvasInner({
         savedRow?.was_overwritten
           ? savedIsGlobal
             ? "Global template updated."
-            : "Template updated."
+            : savedRow?.visibility === "organisation"
+              ? "Organisation template updated."
+              : "Template updated."
           : savedIsGlobal
             ? "Global template saved."
-            : "Template saved."
+            : savedRow?.visibility === "organisation"
+              ? "Organisation template saved."
+              : "Template saved."
       );
       await loadTemplateResults(normalizedName.length >= 4 ? normalizedName : "");
     } catch (saveError) {
@@ -1339,7 +1354,7 @@ function SystemMapCanvasInner({
     } finally {
       setIsSavingTemplate(false);
     }
-  }, [buildTemplateSnapshot, canSaveTemplate, templateQuery, selectedTemplateId, saveAsGlobalTemplate, loadTemplateResults]);
+  }, [buildTemplateSnapshot, canSaveTemplate, templateQuery, selectedTemplateId, templateVisibility, loadTemplateResults]);
 
   const handleToggleSuggestionsMenu = useCallback(() => {
     setShowAddMenu(false);
@@ -1874,9 +1889,11 @@ function SystemMapCanvasInner({
   });
   const [showDeleteSelectionConfirm, setShowDeleteSelectionConfirm] = useState(false);
   const [leftAsideSlideIn, setLeftAsideSlideIn] = useState(false);
+  const activePrimaryLeftAsideKeyRef = useRef<string | null>(null);
   const autosavePointerLockRef = useRef(false);
   const suppressNextPaneClearRef = useRef(false);
   const suppressNextPaneClearFrameRef = useRef<number | null>(null);
+  const suppressPaneClearUntilRef = useRef(0);
   const [collapsedHeadingIds, setCollapsedHeadingIds] = useState<Set<string>>(new Set());
   const [newHeadingTitle, setNewHeadingTitle] = useState("");
   const [newHeadingLevel, setNewHeadingLevel] = useState<1 | 2 | 3>(1);
@@ -2267,6 +2284,7 @@ function SystemMapCanvasInner({
 
   const typesById = useMemo(() => new Map(types.map((t) => [t.id, t])), [types]);
   const elementsById = useMemo(() => new Map(elements.map((el) => [el.id, el])), [elements]);
+  const nodesById = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
   const addDocumentTypes = useMemo(() => {
     const grouped = new Map<string, DocumentTypeRow[]>();
     types.forEach((t) => {
@@ -2358,130 +2376,144 @@ function SystemMapCanvasInner({
     }
     return null;
   }, [nodes, getNodeSize, snapToMinorGrid]);
-  const getFlowNodeBounds = useCallback((flowId: string) => {
-    if (flowId.startsWith("process:")) {
-      const elementId = parseProcessFlowId(flowId);
-      const el = canvasPreviewElements.find((item) => item.id === elementId);
-      if (!el) return null;
+  const flowElementBoundsById = useMemo(() => {
+    const bounds = new Map<string, { x: number; y: number; width: number; height: number }>();
+    canvasPreviewElements.forEach((el) => {
       if (el.element_type === "grouping_container") {
-        return {
+        bounds.set(el.id, {
           x: el.pos_x,
           y: el.pos_y,
           width: Math.max(groupingMinWidth, el.width || groupingDefaultWidth),
           height: Math.max(groupingMinHeight, el.height || groupingDefaultHeight),
-        };
+        });
+        return;
       }
       if (el.element_type === "system_circle") {
-        return { x: el.pos_x, y: el.pos_y, width: systemCircleDiameter, height: systemCircleElementHeight };
+        bounds.set(el.id, { x: el.pos_x, y: el.pos_y, width: systemCircleDiameter, height: systemCircleElementHeight });
+        return;
       }
       if (el.element_type === "process_component") {
-        return { x: el.pos_x, y: el.pos_y, width: processComponentWidth, height: processComponentElementHeight };
+        bounds.set(el.id, { x: el.pos_x, y: el.pos_y, width: processComponentWidth, height: processComponentElementHeight });
+        return;
       }
       if (el.element_type === "person") {
-        const width = mapCategoryId === "org_chart" ? orgChartPersonWidth : personElementWidth;
-        const height = mapCategoryId === "org_chart" ? orgChartPersonHeight : personElementHeight;
-        return { x: el.pos_x, y: el.pos_y, width, height };
+        bounds.set(el.id, {
+          x: el.pos_x,
+          y: el.pos_y,
+          width: mapCategoryId === "org_chart" ? orgChartPersonWidth : personElementWidth,
+          height: mapCategoryId === "org_chart" ? orgChartPersonHeight : personElementHeight,
+        });
+        return;
       }
       if (el.element_type === "sticky_note") {
-        return {
+        bounds.set(el.id, {
           x: el.pos_x,
           y: el.pos_y,
           width: Math.max(stickyMinSize, el.width || stickyDefaultSize),
           height: Math.max(stickyMinSize, el.height || stickyDefaultSize),
-        };
+        });
+        return;
       }
       if (el.element_type === "image_asset") {
-        return {
+        bounds.set(el.id, {
           x: el.pos_x,
           y: el.pos_y,
           width: Math.max(imageMinWidth, el.width || imageDefaultWidth),
           height: Math.max(imageMinHeight, el.height || imageDefaultWidth),
-        };
+        });
+        return;
       }
       if (el.element_type === "text_box") {
-        return {
+        bounds.set(el.id, {
           x: el.pos_x,
           y: el.pos_y,
           width: Math.max(textBoxMinWidth, el.width || textBoxDefaultWidth),
           height: Math.max(textBoxMinHeight, el.height || textBoxDefaultHeight),
-        };
+        });
+        return;
       }
       if (el.element_type === "table") {
-        return {
+        bounds.set(el.id, {
           x: el.pos_x,
           y: el.pos_y,
           width: Math.max(tableMinWidth, el.width || tableDefaultWidth),
           height: Math.max(tableMinHeight, el.height || tableDefaultHeight),
-        };
+        });
+        return;
       }
       if (el.element_type === "shape_rectangle") {
-        return {
+        bounds.set(el.id, {
           x: el.pos_x,
           y: el.pos_y,
           width: Math.max(shapeMinWidth, el.width || shapeRectangleDefaultWidth),
           height: Math.max(shapeMinHeight, el.height || shapeRectangleDefaultHeight),
-        };
+        });
+        return;
       }
       if (el.element_type === "shape_circle") {
-        return {
+        bounds.set(el.id, {
           x: el.pos_x,
           y: el.pos_y,
           width: Math.max(shapeMinWidth, el.width || shapeCircleDefaultSize),
           height: Math.max(shapeMinHeight, el.height || shapeCircleDefaultSize),
-        };
+        });
+        return;
       }
       if (el.element_type === "shape_pill") {
-        return {
+        bounds.set(el.id, {
           x: el.pos_x,
           y: el.pos_y,
           width: Math.max(shapeMinWidth, el.width || shapePillDefaultWidth),
           height: Math.max(shapeMinHeight, el.height || shapePillDefaultHeight),
-        };
+        });
+        return;
       }
-      if (el.element_type === "shape_pentagon") {
-        return {
+      if (el.element_type === "shape_pentagon" || el.element_type === "shape_chevron_left") {
+        bounds.set(el.id, {
           x: el.pos_x,
           y: el.pos_y,
           width: Math.max(shapeMinWidth, el.width || shapePentagonDefaultWidth),
           height: Math.max(shapeMinHeight, el.height || shapePentagonDefaultHeight),
-        };
-      }
-      if (el.element_type === "shape_chevron_left") {
-        return {
-          x: el.pos_x,
-          y: el.pos_y,
-          width: Math.max(shapeMinWidth, el.width || shapePentagonDefaultWidth),
-          height: Math.max(shapeMinHeight, el.height || shapePentagonDefaultHeight),
-        };
+        });
+        return;
       }
       if (el.element_type === "shape_arrow") {
-        return {
+        bounds.set(el.id, {
           x: el.pos_x,
           y: el.pos_y,
           width: Math.max(shapeArrowMinWidth, el.width || shapeArrowDefaultWidth),
           height: Math.max(shapeArrowMinHeight, el.height || shapeArrowDefaultHeight),
-        };
+        });
+        return;
       }
       if (isMethodologyElementType(el.element_type)) {
-        return {
+        bounds.set(el.id, {
           x: el.pos_x,
           y: el.pos_y,
           width: Math.max(minorGridSize * 2, el.width || incidentDefaultWidth),
           height: Math.max(minorGridSize, el.height || incidentSquareSize),
-        };
+        });
+        return;
       }
-      return {
+      bounds.set(el.id, {
         x: el.pos_x,
         y: el.pos_y,
         width: Math.max(processMinWidth, el.width || processHeadingWidth),
         height: Math.max(processMinHeight, el.height || processHeadingHeight),
-      };
+      });
+    });
+    return bounds;
+  }, [canvasPreviewElements, mapCategoryId]);
+
+  const getFlowNodeBounds = useCallback((flowId: string) => {
+    if (flowId.startsWith("process:")) {
+      return flowElementBoundsById.get(parseProcessFlowId(flowId)) ?? null;
     }
-    const node = nodes.find((n) => n.id === flowId);
+    const node = nodesById.get(flowId);
     if (!node) return null;
     const size = getNodeSize(node);
     return { x: node.pos_x, y: node.pos_y, width: size.width, height: size.height };
-  }, [canvasPreviewElements, nodes, getNodeSize, mapCategoryId, minorGridSize, orgChartPersonHeight, orgChartPersonWidth, personElementHeight, personElementWidth, shapeArrowDefaultHeight, shapeArrowDefaultWidth, shapeArrowMinHeight, shapeArrowMinWidth, shapeCircleDefaultSize, shapeMinHeight, shapeMinWidth, shapePentagonDefaultHeight, shapePentagonDefaultWidth, shapePillDefaultHeight, shapePillDefaultWidth, shapeRectangleDefaultHeight, shapeRectangleDefaultWidth, tableDefaultWidth, tableDefaultHeight, tableMinWidth, tableMinHeight]);
+  }, [flowElementBoundsById, nodesById, getNodeSize]);
 
   const [flowNodes, setFlowNodes, onFlowNodesChange] = useNodesState<Node<FlowData>>([]);
   const scheduleHoveredNodeId = useCallback((value: string | null) => {
@@ -2794,7 +2826,19 @@ function SystemMapCanvasInner({
       }, completedResizeIds.has(elementId) ? 0 : 220);
       resizePersistTimersRef.current.set(elementId, timer);
     });
-  }, [onFlowNodesChange, elementsById, elements, mapId, snapToMinorGrid, canEditElement, selectedFlowShapeId, hasUnsavedFlowShapeDraftChanges, tableDefaultWidth, tableDefaultHeight, tableMinWidth, tableMinHeight]);
+  }, [
+    onFlowNodesChange,
+    elementsById,
+    elements,
+    nodes,
+    getNodeSize,
+    getFlowNodeBounds,
+    mapId,
+    snapToMinorGrid,
+    canEditElement,
+    selectedFlowShapeId,
+    hasUnsavedFlowShapeDraftChanges,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -3022,9 +3066,15 @@ function SystemMapCanvasInner({
           });
         }).filter(Boolean) as Node<FlowData>[],
       ];
-    const nextNodes = canvasInteractionLocked
-      ? builtNodes.map((node) => ({ ...node, draggable: false, selectable: false }))
-      : builtNodes;
+    const nextNodes = builtNodes.map((node) => ({
+      ...node,
+      draggable: canvasInteractionLocked ? false : node.draggable,
+      selectable: canvasInteractionLocked ? false : node.selectable,
+      data: {
+        ...node.data,
+        canResize: canManipulateCanvasElements && node.data.canResize !== false,
+      },
+    }));
     setFlowNodes(nextNodes);
   }, [nodes, canvasPreviewElements, typesById, setFlowNodes, getNodeSize, selectedFlowIds, selectedTableId, canManipulateCanvasElements, canEditElement, selectedFlowShapeId, hasUnsavedFlowShapeDraftChanges, mapCategoryId, memberDisplayNameByUserId, userEmail, userId, formatStickyDate, imageUrlsByElementId, handleTableCellCommit, handleTableCellStyleCommit, handleOpenEvidenceMediaOverlay, handleToggleIncidentDetail, canvasInteractionLocked]);
 
@@ -3320,35 +3370,39 @@ function SystemMapCanvasInner({
   const activePrimaryLeftAsideKey = useMemo(() => {
     if (isMobile) return null;
     if (desktopNodeAction !== "configure" && desktopNodeAction !== "relationship") return null;
-    if (selectedSticky) return `sticky:${selectedSticky.id}`;
-    if (selectedImage) return `image:${selectedImage.id}`;
-    if (selectedTextBox) return `textbox:${selectedTextBox.id}`;
-    if (selectedTable) return `table:${selectedTable.id}`;
-    if (selectedFlowShape) return `shape:${selectedFlowShape.id}`;
-    if (selectedProcess) return `category:${selectedProcess.id}`;
-    if (selectedSystem) return `system:${selectedSystem.id}`;
-    if (selectedProcessComponent) return `process:${selectedProcessComponent.id}`;
-    if (selectedPerson) return `person:${selectedPerson.id}`;
-    if (selectedBowtieElement) return `bowtie:${selectedBowtieElement.id}`;
-    if (selectedGrouping) return `grouping:${selectedGrouping.id}`;
-    if (selectedNode) return `document:${selectedNode.id}`;
+    if (selectedStickyId) return `sticky:${selectedStickyId}`;
+    if (selectedImageId) return `image:${selectedImageId}`;
+    if (selectedTextBoxId) return `textbox:${selectedTextBoxId}`;
+    if (selectedTableId) return `table:${selectedTableId}`;
+    if (selectedFlowShapeId) return `shape:${selectedFlowShapeId}`;
+    if (selectedProcessId) return `category:${selectedProcessId}`;
+    if (selectedSystemId) return `system:${selectedSystemId}`;
+    if (selectedProcessComponentId) return `process:${selectedProcessComponentId}`;
+    if (selectedPersonId) return `person:${selectedPersonId}`;
+    if (selectedBowtieElementId) return `bowtie:${selectedBowtieElementId}`;
+    if (selectedGroupingId) return `grouping:${selectedGroupingId}`;
+    if (selectedNodeId) return `document:${selectedNodeId}`;
     return null;
   }, [
     desktopNodeAction,
     isMobile,
-    selectedSticky,
-    selectedImage,
-    selectedTextBox,
-    selectedTable,
-    selectedFlowShape,
-    selectedProcess,
-    selectedSystem,
-    selectedProcessComponent,
-    selectedPerson,
-    selectedBowtieElement,
-    selectedGrouping,
-    selectedNode,
+    selectedStickyId,
+    selectedImageId,
+    selectedTextBoxId,
+    selectedTableId,
+    selectedFlowShapeId,
+    selectedProcessId,
+    selectedSystemId,
+    selectedProcessComponentId,
+    selectedPersonId,
+    selectedBowtieElementId,
+    selectedGroupingId,
+    selectedNodeId,
   ]);
+  const isPrimaryLeftAsideOpen = useCallback(
+    (key: string | null) => Boolean(!isMobile && key && activePrimaryLeftAsideKey === key),
+    [activePrimaryLeftAsideKey, isMobile]
+  );
   const shouldShowDesktopStructurePanel =
     !isMobile && !!selectedNodeId && desktopNodeAction === "structure" && !!outlineNodeId && outlineNodeId === selectedNodeId;
   const searchCatalog = useMemo(() => {
@@ -3450,15 +3504,28 @@ function SystemMapCanvasInner({
     setSearchQuery("");
   }, [rf, searchCatalog]);
 
-  useEffect(() => {
+  const shouldPreservePrimaryLeftAside = useCallback(
+    () =>
+      isNodeDragActiveRef.current ||
+      Boolean(currentSpecificSelectedFlowId) ||
+      Boolean(selectedSingleFlowId) ||
+      Date.now() < suppressPaneClearUntilRef.current,
+    [currentSpecificSelectedFlowId, selectedSingleFlowId]
+  );
+
+  useLayoutEffect(() => {
     if (!activePrimaryLeftAsideKey) {
+      if (activePrimaryLeftAsideKeyRef.current && shouldPreservePrimaryLeftAside()) return;
+      activePrimaryLeftAsideKeyRef.current = null;
       setLeftAsideSlideIn(false);
       return;
     }
+    if (activePrimaryLeftAsideKeyRef.current === activePrimaryLeftAsideKey) return;
+    activePrimaryLeftAsideKeyRef.current = activePrimaryLeftAsideKey;
     setLeftAsideSlideIn(false);
     const raf = requestAnimationFrame(() => setLeftAsideSlideIn(true));
     return () => cancelAnimationFrame(raf);
-  }, [activePrimaryLeftAsideKey]);
+  }, [activePrimaryLeftAsideKey, shouldPreservePrimaryLeftAside]);
 
   const loadOutline = useCallback(async (nodeId: string) => {
     const { data, error: e } = await supabaseBrowser
@@ -3476,11 +3543,6 @@ function SystemMapCanvasInner({
   }, []);
 
   useEffect(() => {
-    if (isPlatformAdmin) return;
-    setSaveAsGlobalTemplate(false);
-  }, [isPlatformAdmin]);
-
-  useEffect(() => {
     if (!isTemplateEditor || !templateEditorTemplateId || loading || !canSaveTemplate) return;
 
     setTemplateEditorStatus("saving");
@@ -3492,7 +3554,8 @@ function SystemMapCanvasInner({
             p_name: templateEditorTemplateName?.trim() || map?.title || "Untitled Template",
             p_snapshot: snapshot,
             p_template_id: templateEditorTemplateId,
-            p_is_global: templateEditorIsGlobal,
+            p_is_global: templateEditorVisibility === "global",
+            p_visibility: templateEditorVisibility,
           });
 
           if (saveError) throw saveError;
@@ -3510,7 +3573,6 @@ function SystemMapCanvasInner({
   }, [
     buildTemplateSnapshot,
     canSaveTemplate,
-    isPlatformAdmin,
     isTemplateEditor,
     loading,
     map?.title,
@@ -3520,8 +3582,8 @@ function SystemMapCanvasInner({
     types,
     outlineItems,
     templateEditorTemplateId,
-    templateEditorIsGlobal,
     templateEditorTemplateName,
+    templateEditorVisibility,
   ]);
 
   useEffect(() => {
@@ -4277,8 +4339,14 @@ function SystemMapCanvasInner({
       return;
     }
     const timer = window.setInterval(() => {
-      setSuggestionProgress((current) => (current >= 92 ? current : current + Math.max(2, Math.round((100 - current) / 7))));
-    }, 180);
+      setSuggestionProgress((current) => {
+        if (current >= 86) return current;
+        if (current < 35) return Math.min(35, current + 5);
+        if (current < 60) return Math.min(60, current + 2);
+        if (current < 76) return Math.min(76, current + 1);
+        return Math.min(86, current + 0.5);
+      });
+    }, 700);
     return () => window.clearInterval(timer);
   }, [isLoadingSuggestions, suggestionProgress]);
 
@@ -6076,19 +6144,21 @@ function SystemMapCanvasInner({
     selectedTextBoxId,
   ]);
   useEffect(() => {
-    const hasAnyBlueAsideOpen =
-      !!selectedNodeId ||
-      !!selectedProcessId ||
-      !!selectedSystemId ||
-      !!selectedProcessComponentId ||
-      !!selectedPersonId ||
-      !!selectedGroupingId ||
-      !!selectedStickyId ||
-      !!selectedImageId ||
-      !!selectedTextBoxId ||
-      !!selectedTableId ||
-      !!selectedFlowShapeId ||
-      !!selectedBowtieElementId;
+    const hasSelectedMobileAside =
+      isMobile &&
+      (!!selectedNodeId ||
+        !!selectedProcessId ||
+        !!selectedSystemId ||
+        !!selectedProcessComponentId ||
+        !!selectedPersonId ||
+        !!selectedGroupingId ||
+        !!selectedStickyId ||
+        !!selectedImageId ||
+        !!selectedTextBoxId ||
+        !!selectedTableId ||
+        !!selectedFlowShapeId ||
+        !!selectedBowtieElementId);
+    const hasAnyBlueAsideOpen = hasSelectedMobileAside || Boolean(activePrimaryLeftAsideKey || shouldShowDesktopStructurePanel);
     if (!hasAnyBlueAsideOpen) return;
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as HTMLElement | null;
@@ -6114,7 +6184,10 @@ function SystemMapCanvasInner({
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [
     armPaneClearSuppression,
+    activePrimaryLeftAsideKey,
     saveOpenLeftAside,
+    shouldShowDesktopStructurePanel,
+    isMobile,
     selectedBowtieElementId,
     selectedFlowShapeId,
     selectedGroupingId,
@@ -6208,9 +6281,9 @@ function SystemMapCanvasInner({
   });
   useEffect(() => {
     if (isMobile) return;
-    if (selectedNodeId) return;
+    if (currentSpecificSelectedFlowId || selectedSingleFlowId) return;
     closeDesktopDrilldownPanels();
-  }, [selectedNodeId, isMobile, closeDesktopDrilldownPanels]);
+  }, [currentSpecificSelectedFlowId, selectedSingleFlowId, isMobile, closeDesktopDrilldownPanels]);
 
   const { handlePaneClickClearSelection, handlePaneMouseDown } = useCanvasPaneSelectionActions({
     rf,
@@ -6496,7 +6569,6 @@ function SystemMapCanvasInner({
         onToggleSuggestionsMenu={handleToggleSuggestionsMenu}
         isLoadingSuggestions={isLoadingSuggestions}
         suggestionProgress={suggestionProgress}
-        suggestionOverview={suggestionOverview}
         suggestions={mapSuggestions}
         suggestionError={suggestionError}
         suggestionsLastUpdatedAt={suggestionsLastUpdatedAt}
@@ -6506,8 +6578,9 @@ function SystemMapCanvasInner({
         canvasInteractionLocked={canvasInteractionLocked}
         onToggleCanvasInteractionLock={() => setCanvasInteractionLocked((prev) => !prev)}
         isPlatformAdmin={isPlatformAdmin}
-        saveAsGlobalTemplate={saveAsGlobalTemplate}
-        setSaveAsGlobalTemplate={handleToggleGlobalTemplateSave}
+        isOrgTemplateUser={accessState?.orgManagedAccess === true}
+        templateVisibility={templateVisibility}
+        setTemplateVisibility={handleSetTemplateVisibility}
         templateDisabledReason={templateDisabledReason}
         showTemplateMenu={showTemplateMenu}
         setShowTemplateMenu={setShowTemplateMenu}
@@ -6680,7 +6753,9 @@ function SystemMapCanvasInner({
             onNodeClick={(event, n) =>
               (() => {
                 armPaneClearSuppression();
-                if (!isMobile) closeDesktopDrilldownPanels();
+                if (!isMobile && event.detail > 1) return;
+                if (!isMobile && desktopNodeAction === "configure" && currentSpecificSelectedFlowId === n.id) return;
+                if (!isMobile && desktopNodeAction !== "configure") closeDesktopDrilldownPanels();
                 handleCanvasNodeClick({
                   event,
                   node: n,
@@ -6706,6 +6781,37 @@ function SystemMapCanvasInner({
                 });
               })()
             }
+            onNodeDoubleClick={(event, n) => {
+              if (isMobile) return;
+              event.preventDefault();
+              event.stopPropagation();
+              armPaneClearSuppression();
+              if (desktopNodeAction === "configure" && currentSpecificSelectedFlowId === n.id) return;
+              handleCanvasNodeClick({
+                event,
+                node: n,
+                mapRole,
+                elements,
+                canEditElement,
+                isMobile,
+                lastMobileTapRef,
+                setSelectedFlowIds,
+                setSelectedNodeId,
+                setSelectedProcessId,
+                setSelectedSystemId,
+                setSelectedProcessComponentId,
+                setSelectedPersonId,
+                setSelectedGroupingId,
+                setSelectedStickyId,
+                setSelectedImageId,
+                setSelectedTextBoxId,
+                setSelectedTableId,
+                setSelectedFlowShapeId,
+                setSelectedBowtieElementId,
+                setMobileNodeMenuId,
+              });
+              setDesktopNodeAction("configure");
+            }}
             onNodeContextMenu={(e, n) => {
               if (!canUseContextMenu || canvasInteractionLocked) return;
               e.preventDefault();
@@ -6728,8 +6834,10 @@ function SystemMapCanvasInner({
             onPaneClick={() => {
               scheduleHoveredNodeId(null);
               scheduleHoveredEdgeId(null);
-              if (suppressNextPaneClearRef.current) {
+              if (isNodeDragActiveRef.current) return;
+              if (suppressNextPaneClearRef.current || Date.now() < suppressPaneClearUntilRef.current) {
                 suppressNextPaneClearRef.current = false;
+                suppressPaneClearUntilRef.current = 0;
                 if (suppressNextPaneClearFrameRef.current !== null) {
                   cancelAnimationFrame(suppressNextPaneClearFrameRef.current);
                   suppressNextPaneClearFrameRef.current = null;
@@ -6746,10 +6854,13 @@ function SystemMapCanvasInner({
             onNodeMouseLeave={() => scheduleHoveredNodeId(null)}
             onNodeDragStart={() => {
               isNodeDragActiveRef.current = true;
+              suppressPaneClearUntilRef.current = Date.now() + 500;
               setIsNodeDragActive(true);
             }}
             onNodeDragStop={(event, node) => {
+              suppressPaneClearUntilRef.current = Date.now() + 750;
               void onNodeDragStop(event, node).finally(() => {
+                suppressPaneClearUntilRef.current = Date.now() + 500;
                 isNodeDragActiveRef.current = false;
                 setIsNodeDragActive(false);
               });
@@ -6996,7 +7107,7 @@ function SystemMapCanvasInner({
 
         <CanvasElementPropertyOverlays
           categoryProps={{
-            open: !!selectedProcess && (isMobile || desktopNodeAction === "configure"),
+            open: isMobile ? !!selectedProcess : isPrimaryLeftAsideOpen(selectedProcessId ? `category:${selectedProcessId}` : null),
             isMobile,
             leftAsideSlideIn,
             processHeadingDraft,
@@ -7024,7 +7135,7 @@ function SystemMapCanvasInner({
             actionDisabledReason: readOnlyActionReason,
           }}
           systemProps={{
-            open: !!selectedSystem && (isMobile || desktopNodeAction === "configure"),
+            open: isMobile ? !!selectedSystem : isPrimaryLeftAsideOpen(selectedSystemId ? `system:${selectedSystemId}` : null),
             isMobile,
             leftAsideSlideIn,
             systemNameDraft,
@@ -7048,7 +7159,9 @@ function SystemMapCanvasInner({
             actionDisabledReason: readOnlyActionReason,
           }}
           processProps={{
-            open: !!selectedProcessComponent && (isMobile || desktopNodeAction === "configure"),
+            open: isMobile
+              ? !!selectedProcessComponent
+              : isPrimaryLeftAsideOpen(selectedProcessComponentId ? `process:${selectedProcessComponentId}` : null),
             isMobile,
             leftAsideSlideIn,
             processComponentLabelDraft,
@@ -7072,7 +7185,7 @@ function SystemMapCanvasInner({
             actionDisabledReason: readOnlyActionReason,
           }}
           personProps={{
-            open: !!selectedPerson && (isMobile || desktopNodeAction === "configure"),
+            open: isMobile ? !!selectedPerson : isPrimaryLeftAsideOpen(selectedPersonId ? `person:${selectedPersonId}` : null),
             isMobile,
             leftAsideSlideIn,
             mapCategoryId,
@@ -7118,7 +7231,9 @@ function SystemMapCanvasInner({
             actionDisabledReason: readOnlyActionReason,
           }}
           bowtieProps={{
-            open: !!selectedBowtieElement && (isMobile || desktopNodeAction === "configure"),
+            open: isMobile
+              ? !!selectedBowtieElement
+              : isPrimaryLeftAsideOpen(selectedBowtieElementId ? `bowtie:${selectedBowtieElementId}` : null),
             isMobile,
             leftAsideSlideIn,
             bowtieElementType:
@@ -7184,7 +7299,7 @@ function SystemMapCanvasInner({
             actionDisabledReason: readOnlyActionReason,
           }}
           groupingProps={{
-            open: !!selectedGrouping && (isMobile || desktopNodeAction === "configure"),
+            open: isMobile ? !!selectedGrouping : isPrimaryLeftAsideOpen(selectedGroupingId ? `grouping:${selectedGroupingId}` : null),
             isMobile,
             leftAsideSlideIn,
             groupingLabelDraft,
@@ -7210,7 +7325,7 @@ function SystemMapCanvasInner({
             actionDisabledReason: readOnlyActionReason,
           }}
           stickyProps={{
-            open: !!selectedSticky && (isMobile || desktopNodeAction === "configure"),
+            open: isMobile ? !!selectedSticky : isPrimaryLeftAsideOpen(selectedStickyId ? `sticky:${selectedStickyId}` : null),
             isMobile,
             leftAsideSlideIn,
             stickyTextDraft,
@@ -7235,7 +7350,7 @@ function SystemMapCanvasInner({
             actionDisabledReason: readOnlyActionReason,
           }}
           imageProps={{
-            open: !!selectedImage && (isMobile || desktopNodeAction === "configure"),
+            open: isMobile ? !!selectedImage : isPrimaryLeftAsideOpen(selectedImageId ? `image:${selectedImageId}` : null),
             isMobile,
             leftAsideSlideIn,
             imageDescriptionDraft,
@@ -7265,7 +7380,7 @@ function SystemMapCanvasInner({
             actionDisabledReason: readOnlyActionReason,
           }}
           textBoxProps={{
-            open: !!selectedTextBox && (isMobile || desktopNodeAction === "configure"),
+            open: isMobile ? !!selectedTextBox : isPrimaryLeftAsideOpen(selectedTextBoxId ? `textbox:${selectedTextBoxId}` : null),
             isMobile,
             leftAsideSlideIn,
             textBoxContentDraft,
@@ -7301,7 +7416,7 @@ function SystemMapCanvasInner({
             actionDisabledReason: readOnlyActionReason,
           }}
           tableProps={{
-            open: !!selectedTable && (isMobile || desktopNodeAction === "configure"),
+            open: isMobile ? !!selectedTable : isPrimaryLeftAsideOpen(selectedTableId ? `table:${selectedTableId}` : null),
             isMobile,
             leftAsideSlideIn,
             tableRowsDraft,
@@ -7339,7 +7454,7 @@ function SystemMapCanvasInner({
             actionDisabledReason: readOnlyActionReason,
           }}
           flowShapeProps={{
-            open: !!selectedFlowShape && (isMobile || desktopNodeAction === "configure"),
+            open: isMobile ? !!selectedFlowShape : isPrimaryLeftAsideOpen(selectedFlowShapeId ? `shape:${selectedFlowShapeId}` : null),
             isMobile,
             leftAsideSlideIn,
             title:
@@ -7396,7 +7511,7 @@ function SystemMapCanvasInner({
             actionDisabledReason: readOnlyActionReason,
           }}
           documentProps={{
-            open: !!selectedNode && !isMobile && desktopNodeAction === "configure",
+            open: isPrimaryLeftAsideOpen(selectedNodeId ? `document:${selectedNodeId}` : null),
             leftAsideSlideIn,
             onClose: () => (isMobile ? handleCloseDocumentPropertiesPanel() : setDesktopNodeAction(null)),
             onOpenRelationship: () => {
@@ -7597,6 +7712,7 @@ function SystemMapCanvasInner({
             },
             relatedItems: mobileRelatedItems,
             onDeleteRelation: handleDeleteRelation,
+            actionDisabledReason: readOnlyActionReason,
           }}
           documentStructureAsideProps={{
             open: Boolean(isMobile || shouldShowDesktopStructurePanel),
@@ -7660,6 +7776,7 @@ export default function SystemMapCanvasClient({
   templateEditorTemplateId = null,
   templateEditorTemplateName = null,
   templateEditorIsGlobal = false,
+  templateEditorVisibility = templateEditorIsGlobal ? "global" : "private",
   entrySource = "dashboard",
   viewerMode = "member",
   initialSnapshot = null,
@@ -7670,6 +7787,7 @@ export default function SystemMapCanvasClient({
   templateEditorTemplateId?: string | null;
   templateEditorTemplateName?: string | null;
   templateEditorIsGlobal?: boolean;
+  templateEditorVisibility?: InvestigationTemplateVisibility;
   entrySource?: "dashboard" | "templates";
   viewerMode?: "member" | "guest";
   initialSnapshot?: SystemMapCanvasSnapshot | null;
@@ -7721,6 +7839,7 @@ export default function SystemMapCanvasClient({
         templateEditorTemplateId={templateEditorTemplateId}
         templateEditorTemplateName={templateEditorTemplateName}
         templateEditorIsGlobal={templateEditorIsGlobal}
+        templateEditorVisibility={templateEditorVisibility}
         entrySource={entrySource}
         viewerMode={viewerMode}
         initialSnapshot={initialSnapshot}

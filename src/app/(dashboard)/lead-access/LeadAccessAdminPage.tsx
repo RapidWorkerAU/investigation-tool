@@ -390,6 +390,7 @@ export default function LeadAccessAdminPage() {
   if (loading) {
     return (
       <DashboardPageSkeleton
+        mode="admin"
         activeNav="lead-access"
         eyebrow="Platform Admin"
         title="Lead Access Codes"
@@ -403,6 +404,7 @@ export default function LeadAccessAdminPage() {
 
   return (
     <DashboardShell
+      mode="admin"
       activeNav="lead-access"
       eyebrow="Platform Admin"
       title="Lead Access Codes"
@@ -439,7 +441,7 @@ export default function LeadAccessAdminPage() {
             onClick={openCreateModal}
             disabled={loading || !authorized || campaigns.length === 0}
           >
-            <Image src="/icons/addcomponent.svg" alt="" width={16} height={16} className={shellStyles.actionIcon} />
+            <Image src="/icons/addcomponent.svg" alt="" width={16} height={16} className={`${shellStyles.actionIcon} ${shellStyles.actionIconWhite}`} />
             Add Access Code
           </button>
         </div>

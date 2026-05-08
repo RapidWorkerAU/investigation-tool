@@ -9,6 +9,7 @@ import shellStyles from "@/components/dashboard/DashboardShell.module.css";
 import { DashboardPageSkeleton } from "@/components/dashboard/DashboardTableLoadingState";
 import DashboardTableFooter from "@/components/dashboard/DashboardTableFooter";
 import { fetchAccessState, type BillingAccessState } from "@/lib/access";
+import type { InvestigationTemplateVisibility } from "@/lib/investigationTemplates";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
 
 type TemplateRow = {
@@ -18,6 +19,8 @@ type TemplateRow = {
   created_at: string;
   updated_at: string;
   is_global: boolean;
+  visibility: InvestigationTemplateVisibility;
+  organisation_id: string | null;
   snapshot: Record<string, unknown>;
 };
 
@@ -31,6 +34,21 @@ const formatDateTime = (value: string) =>
     hour: "2-digit",
     minute: "2-digit",
   });
+
+const getTemplateVisibility = (row: Pick<TemplateRow, "is_global" | "visibility">): InvestigationTemplateVisibility =>
+  row.visibility ?? (row.is_global ? "global" : "private");
+
+const getTemplateVisibilityLabel = (visibility: InvestigationTemplateVisibility) => {
+  if (visibility === "global") return "Global";
+  if (visibility === "organisation") return "Organisation";
+  return "My templates";
+};
+
+const getTemplateVisibilityDescription = (visibility: InvestigationTemplateVisibility) => {
+  if (visibility === "global") return "Global template shared across Investigation Tool.";
+  if (visibility === "organisation") return "Organisation template shared with active users in your organisation.";
+  return "Personal template available in your library.";
+};
 
 export default function TemplatesWorkspace() {
   const router = useRouter();
@@ -82,7 +100,7 @@ export default function TemplatesWorkspace() {
 
     const { data, error: templateError } = await supabase
       .from("investigation_templates")
-      .select("id,name,user_id,created_at,updated_at,is_global,snapshot")
+      .select("id,name,user_id,created_at,updated_at,is_global,visibility,organisation_id,snapshot")
       .order("updated_at", { ascending: false });
 
     if (templateError) throw templateError;
@@ -143,8 +161,9 @@ export default function TemplatesWorkspace() {
   const editableRows = useMemo(
     () =>
       rows.filter((row) => {
-        if (row.is_global) return isPlatformAdmin;
-        return row.user_id === currentUserId;
+        if (row.user_id === currentUserId) return true;
+        if (isPlatformAdmin) return true;
+        return false;
       }),
     [currentUserId, isPlatformAdmin, rows]
   );
@@ -171,10 +190,10 @@ export default function TemplatesWorkspace() {
   };
 
   const buildDuplicateTemplateName = useCallback(
-    (name: string, isGlobal: boolean) => {
+    (name: string, visibility: InvestigationTemplateVisibility) => {
       const existingNames = new Set(
         rows
-          .filter((row) => row.is_global === isGlobal)
+          .filter((row) => getTemplateVisibility(row) === visibility)
           .map((row) => row.name.trim().toLowerCase())
       );
       let attempt = `${name} (Copy)`;
@@ -205,7 +224,7 @@ export default function TemplatesWorkspace() {
 
       setPendingOpenRow(null);
       router.push(
-        `/system-maps/${openedRow.map_id}?templateEditor=1&templateId=${row.id}&templateName=${encodeURIComponent(row.name)}&templateGlobal=${row.is_global ? "1" : "0"}&from=templates`
+        `/system-maps/${openedRow.map_id}?templateEditor=1&templateId=${row.id}&templateName=${encodeURIComponent(row.name)}&templateGlobal=${row.is_global ? "1" : "0"}&templateVisibility=${encodeURIComponent(row.visibility ?? (row.is_global ? "global" : "private"))}&from=templates`
       );
     } catch (openError) {
       setError(openError instanceof Error ? openError.message : "Unable to open template editor.");
@@ -242,10 +261,11 @@ export default function TemplatesWorkspace() {
       setDuplicatingTemplateId(row.id);
       setError(null);
       const { error: duplicateError } = await supabase.rpc("save_investigation_template", {
-        p_name: buildDuplicateTemplateName(row.name, row.is_global),
+        p_name: buildDuplicateTemplateName(row.name, getTemplateVisibility(row)),
         p_snapshot: row.snapshot,
         p_template_id: null,
-        p_is_global: row.is_global,
+        p_is_global: row.visibility === "global",
+        p_visibility: row.visibility ?? (row.is_global ? "global" : "private"),
       });
 
       if (duplicateError) throw duplicateError;
@@ -391,13 +411,13 @@ export default function TemplatesWorkspace() {
                         <div className={shellStyles.mapCellText}>
                           <strong className={shellStyles.tableClamp}>{row.name}</strong>
                           <span className={shellStyles.tableClamp}>
-                            {row.is_global ? "Global template shared across Investigation Tool." : "Personal template available in your library."}
+                            {getTemplateVisibilityDescription(getTemplateVisibility(row))}
                           </span>
                         </div>
                       </div>
                     </td>
                     <td>
-                      <span className={shellStyles.tableClamp}>{row.is_global ? "Global" : "My templates"}</span>
+                      <span className={shellStyles.tableClamp}>{getTemplateVisibilityLabel(getTemplateVisibility(row))}</span>
                     </td>
                     <td>
                       <span className={shellStyles.tableDate}>{formatDateTime(row.updated_at)}</span>
@@ -464,7 +484,7 @@ export default function TemplatesWorkspace() {
                       </label>
                       <div className={shellStyles.dashboardMobileCardTitleBlock}>
                         <strong>{row.name}</strong>
-                        <span>{row.is_global ? "Global template" : "Personal template"}</span>
+                        <span>{getTemplateVisibilityLabel(getTemplateVisibility(row))} template</span>
                       </div>
                       <span className={shellStyles.dashboardMobileChevron} aria-hidden="true">
                         {expandedMobileTemplateId === row.id ? "−" : "+"}
@@ -477,7 +497,7 @@ export default function TemplatesWorkspace() {
                       <dl className={shellStyles.dashboardMobileMeta}>
                         <div>
                           <dt>Library</dt>
-                          <dd>{row.is_global ? "Global" : "My templates"}</dd>
+                          <dd>{getTemplateVisibilityLabel(getTemplateVisibility(row))}</dd>
                         </div>
                         <div className={shellStyles.dashboardMobileMetaDate}>
                           <dt>Updated</dt>

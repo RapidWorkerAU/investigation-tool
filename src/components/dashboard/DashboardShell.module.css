@@ -522,6 +522,7 @@
   display: grid;
   gap: 18px;
   flex: 1 1 auto;
+  min-width: 0;
   min-height: 0;
   overflow: auto;
   align-content: start;
@@ -694,6 +695,8 @@
 .table td:last-child {
   text-align: left;
   border-right: 0;
+  padding-left: clamp(6px, 0.7vw, 16px);
+  padding-right: clamp(6px, 0.7vw, 16px);
 }
 
 .table th:first-child,
@@ -1492,6 +1495,7 @@
 }
 
 .accountSection {
+  min-width: 0;
   padding: 28px;
 }
 
@@ -1703,6 +1707,8 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
+  max-width: 100%;
+  min-width: 0;
   min-height: 40px;
   padding: 0 18px;
   border-radius: 12px;
@@ -1886,7 +1892,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: clamp(4px, 0.6vw, 12px);
   min-width: 0;
   flex-wrap: nowrap;
 }
@@ -2001,12 +2007,12 @@
 }
 
 .actionButton {
-  width: 32px;
-  height: 32px;
+  width: clamp(24px, 2.1vw, 32px);
+  height: clamp(24px, 2.1vw, 32px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 12px;
+  border-radius: clamp(9px, 0.8vw, 12px);
   border: 1px solid #dfe3ea;
   background: #ffffff;
   box-shadow:
@@ -2036,9 +2042,13 @@
 }
 
 .actionIcon {
-  width: 16px;
-  height: 16px;
+  width: clamp(12px, 1vw, 16px);
+  height: clamp(12px, 1vw, 16px);
   object-fit: contain;
+}
+
+.actionIconWhite {
+  filter: brightness(0) invert(1);
 }
 
 .modalBackdrop {
@@ -2237,6 +2247,7 @@
 .reportLayout {
   display: grid;
   gap: 18px;
+  min-width: 0;
   padding-bottom: 20px;
 }
 
@@ -2279,14 +2290,20 @@
   gap: 16px;
   width: 100%;
   padding: 8px 0 8px;
-  overflow-x: auto;
+  min-width: 0;
+  overflow-x: visible;
+  flex-wrap: wrap;
 }
 
 .reportToggleGroup {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 0px;
   padding: 2px;
+  max-width: 100%;
+  min-width: 0;
+  flex: 1 1 720px;
+  flex-wrap: wrap;
   border-radius: 10px;
   background: linear-gradient(180deg, #515a67 0%, #3f4956 100%);
   border: 1px solid rgba(24, 29, 39, 0.18);
@@ -2300,7 +2317,10 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  flex: 0 0 auto;
+  min-width: 0;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .reportMobileSelectWrap {
@@ -2345,14 +2365,15 @@
 }
 
 .reportToggleButton {
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   min-height: 30px;
-  padding: 10px 2px;
+  min-width: max-content;
+  padding: 10px 8px;
   border: 0;
   border-radius: 10px;
   background: transparent;
   color: rgba(255, 255, 255, 0.96);
-  font-size: 0.98rem;
+  font-size: clamp(0.7rem, 0.72vw, 0.98rem);
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
@@ -2561,6 +2582,7 @@
   gap: 24px;
   align-items: start;
   width: 100%;
+  min-width: 0;
 }
 
 .reportScopeColumn {
@@ -2848,26 +2870,30 @@
     flex-direction: row;
     gap: 12px;
     padding: 0px;
-    align-items: center;
+    align-items: flex-start;
     overflow-x: visible;
+    flex-wrap: wrap;
   }
 
   .reportToggleGroup {
-    flex: 0 0 auto;
-    min-width: max-content;
+    flex: 1 1 620px;
+    min-width: 0;
+    max-width: 100%;
     width: auto;
-    display: inline-flex;
+    display: flex;
+    flex-wrap: wrap;
     gap: 3px;
     padding: 4px;
     border-radius: 10px;
   }
 
   .reportToggleButton {
+    flex: 1 1 auto;
     width: auto;
     min-width: 0;
     min-height: 38px;
-    padding: 10px;
-    font-size: 0.74rem;
+    padding: 8px clamp(5px, 0.55vw, 10px);
+    font-size: clamp(0.62rem, 0.62vw, 0.74rem);
     line-height: 1.1;
     text-align: center;
     white-space: nowrap;
@@ -2875,10 +2901,12 @@
 
   .reportToggleActions {
     margin-left: auto;
-    flex: 0 0 auto;
-    justify-content: flex-start;
+    flex: 0 1 auto;
+    justify-content: flex-end;
     width: auto;
     align-self: center;
+    min-width: 0;
+    flex-wrap: wrap;
   }
 
   .reportToggleActions .button {
@@ -2909,6 +2937,265 @@
     font-size: 0.92rem;
     line-height: 1.38;
     overflow-wrap: anywhere;
+  }
+}
+
+@media (min-width: 1081px) and (max-width: 1500px) {
+  .sidebar {
+    width: 232px;
+    padding: 16px 12px 18px;
+    gap: 16px;
+  }
+
+  .sidebarCollapsed {
+    width: 76px;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .sidebarTop {
+    gap: 8px;
+  }
+
+  .brand {
+    min-height: 46px;
+    gap: 10px;
+  }
+
+  .brandImage {
+    width: 46px;
+    height: 46px;
+  }
+
+  .brandText {
+    font-size: 0.9rem;
+    line-height: 1.08;
+  }
+
+  .sidebarCollapseButton {
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+  }
+
+  .sidebarNav {
+    gap: 8px;
+  }
+
+  .sidebarLink {
+    min-height: 48px;
+    gap: 10px;
+    padding: 0 12px;
+    border-radius: 16px;
+  }
+
+  .sidebarLinkLabel {
+    font-size: 0.84rem;
+  }
+
+  .sidebarIcon {
+    width: 20px;
+    height: 20px;
+  }
+
+  .topbar {
+    padding: 20px 24px 16px;
+  }
+
+  .body {
+    padding: 18px 24px 24px;
+  }
+
+  .table th,
+  .table td,
+  .reportDataTable th,
+  .reportDataTable td {
+    padding-left: 10px;
+    padding-right: 10px;
+    font-size: 0.74rem;
+  }
+
+  .table th:last-child,
+  .table td:last-child {
+    padding-left: 5px;
+    padding-right: 5px;
+  }
+
+  .mapCell strong {
+    font-size: 0.74rem;
+  }
+
+  .subtitle,
+  .tableDate,
+  .tableValue,
+  .tableWrapText {
+    font-size: 0.76rem;
+  }
+
+  .actionButtons {
+    gap: 4px;
+  }
+
+  .actionButton {
+    width: 26px;
+    height: 26px;
+    border-radius: 9px;
+  }
+
+  .actionIcon {
+    width: 12px;
+    height: 12px;
+  }
+}
+
+@media (min-width: 1081px) and (max-width: 1320px) {
+  .sidebar {
+    width: 212px;
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .sidebarCollapsed {
+    width: 72px;
+  }
+
+  .brandImage {
+    width: 42px;
+    height: 42px;
+  }
+
+  .brandText {
+    font-size: 0.84rem;
+  }
+
+  .sidebarLink {
+    min-height: 44px;
+    padding: 0 10px;
+  }
+
+  .sidebarLinkLabel {
+    font-size: 0.78rem;
+  }
+
+  .topbar {
+    padding: 18px 20px 16px;
+  }
+
+  .body {
+    padding: 16px 20px 22px;
+  }
+
+  .accountSection {
+    padding: 18px;
+  }
+
+  .table th,
+  .table td,
+  .reportDataTable th,
+  .reportDataTable td {
+    padding-left: 10px;
+    padding-right: 10px;
+    font-size: 0.74rem;
+  }
+
+  .table th:last-child,
+  .table td:last-child {
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+
+  .actionButtons {
+    gap: 5px;
+  }
+
+  .actionButton {
+    width: 27px;
+    height: 27px;
+    border-radius: 9px;
+  }
+
+  .actionIcon {
+    width: 13px;
+    height: 13px;
+  }
+
+  .reportToggleBar {
+    gap: 10px;
+  }
+
+  .reportToggleGroup {
+    flex-basis: 100%;
+    order: 2;
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 3px;
+  }
+
+  .reportToggleButton {
+    min-height: 34px;
+    padding: 6px 4px;
+    font-size: 0.61rem;
+  }
+
+  .reportToggleActions {
+    order: 1;
+    width: 100%;
+  }
+
+  .reportToggleActions .button {
+    min-height: 36px;
+    padding: 0 12px;
+    font-size: 0.72rem;
+  }
+
+  .reportScopeSplitLayout {
+    gap: 18px;
+  }
+}
+
+@media (min-width: 1081px) and (max-width: 1180px) {
+  .sidebar {
+    width: 196px;
+  }
+
+  .brandText {
+    font-size: 0.78rem;
+  }
+
+  .sidebarLink {
+    gap: 8px;
+    padding: 0 8px;
+  }
+
+  .sidebarLinkLabel {
+    font-size: 0.74rem;
+  }
+
+  .body {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .table th,
+  .table td,
+  .reportDataTable th,
+  .reportDataTable td {
+    padding-left: 7px;
+    padding-right: 7px;
+    font-size: 0.68rem;
+  }
+
+  .mapCell strong,
+  .subtitle,
+  .tableDate,
+  .tableValue,
+  .tableWrapText {
+    font-size: 0.7rem;
+  }
+
+  .actionButton {
+    width: 24px;
+    height: 24px;
   }
 }
 
@@ -4600,7 +4887,7 @@
   }
 
   .reportToggleButton {
-    width: auto%;
+    width: auto;
     min-width: 0;
     min-height: 38px;
     padding: 0px;

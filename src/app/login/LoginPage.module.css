@@ -113,6 +113,18 @@
   box-shadow: 0 0 0 3px rgba(75, 143, 241, 0.12);
 }
 
+.field input::-ms-reveal,
+.field input::-ms-clear {
+  display: none;
+}
+
+.field input::-webkit-credentials-auto-fill-button,
+.field input::-webkit-caps-lock-indicator {
+  visibility: hidden;
+  display: none;
+  pointer-events: none;
+}
+
 .fieldError input {
   border-color: rgba(213, 58, 79, 0.62);
 }

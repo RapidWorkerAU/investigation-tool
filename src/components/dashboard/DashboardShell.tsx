@@ -46,6 +46,7 @@ const adminSidebarLinks = [
     label: "Organisations",
     icon: "/icons/organisation.svg",
   },
+  { key: "lead-access" as const, href: "/lead-access", label: "Lead Access", icon: "/icons/lock.svg" },
 ];
 
 const DESKTOP_SIDEBAR_STATE_KEY = "investigation_tool_dashboard_sidebar_collapsed";
@@ -345,6 +346,9 @@ export default function DashboardShell({
                 </Link>
                 <Link href="/admin/organisations" onClick={() => setMobileMenuOpen(false)}>
                   Organisations
+                </Link>
+                <Link href="/lead-access" onClick={() => setMobileMenuOpen(false)}>
+                  Lead Access
                 </Link>
               </>
             ) : (

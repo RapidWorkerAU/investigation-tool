@@ -3,6 +3,7 @@ import { DashboardPageSkeleton } from "@/components/dashboard/DashboardTableLoad
 export default function LeadAccessLoading() {
   return (
     <DashboardPageSkeleton
+      mode="admin"
       activeNav="lead-access"
       eyebrow="Platform Admin"
       title="Lead Access Codes"

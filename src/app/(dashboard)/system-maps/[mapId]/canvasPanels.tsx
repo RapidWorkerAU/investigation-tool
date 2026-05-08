@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
+import type { InvestigationTemplateVisibility } from "@/lib/investigationTemplates";
 import type { MapMemberProfileRow, SystemMap } from "./canvasShared";
 import type { NodePaletteKind } from "./mapCategories";
 
@@ -40,7 +41,6 @@ type CanvasActionButtonsProps = {
   onToggleSuggestionsMenu: () => void;
   isLoadingSuggestions: boolean;
   suggestionProgress: number;
-  suggestionOverview: string;
   suggestions: Array<{
     id: string;
     title: string;
@@ -117,19 +117,20 @@ type CanvasActionButtonsProps = {
   canvasInteractionLocked: boolean;
   onToggleCanvasInteractionLock: () => void;
   isPlatformAdmin: boolean;
-  saveAsGlobalTemplate: boolean;
-  setSaveAsGlobalTemplate: (updater: (prev: boolean) => boolean) => void;
+  isOrgTemplateUser: boolean;
+  templateVisibility: InvestigationTemplateVisibility;
+  setTemplateVisibility: (visibility: InvestigationTemplateVisibility) => void;
   templateDisabledReason?: string;
   showTemplateMenu: boolean;
   setShowTemplateMenu: (updater: (prev: boolean) => boolean) => void;
   templateMenuRef: RefObject<HTMLDivElement | null>;
   templateQuery: string;
   setTemplateQuery: (value: string) => void;
-  templateResults: Array<{ id: string; name: string; updatedAt: string; isGlobal: boolean }>;
+  templateResults: Array<{ id: string; name: string; updatedAt: string; isGlobal: boolean; visibility: InvestigationTemplateVisibility }>;
   isLoadingTemplates: boolean;
   isSavingTemplate: boolean;
   templateSaveMessage: string | null;
-  onSelectTemplate: (id: string, name: string, isGlobal: boolean) => void;
+  onSelectTemplate: (id: string, name: string, visibility: InvestigationTemplateVisibility) => void;
   onSaveTemplate: () => void;
   showPrintMenu: boolean;
   setShowPrintMenu: (updater: (prev: boolean) => boolean) => void;
@@ -160,7 +161,6 @@ export function CanvasActionButtons({
   onToggleSuggestionsMenu,
   isLoadingSuggestions,
   suggestionProgress,
-  suggestionOverview,
   suggestions,
   suggestionError,
   suggestionsLastUpdatedAt,
@@ -221,8 +221,9 @@ export function CanvasActionButtons({
   canvasInteractionLocked,
   onToggleCanvasInteractionLock,
   isPlatformAdmin,
-  saveAsGlobalTemplate,
-  setSaveAsGlobalTemplate,
+  isOrgTemplateUser,
+  templateVisibility,
+  setTemplateVisibility,
   templateDisabledReason,
   showTemplateMenu,
   setShowTemplateMenu,
@@ -616,7 +617,6 @@ export function CanvasActionButtons({
     isLoadingTemplates,
     isPreparingPrint,
     printMenuRef,
-    saveAsGlobalTemplate,
     searchMenuRef,
     searchQuery,
     searchResults.length,
@@ -627,10 +627,19 @@ export function CanvasActionButtons({
     templateQuery,
     templateResults.length,
     templateSaveMessage,
+    templateVisibility,
   ]);
 
   const renderTemplateMenu = () => {
     if (!showTemplateMenu || !canSaveTemplate) return null;
+    const visibilityOptions: Array<{ value: InvestigationTemplateVisibility; label: string; description: string }> = [
+      { value: "global", label: "Global", description: "Visible to every Investigation Tool user." },
+      ...(isOrgTemplateUser
+        ? [{ value: "organisation" as const, label: "Organisation", description: "Visible to active users in your organisation." }]
+        : []),
+      { value: "private", label: "Private", description: "Visible only in your template library." },
+    ];
+    const selectedVisibilityLabel = visibilityOptions.find((option) => option.value === templateVisibility)?.label ?? "Private";
     return (
       <div className="fixed left-[98px] top-[82px] bottom-[20px] z-[160] w-[360px] max-w-[calc(100vw-132px)]">
         <div
@@ -658,53 +667,35 @@ export function CanvasActionButtons({
             </div>
             <p className="mt-3 text-sm leading-5 text-slate-600">
               Select an existing template to overwrite it, or enter a new name to save a fresh template.
-              {isPlatformAdmin ? ` ${saveAsGlobalTemplate ? "This save will update the shared global template library." : "Switch on Global template to publish this for every user."}` : ""}
+              {` Saving as ${selectedVisibilityLabel.toLowerCase()} controls who can find and use this template.`}
             </p>
-            {isPlatformAdmin ? (
-              <div className="mt-4 text-left">
-                <div
-                  className="grid grid-cols-2 gap-1.5 rounded-2xl bg-[#314661] p-1"
-                  role="radiogroup"
-                  aria-label="Template visibility"
-                >
+            <div className="mt-4 text-left">
+              <div
+                className={`grid gap-1.5 rounded-2xl bg-[#314661] p-1 ${isOrgTemplateUser ? "grid-cols-3" : "grid-cols-2"}`}
+                role="radiogroup"
+                aria-label="Template visibility"
+              >
+                {visibilityOptions.map((option) => (
                   <button
+                    key={option.value}
                     type="button"
                     role="radio"
-                    aria-checked={saveAsGlobalTemplate}
+                    aria-checked={templateVisibility === option.value}
                     className={`rounded-xl px-3 py-1.5 text-sm font-semibold transition ${
-                      saveAsGlobalTemplate
+                      templateVisibility === option.value
                         ? "bg-white text-[#102a43] shadow-[0_8px_18px_rgba(15,23,42,0.16)]"
                         : "text-white hover:text-white"
                     }`}
-                    onClick={() => setSaveAsGlobalTemplate(() => true)}
+                    onClick={() => setTemplateVisibility(option.value)}
                   >
-                    Global
+                    {option.label}
                   </button>
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={!saveAsGlobalTemplate}
-                    className={`rounded-xl px-3 py-1.5 text-sm font-semibold transition ${
-                      !saveAsGlobalTemplate
-                        ? saveAsGlobalTemplate
-                          ? "bg-white text-[#102a43] shadow-[0_8px_18px_rgba(15,23,42,0.16)]"
-                          : "bg-white text-[#102a43] shadow-[0_8px_18px_rgba(15,23,42,0.16)]"
-                        : saveAsGlobalTemplate
-                          ? "text-white hover:text-white"
-                          : "text-white hover:text-white"
-                    }`}
-                    onClick={() => setSaveAsGlobalTemplate(() => false)}
-                  >
-                    Private
-                  </button>
-                </div>
-                <p className="mt-3 text-xs leading-5 text-slate-600">
-                  {saveAsGlobalTemplate
-                    ? "Global templates are published to the shared template library for every user."
-                    : "Private templates are saved only to your own template library."}
-                </p>
+                ))}
               </div>
-            ) : null}
+              <p className="mt-3 text-xs leading-5 text-slate-600">
+                {visibilityOptions.find((option) => option.value === templateVisibility)?.description}
+              </p>
+            </div>
           </div>
           <div className="flex-1 overflow-y-auto px-5 pb-5 pt-5">
             <input
@@ -722,7 +713,7 @@ export function CanvasActionButtons({
                 onClick={onSaveTemplate}
                 disabled={isSavingTemplate || !templateQuery.trim()}
               >
-                {isSavingTemplate ? "Saving..." : saveAsGlobalTemplate ? "Save Global Template" : "Save Private Template"}
+                {isSavingTemplate ? "Saving..." : `Save ${selectedVisibilityLabel} Template`}
               </button>
             </div>
             {templateQuery.trim().length > 0 || isLoadingTemplates || templateResults.length > 0 ? (
@@ -735,7 +726,7 @@ export function CanvasActionButtons({
                       key={result.id}
                       type="button"
                       className="block w-full border-b border-slate-100 px-3 py-2.5 text-left text-sm text-slate-800 last:border-b-0 hover:bg-slate-50"
-                      onClick={() => onSelectTemplate(result.id, result.name, result.isGlobal)}
+                      onClick={() => onSelectTemplate(result.id, result.name, result.visibility)}
                     >
                       <div className="font-semibold text-slate-900">{result.name}</div>
                       <div className="hidden text-xs text-slate-500">
@@ -904,11 +895,21 @@ export function CanvasActionButtons({
   const renderSuggestionsModal = () => {
     if (!showSuggestionsMenu || !canUseSuggestionCheck) return null;
 
+    const getSuggestionMeta = (suggestion: (typeof suggestions)[number]) => {
+      if (suggestion.priority === "high") {
+        return { icon: "/icons/lightbulb.svg", color: "#f59e0b", label: "High priority" };
+      }
+      if (suggestion.priority === "medium") {
+        return { icon: "/icons/file.svg", color: "#45c4b0", label: "Suggestion" };
+      }
+      return { icon: "/icons/infoicon.svg", color: "#47b9d6", label: "Observation" };
+    };
+
     return (
       <div className="fixed left-[98px] top-[82px] bottom-[20px] z-[160] w-[380px] max-w-[calc(100vw-132px)]">
         <div
           ref={suggestionMenuRef}
-          className="flex h-full w-full flex-col overflow-hidden rounded-[28px] border border-white/45 bg-[linear-gradient(180deg,rgba(248,250,252,0.98),rgba(241,245,249,0.96))] shadow-[0_28px_64px_rgba(15,23,42,0.24)]"
+          className="flex h-full w-full flex-col overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-[0_28px_64px_rgba(15,23,42,0.24)]"
         >
           <div className="border-b border-slate-200/80 px-5 py-4">
             <div className="flex items-start justify-between gap-4">
@@ -960,16 +961,10 @@ export function CanvasActionButtons({
               </div>
             ) : null}
           </div>
-          <div className="flex-1 overflow-y-auto px-5 pb-5 pt-5">
+          <div className="flex-1 overflow-y-auto bg-white">
             {suggestionError ? (
-              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <div className="m-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                 {suggestionError}
-              </div>
-            ) : null}
-            {suggestionOverview ? (
-              <div className="mb-4 rounded-[22px] border border-slate-200 bg-white/80 px-4 py-3 shadow-[0_10px_22px_rgba(15,23,42,0.06)]">
-                <div className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-slate-500">Overview</div>
-                <p className="mt-2 text-[13px] leading-5 text-slate-700">{suggestionOverview}</p>
               </div>
             ) : null}
             {!suggestionError && !isLoadingSuggestions && suggestions.length === 0 ? (
@@ -989,14 +984,43 @@ export function CanvasActionButtons({
                 </div>
               </div>
             ) : null}
-            <div className="divide-y divide-slate-200">
+            <div className="divide-y divide-slate-200 border-t border-slate-200">
               {suggestions.map((suggestion) => {
+                const meta = getSuggestionMeta(suggestion);
                 return (
-                  <div key={suggestion.id} className="py-4 first:pt-0 last:pb-0">
-                    <div className="grid grid-cols-[24px_minmax(0,1fr)] items-start gap-3">
+                  <div key={suggestion.id} className="group relative grid grid-cols-[36px_minmax(0,1fr)_28px] gap-4 bg-white px-5 py-4 transition hover:bg-slate-50">
+                    <div className="pt-0.5">
+                      <span
+                        aria-hidden="true"
+                        className="block h-7 w-7"
+                        style={{
+                          backgroundColor: meta.color,
+                          WebkitMaskImage: `url('${meta.icon}')`,
+                          maskImage: `url('${meta.icon}')`,
+                          WebkitMaskRepeat: "no-repeat",
+                          maskRepeat: "no-repeat",
+                          WebkitMaskPosition: "center",
+                          maskPosition: "center",
+                          WebkitMaskSize: "contain",
+                          maskSize: "contain",
+                        }}
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="truncate text-[13px] italic leading-5 text-slate-400">
+                        {meta.label}
+                      </div>
+                      <div className="mt-0.5 text-[14px] font-bold leading-5 text-slate-700">
+                        {suggestion.title || "Suggestion"}
+                      </div>
+                      <p className="mt-1 text-[11.2px] leading-[1.55] text-slate-700">
+                        {suggestion.question}
+                      </p>
+                    </div>
+                    <div className="flex justify-end">
                       <button
                         type="button"
-                        className="mt-[2px] inline-flex h-6 w-6 shrink-0 items-center justify-center self-start text-slate-500 transition hover:text-slate-900"
+                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center self-start rounded-full text-slate-300 opacity-0 transition hover:bg-slate-100 hover:text-slate-700 group-hover:opacity-100"
                         aria-label={`Dismiss ${suggestion.title}`}
                         title="Dismiss Suggestion"
                         onClick={() => onDismissSuggestion(suggestion.id)}
@@ -1007,16 +1031,6 @@ export function CanvasActionButtons({
                           style={{ WebkitMaskImage: "url('/icons/close.svg')", maskImage: "url('/icons/close.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
                         />
                       </button>
-                      <div className="min-w-0">
-                        <div className="flex w-full rounded-full bg-[#102a43] px-2 py-[2px] text-[0.58rem] font-semibold uppercase tracking-[0.16em] text-white">
-                          Observation
-                        </div>
-                        <p className="mt-1 text-[13px] font-normal leading-5 text-slate-700">{suggestion.rationale}</p>
-                        <div className="mt-2.5 flex w-full rounded-full bg-[#102a43] px-2 py-[2px] text-[0.58rem] font-semibold uppercase tracking-[0.16em] text-white">
-                          Action
-                        </div>
-                        <p className="mt-1 text-[13px] font-normal leading-5 text-slate-900">{suggestion.question}</p>
-                      </div>
                     </div>
                   </div>
                 );
@@ -1773,7 +1787,6 @@ export function CanvasActionButtons({
               />
               <div className="px-2 pb-1 text-[11px] text-slate-500">
                 Select an existing template to overwrite it, or enter a new name to save a fresh template.
-                {isPlatformAdmin ? ` ${saveAsGlobalTemplate ? "This save will update the shared global template library." : "Switch on Global template to publish this for every user."}` : ""}
               </div>
               {templateQuery.trim().length > 0 || isLoadingTemplates || templateResults.length > 0 ? (
                 <div className="mt-1 max-h-56 overflow-auto rounded-none border border-slate-300 bg-white">
@@ -1785,7 +1798,7 @@ export function CanvasActionButtons({
                         key={result.id}
                         type="button"
                         className="block w-full px-3 py-2 text-left text-sm text-slate-800 hover:bg-slate-100"
-                        onClick={() => onSelectTemplate(result.id, result.name, result.isGlobal)}
+                        onClick={() => onSelectTemplate(result.id, result.name, result.visibility)}
                       >
                         <div className="font-semibold text-slate-900">{result.name}</div>
                         <div className="text-xs text-slate-500">
@@ -1804,10 +1817,10 @@ export function CanvasActionButtons({
               <div className="mt-2 flex items-center justify-between gap-2 border-t border-slate-200 pt-2">
                 {templateSaveMessage ? <div className="mr-auto text-xs font-medium text-emerald-600">{templateSaveMessage}</div> : null}
                 <div className="flex flex-1 items-stretch gap-2">
-                  {isPlatformAdmin ? (
+                  {false ? (
                     <label
                       className={`flex min-h-[46px] items-stretch border px-3 py-2 text-left transition-colors ${
-                        saveAsGlobalTemplate
+                        templateVisibility === "global"
                           ? "border-sky-700 bg-[#102a43] text-white"
                           : "border-slate-300 bg-white text-slate-900"
                       }`}
@@ -1815,15 +1828,15 @@ export function CanvasActionButtons({
                     >
                       <div className="flex flex-col justify-center pr-4 leading-tight">
                         <span className="text-[10px] font-semibold uppercase tracking-[0.22em]">Global template</span>
-                        <span className={`mt-0.5 text-[11px] ${saveAsGlobalTemplate ? "text-slate-200" : "text-slate-500"}`}>
-                          {saveAsGlobalTemplate ? "Visible to every user" : "Save only to your library"}
+                        <span className={`mt-0.5 text-[11px] ${templateVisibility === "global" ? "text-slate-200" : "text-slate-500"}`}>
+                          {templateVisibility === "global" ? "Visible to every user" : "Save only to your library"}
                         </span>
                       </div>
                       <div className="flex min-w-[24px] items-center justify-center self-stretch">
                         <input
                           type="checkbox"
-                          checked={saveAsGlobalTemplate}
-                          onChange={() => setSaveAsGlobalTemplate((prev) => !prev)}
+                          checked={templateVisibility === "global"}
+                          onChange={() => setTemplateVisibility(templateVisibility === "global" ? "private" : "global")}
                           className="h-4 w-4 cursor-pointer accent-slate-900"
                           aria-label="Save as global template"
                         />

@@ -58,6 +58,7 @@ type AsideShellProps = {
   leftAsideSlideIn: boolean;
   title: string;
   onClose: () => void;
+  readOnly?: boolean;
   children: ReactNode;
 };
 
@@ -269,9 +270,10 @@ function OutlineWeightField({ value, onChange }: { value: string; onChange: (val
   );
 }
 
-function AsideShell({ isMobile, leftAsideSlideIn, title, onClose, children }: AsideShellProps) {
+function AsideShell({ isMobile, leftAsideSlideIn, title, onClose, readOnly = false, children }: AsideShellProps) {
   return (
     <aside
+      data-read-only={readOnly ? "true" : undefined}
       className={`canvas-left-aside fixed border-r border-[#0b1f33] bg-[#102a43] text-slate-100 shadow-[12px_0_30px_rgba(2,12,27,0.45)] transition-transform duration-300 ${
         isMobile ? "inset-0 z-[98] w-full max-w-full" : "bottom-4 left-[98px] top-[82px] z-[75] w-[calc(100vw-122px)] max-w-[408px] rounded-[28px] border"
       }`}
@@ -345,7 +347,7 @@ export function CategoryPropertiesAside({
   const safeOutlineColor = /^#[0-9a-fA-F]{6}$/.test(processOutlineColorDraft ?? "") ? String(processOutlineColorDraft).toUpperCase() : safeColor;
   const [activePaletteTarget, setActivePaletteTarget] = useState<"background" | "outline" | null>(null);
   return (
-    <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title="Category Properties" onClose={onClose}>
+    <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title="Category Properties" onClose={onClose} readOnly={!!actionDisabledReason}>
       <div className="mt-4 space-y-3">
         <label className="text-sm text-white">Category Label
           <input
@@ -460,7 +462,7 @@ function SimpleLabelAside({
 }: SimpleLabelAsideProps) {
   if (!open) return null;
   return (
-    <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title={title} onClose={onClose}>
+    <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title={title} onClose={onClose} readOnly={!!actionDisabledReason}>
       {topAction ? <div className="mt-3">{topAction}</div> : null}
       <div className="mt-4 space-y-3">
         <label className="text-sm text-white">{fieldLabel}
@@ -614,7 +616,7 @@ export function StickyNoteAside({
   const safeOutlineColor = /^#[0-9a-fA-F]{6}$/.test(stickyOutlineColorDraft) ? stickyOutlineColorDraft.toUpperCase() : "#F59E0B";
   const [activePaletteTarget, setActivePaletteTarget] = useState<"background" | "outline" | null>(null);
   return (
-    <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title="Sticky Note" onClose={onClose}>
+    <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title="Sticky Note" onClose={onClose} readOnly={!!actionDisabledReason}>
       <div className="mt-4 space-y-3">
         <label className="text-sm text-white">Note Text
           <textarea
@@ -711,7 +713,7 @@ export function ImageAssetAside({
 }: ImageAssetAsideProps) {
   if (!open) return null;
   return (
-    <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title="Image Properties" onClose={onClose}>
+    <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title="Image Properties" onClose={onClose} readOnly={!!actionDisabledReason}>
       <div className="mt-4 space-y-3">
         <label className="text-sm text-white">Image Description
           <textarea
@@ -807,7 +809,7 @@ export function TextBoxAside({
   const safeOutlineColor = /^#[0-9a-fA-F]{6}$/.test(textBoxOutlineColorDraft) ? textBoxOutlineColorDraft.toUpperCase() : "#111827";
   const [activePaletteTarget, setActivePaletteTarget] = useState<"background" | "outline" | null>(null);
   return (
-    <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title="Text Box" onClose={onClose}>
+    <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title="Text Box" onClose={onClose} readOnly={!!actionDisabledReason}>
       <div className="mt-4 space-y-3">
         <label className="text-sm text-white">Text
           <textarea
@@ -1022,7 +1024,7 @@ export function TableAside({
   const parsedGridWeight = Number(tableGridLineWeightDraft.trim());
   const gridLineWeightValue = Number.isFinite(parsedGridWeight) ? Math.max(0.5, Math.min(6, Math.round(parsedGridWeight * 2) / 2)) : 0.5;
   return (
-    <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title="Table Properties" onClose={onClose}>
+    <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title="Table Properties" onClose={onClose} readOnly={!!actionDisabledReason}>
       <div className="mt-4 space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <label className="text-sm text-white">Rows (min {tableMinRows})
@@ -1213,7 +1215,7 @@ export function FlowShapeAside({
   const safeOutlineColor = /^#[0-9a-fA-F]{6}$/.test(shapeOutlineColorDraft) ? shapeOutlineColorDraft.toUpperCase() : safeColor.toUpperCase();
   const [activePaletteTarget, setActivePaletteTarget] = useState<"background" | "outline" | null>(null);
   return (
-    <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title={title} onClose={onClose}>
+    <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title={title} onClose={onClose} readOnly={!!actionDisabledReason}>
       <div className="mt-4 space-y-3">
         {supportsText ? (
           <>
@@ -1590,7 +1592,7 @@ export function RelationshipManagerAside({
 }: RelationshipManagerAsideProps) {
   if (!open) return null;
   return (
-    <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title={title} onClose={onClose}>
+    <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title={title} onClose={onClose} readOnly={!!actionDisabledReason}>
       <div className="mt-3">
         {wrapWithReason(
           actionDisabledReason,
@@ -1699,7 +1701,7 @@ export function PersonPropertiesAside({
     "Other",
   ] as const;
   return (
-    <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title="Person Properties" onClose={onClose}>
+    <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title="Person Properties" onClose={onClose} readOnly={!!actionDisabledReason}>
       <div className="mt-4 space-y-3">
         {isOrgChart ? (
           <>
@@ -1995,7 +1997,7 @@ export function BowtiePropertiesAside({
   };
 
   return (
-    <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title={`${title} Properties`} onClose={onClose}>
+    <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title={`${title} Properties`} onClose={onClose} readOnly={!!actionDisabledReason}>
       <div className="mt-4 space-y-3">
         {isRiskRating ? (
           <div className="text-sm text-white">Label
@@ -2682,7 +2684,7 @@ export function GroupingContainerAside({
   if (!open) return null;
   const safeHeaderColor = /^#[0-9a-fA-F]{6}$/.test(groupingHeaderColorDraft) ? groupingHeaderColorDraft.toUpperCase() : "#FFFFFF";
   return (
-    <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title="Grouping Container" onClose={onClose}>
+    <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title="Grouping Container" onClose={onClose} readOnly={!!actionDisabledReason}>
       <div className="mt-4 space-y-3">
         <label className="text-sm text-white">Group Label
           <input
@@ -2809,6 +2811,7 @@ export function DocumentPropertiesAside({
   if (!open) return null;
   return (
     <aside
+      data-read-only={actionDisabledReason ? "true" : undefined}
       className="canvas-left-aside fixed bottom-4 left-[98px] top-[82px] z-[75] w-[calc(100vw-122px)] max-w-[408px] rounded-[28px] border bg-[#102a43] text-slate-100 shadow-[12px_0_30px_rgba(2,12,27,0.45)] transition-transform duration-300"
       style={{ transform: leftAsideSlideIn ? "translateX(0)" : "translateX(-100%)" }}
     >
@@ -2985,6 +2988,7 @@ type MobileDocumentPropertiesModalProps = {
   onSaveNode: () => Promise<void>;
   relatedItems: MobileRelationshipListItem[];
   onDeleteRelation: (relationId: string) => void;
+  actionDisabledReason?: string;
 };
 
 export function MobileDocumentPropertiesModal({
@@ -3013,16 +3017,17 @@ export function MobileDocumentPropertiesModal({
   onSaveNode,
   relatedItems,
   onDeleteRelation,
+  actionDisabledReason,
 }: MobileDocumentPropertiesModalProps) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-[98] overflow-y-auto bg-white text-slate-900">
+    <div className="fixed inset-0 z-[98] overflow-y-auto bg-white text-slate-900" data-read-only={actionDisabledReason ? "true" : undefined}>
       <div className="min-h-full px-5 pb-28 pt-5">
         <div className="flex items-center justify-between border-b border-slate-200 pb-3">
           <h2 className="text-lg font-semibold">Document Properties</h2>
           <button
             type="button"
-            className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-300 bg-white text-slate-900"
+            className="canvas-left-aside__close inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-300 bg-white text-slate-900"
             onClick={onClose}
           >
             <span className="text-xl leading-none">x</span>
@@ -3089,7 +3094,7 @@ export function MobileDocumentPropertiesModal({
           <label className="text-sm">Owner<input className="mt-1 w-full rounded border border-slate-300 px-3 py-2" value={ownerName} onChange={(e) => setOwnerName(e.target.value)} placeholder="Enter owner name" /></label>
         </div>
 
-        <div className="mt-4 flex justify-end"><button className="dashboardButton dashboardButtonPrimary" onClick={() => void onSaveNode()}>Save properties</button></div>
+        <div className="mt-4 flex justify-end"><button className="dashboardButton dashboardButtonPrimary" onClick={() => void onSaveNode()} disabled={!!actionDisabledReason}>Save properties</button></div>
 
         <div className="mt-6 border-t border-slate-200 pt-4">
           <h3 className="font-semibold">Relationships</h3>
