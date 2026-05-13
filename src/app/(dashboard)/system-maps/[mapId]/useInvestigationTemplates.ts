@@ -8,6 +8,7 @@ import {
 import { supabaseBrowser } from "@/lib/supabase/client";
 import type {
   CanvasElementRow,
+  AnchorLinkRow,
   DocumentNodeRow,
   DocumentTypeRow,
   NodeRelationRow,
@@ -39,6 +40,7 @@ type UseInvestigationTemplatesParams = {
   nodes: DocumentNodeRow[];
   elements: CanvasElementRow[];
   relations: NodeRelationRow[];
+  anchorLinks: AnchorLinkRow[];
   outlineItems: OutlineItemRow[];
 };
 
@@ -57,6 +59,7 @@ export function useInvestigationTemplates({
   nodes,
   elements,
   relations,
+  anchorLinks,
   outlineItems,
 }: UseInvestigationTemplatesParams) {
   const [showTemplateMenu, setShowTemplateMenu] = useState(false);
@@ -128,8 +131,8 @@ export function useInvestigationTemplates({
   }, []);
 
   const buildTemplateSnapshot = useCallback(async () => {
-    return buildInvestigationTemplateSnapshot({ types, nodes, elements, relations, outlineItems });
-  }, [elements, nodes, outlineItems, relations, types]);
+    return buildInvestigationTemplateSnapshot({ types, nodes, elements, relations, anchorLinks, outlineItems });
+  }, [anchorLinks, elements, nodes, outlineItems, relations, types]);
 
   const handleSaveTemplate = useCallback(async () => {
     if (!canSaveTemplate) return;

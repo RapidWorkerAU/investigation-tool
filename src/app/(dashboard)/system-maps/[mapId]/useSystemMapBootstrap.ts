@@ -10,6 +10,7 @@ import {
   isAbortLikeError,
   normalizeTypeRanks,
   type CanvasElementRow,
+  type AnchorLinkRow,
   type DocumentNodeRow,
   type DocumentTypeRow,
   type NodeRelationRow,
@@ -48,6 +49,7 @@ type UseSystemMapBootstrapParams = {
   setNodes: Dispatch<SetStateAction<DocumentNodeRow[]>>;
   setElements: Dispatch<SetStateAction<CanvasElementRow[]>>;
   setRelations: Dispatch<SetStateAction<NodeRelationRow[]>>;
+  setAnchorLinks: Dispatch<SetStateAction<AnchorLinkRow[]>>;
   setImageUrlsByElementId: Dispatch<SetStateAction<Record<string, string>>>;
   setHasStoredViewport: Dispatch<SetStateAction<boolean>>;
   setPendingViewport: Dispatch<SetStateAction<ViewportState | null>>;
@@ -79,6 +81,7 @@ export function useSystemMapBootstrap({
   setNodes,
   setElements,
   setRelations,
+  setAnchorLinks,
   setImageUrlsByElementId,
   setHasStoredViewport,
   setPendingViewport,
@@ -129,6 +132,7 @@ export function useSystemMapBootstrap({
           setNodes(initialSnapshot.nodes);
           setElements(initialSnapshot.elements);
           setRelations(initialSnapshot.relations);
+          setAnchorLinks(initialSnapshot.anchorLinks ?? []);
           setImageUrlsByElementId(initialSnapshot.imageUrlsByElementId ?? {});
           const nextSaved: Record<string, { x: number; y: number }> = {};
           initialSnapshot.nodes.forEach((node) => {
@@ -174,7 +178,7 @@ export function useSystemMapBootstrap({
         }
 
         setLoadingStage(50, "Loading map shell, nodes, and canvas data...");
-        const [memberRes, mapRes, typeRes, nodeRes, elementRes, relRes, viewRes] = await Promise.all([
+        const [memberRes, mapRes, typeRes, nodeRes, elementRes, relRes, anchorLinkRes, viewRes] = await Promise.all([
           supabaseBrowser.schema("ms").from("map_members").select("role").eq("map_id", mapId).eq("user_id", user.id).maybeSingle(),
           supabaseBrowser.schema("ms").from("system_maps").select("id,title,description,owner_id,updated_by_user_id,map_code,map_category,updated_at,created_at").eq("id", mapId).maybeSingle(),
           supabaseBrowser.schema("ms").from("document_types").select("id,map_id,name,level_rank,band_y_min,band_y_max,is_active").eq("is_active", true).or(`map_id.eq.${mapId},map_id.is.null`).order("level_rank", { ascending: true }),
@@ -185,6 +189,12 @@ export function useSystemMapBootstrap({
             .from("node_relations")
             .select("*")
             .eq("map_id", mapId),
+          supabaseBrowser
+            .schema("ms")
+            .from("canvas_anchor_links")
+            .select("*")
+            .eq("map_id", mapId)
+            .order("sort_order", { ascending: true }),
           supabaseBrowser.schema("ms").from("map_view_state").select("pan_x,pan_y,zoom").eq("map_id", mapId).eq("user_id", user.id).maybeSingle(),
         ]);
         if (cancelled) return;
@@ -195,6 +205,10 @@ export function useSystemMapBootstrap({
         }
         if (nodeRes.error) {
           setError("Unable to load map documents.");
+          return;
+        }
+        if (anchorLinkRes.error) {
+          setError(anchorLinkRes.error.message || "Unable to load anchor navigation links.");
           return;
         }
 
@@ -293,6 +307,7 @@ export function useSystemMapBootstrap({
         setNodes(loadedNodes);
         setElements((elementRes.data ?? []) as unknown as CanvasElementRow[]);
         setRelations((relRes.data ?? []) as unknown as NodeRelationRow[]);
+        setAnchorLinks((anchorLinkRes.data ?? []) as unknown as AnchorLinkRow[]);
         const nextSaved: Record<string, { x: number; y: number }> = {};
         loadedNodes.forEach((n) => (nextSaved[n.id] = { x: n.pos_x, y: n.pos_y }));
         savedPos.current = nextSaved;
@@ -341,6 +356,7 @@ export function useSystemMapBootstrap({
     setAccessState,
     setElements,
     setError,
+    setAnchorLinks,
     setHasCurrentPassAssignment,
     setHasStoredViewport,
     setImageUrlsByElementId,

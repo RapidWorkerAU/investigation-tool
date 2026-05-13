@@ -1,6 +1,7 @@
 import type { InvestigationTemplateSnapshot } from "@/lib/investigationTemplates";
 import {
   normalizeTypeRanks,
+  type AnchorLinkRow,
   type CanvasElementRow,
   type DocumentNodeRow,
   type DocumentTypeRow,
@@ -22,6 +23,7 @@ type BuildSnapshotParams = {
   nodes: DocumentNodeRow[];
   elements: CanvasElementRow[];
   relations: NodeRelationRow[];
+  anchorLinks: AnchorLinkRow[];
   outlineItems: OutlineItemRow[];
   includeElementCreator?: boolean;
 };
@@ -31,6 +33,7 @@ export function buildInvestigationTemplateSnapshot({
   nodes,
   elements,
   relations,
+  anchorLinks,
   outlineItems,
   includeElementCreator = false,
 }: BuildSnapshotParams): InvestigationTemplateSnapshot {
@@ -92,6 +95,13 @@ export function buildInvestigationTemplateSnapshot({
       relationship_category: item.relationship_category,
       relationship_custom_type: item.relationship_custom_type,
     })),
+    anchorLinks: anchorLinks.map((item) => ({
+      id: item.id,
+      anchor_id: item.anchor_id,
+      linked_anchor_id: item.linked_anchor_id,
+      sort_order: item.sort_order,
+      created_by_user_id: item.created_by_user_id,
+    })),
     outlineItems: outlineItems.map((item) => ({
       id: item.id,
       node_id: item.node_id,
@@ -142,6 +152,7 @@ export function resolveMapSessionHistorySnapshotState(snapshot: MapSessionHistor
     nodes: snapshot.nodes as DocumentNodeRow[],
     elements: snapshot.elements as CanvasElementRow[],
     relations: snapshot.relations as NodeRelationRow[],
+    anchorLinks: ((snapshot as { anchorLinks?: AnchorLinkRow[] }).anchorLinks ?? []) as AnchorLinkRow[],
     outlineItems: snapshot.outlineItems as OutlineItemRow[],
   };
 }

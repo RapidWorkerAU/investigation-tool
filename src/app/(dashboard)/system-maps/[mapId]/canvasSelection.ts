@@ -13,6 +13,7 @@ export type CanvasSelectionTarget =
   | "system"
   | "processComponent"
   | "person"
+  | "anchor"
   | "grouping"
   | "sticky"
   | "image"
@@ -27,6 +28,7 @@ export type CanvasSelectionSetters = {
   setSelectedSystemId: Setter<string | null>;
   setSelectedProcessComponentId: Setter<string | null>;
   setSelectedPersonId: Setter<string | null>;
+  setSelectedAnchorId: Setter<string | null>;
   setSelectedGroupingId: Setter<string | null>;
   setSelectedStickyId: Setter<string | null>;
   setSelectedImageId: Setter<string | null>;
@@ -52,6 +54,7 @@ export const clearCanvasSelections = (
   if (!isExcepted("system", except)) setters.setSelectedSystemId(null);
   if (!isExcepted("processComponent", except)) setters.setSelectedProcessComponentId(null);
   if (!isExcepted("person", except)) setters.setSelectedPersonId(null);
+  if (!isExcepted("anchor", except)) setters.setSelectedAnchorId(null);
   if (!isExcepted("grouping", except)) setters.setSelectedGroupingId(null);
   if (!isExcepted("sticky", except)) setters.setSelectedStickyId(null);
   if (!isExcepted("image", except)) setters.setSelectedImageId(null);
@@ -82,6 +85,9 @@ export const setCanvasSelection = (
       break;
     case "person":
       setters.setSelectedPersonId(id);
+      break;
+    case "anchor":
+      setters.setSelectedAnchorId(id);
       break;
     case "grouping":
       setters.setSelectedGroupingId(id);
@@ -143,7 +149,8 @@ export const getCanvasSelectionTargetForEntityKind = (
   if (entityKind === "category") return "category";
   if (entityKind === "system_circle") return "system";
   if (entityKind === "process_component") return "processComponent";
-  if (entityKind === "person") return "person";
+  if (entityKind === "person" || entityKind === "equipment" || entityKind === "environment") return "person";
+  if (entityKind === "anchor") return "anchor";
   if (entityKind === "grouping_container") return "grouping";
   if (entityKind === "sticky_note") return "sticky";
   if (entityKind === "image_asset") return "image";

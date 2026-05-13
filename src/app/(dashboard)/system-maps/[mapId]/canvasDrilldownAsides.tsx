@@ -269,7 +269,7 @@ export function AddRelationshipAside({
                 )}
               </div> : null}
               {allowSystemTargets ? <div className="relative">
-                <div className="mb-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Components (Systems, Processes, People)</div>
+                <div className="mb-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Components (Systems, Processes, People, Equipment, Environment)</div>
                 <div className="relative flex">
                   <input
                     className="w-full rounded-l border border-slate-300 bg-white px-3 py-2"

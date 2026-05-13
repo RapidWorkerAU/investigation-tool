@@ -17,9 +17,24 @@ import {
 } from "@/lib/organisationBranding";
 import { accessBlocksInvestigationEntry, accessCanUseReportGeneration, accessRequiresSelection, fetchAccessState } from "@/lib/access";
 import {
+  cleanEvidenceDescription,
+  getConfigValue,
+  getEvidenceFileType,
+  getEvidenceMediaPath,
+  getEvidenceMediaUrl,
+  isPdfEvidence,
+} from "@/lib/investigation-report/evidence";
+import { formatReportDate, formatReportTime } from "@/lib/investigation-report/formatters";
+import {
   buildDraftReportText,
   normalizeInvestigationReportPayload,
 } from "@/lib/investigation-report/helpers";
+import {
+  isReportSectionVisibilityId,
+  isReportSectionVisible,
+  type ReportSectionVisibilityId,
+} from "@/lib/investigation-report/sections";
+import { normalizeHeaderKey, splitBracketedValue, toTitleCaseLabel } from "@/lib/investigation-report/text";
 import type { InvestigationSavedReportPayload, InvestigationReportStatus } from "@/lib/investigation-report/types";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
 import { parsePersonLabels } from "@/app/(dashboard)/system-maps/[mapId]/canvasShared";
@@ -217,47 +232,20 @@ const sectionDefinitions: SectionDefinition[] = [
   },
 ];
 
-type PdfVisibleSectionId = keyof NonNullable<InvestigationSavedReportPayload["report"]["section_visibility"]>;
-type EditablePdfVisibleSectionId = Extract<SectionId, PdfVisibleSectionId>;
-
-const hideableSectionIds: PdfVisibleSectionId[] = [
-  "executive_summary",
-  "long_description",
-  "response_and_recovery",
-  "task_and_conditions",
-  "incident_outcomes",
-  "people_involved",
-  "incident_timeline",
-  "factors_and_system_factors",
-  "predisposing_factors",
-  "controls_and_barriers",
-  "incident_findings",
-  "recommendations",
-  "preliminary_facts",
-  "evidence",
-  "signatures",
-];
-
-const sectionVisibilityAliases: Partial<Record<SectionId, PdfVisibleSectionId>> = {
+const sectionVisibilityAliases: Partial<Record<SectionId, ReportSectionVisibilityId>> = {
   incident_factors: "factors_and_system_factors",
   incident_system_factors: "factors_and_system_factors",
 };
 
-function isPdfVisibleSectionId(sectionId: SectionId): sectionId is EditablePdfVisibleSectionId {
-  return hideableSectionIds.includes((sectionVisibilityAliases[sectionId] ?? sectionId) as PdfVisibleSectionId);
-}
-
-function getPdfVisibilitySectionId(sectionId: SectionId): PdfVisibleSectionId | null {
+function getPdfVisibilitySectionId(sectionId: SectionId): ReportSectionVisibilityId | null {
   const resolvedSectionId = sectionVisibilityAliases[sectionId] ?? sectionId;
-  return hideableSectionIds.includes(resolvedSectionId as PdfVisibleSectionId)
-    ? (resolvedSectionId as PdfVisibleSectionId)
-    : null;
+  return isReportSectionVisibilityId(resolvedSectionId) ? resolvedSectionId : null;
 }
 
 function isSectionVisibleInPdf(report: InvestigationSavedReportPayload, sectionId: SectionId) {
   const visibleSectionId = getPdfVisibilitySectionId(sectionId);
   if (!visibleSectionId) return true;
-  return report.report.section_visibility?.[visibleSectionId] !== false;
+  return isReportSectionVisible(report.report.section_visibility, visibleSectionId);
 }
 
 function getSectionValue(report: InvestigationSavedReportPayload, sectionId: SectionId) {
@@ -366,102 +354,6 @@ function setSectionValue(
   }
 }
 
-function getConfigValue(config: Record<string, unknown> | null | undefined, ...keys: string[]) {
-  if (!config) return "";
-  for (const key of keys) {
-    const value = config[key];
-    if (typeof value === "string" && value.trim()) return value.trim();
-  }
-  return "";
-}
-
-function getEvidenceMediaPath(config: Record<string, unknown> | null | undefined) {
-  return getConfigValue(config, "media_storage_path", "mediaStoragePath", "storage_path", "storagePath");
-}
-
-function getEvidenceMediaUrl(config: Record<string, unknown> | null | undefined) {
-  return getConfigValue(config, "preview_url", "previewUrl", "file_url", "fileUrl", "public_url", "publicUrl", "url");
-}
-
-function getEvidenceMediaMime(config: Record<string, unknown> | null | undefined) {
-  return getConfigValue(config, "media_mime", "mediaMime", "mime_type", "mimeType");
-}
-
-function getEvidenceMediaName(config: Record<string, unknown> | null | undefined) {
-  return getConfigValue(config, "media_name", "mediaName", "file_name", "fileName");
-}
-
-function isPdfEvidence(config: Record<string, unknown> | null | undefined) {
-  const mime = getEvidenceMediaMime(config).toLowerCase();
-  const name = getEvidenceMediaName(config).toLowerCase();
-  const path = getEvidenceMediaPath(config).toLowerCase();
-  return mime.includes("pdf") || name.endsWith(".pdf") || path.endsWith(".pdf");
-}
-
-function getEvidenceFileType(config: Record<string, unknown> | null | undefined) {
-  const mime = getEvidenceMediaMime(config).toLowerCase();
-  if (mime.includes("/")) {
-    return mime.split("/").pop()?.toUpperCase() || "FILE";
-  }
-  const name = getEvidenceMediaName(config).toLowerCase();
-  const path = getEvidenceMediaPath(config).toLowerCase();
-  const source = name || path;
-  const match = source.match(/\.([a-z0-9]+)$/i);
-  return match?.[1]?.toUpperCase() || "FILE";
-}
-
-function cleanEvidenceDescription(value: string | null | undefined) {
-  const trimmed = (value ?? "").trim();
-  if (!trimmed) return "";
-
-  const sourceStripped = trimmed
-    .replace(/source:\s*.*?(?=(media:|description:|storage path:|$))/i, "")
-    .replace(/media:\s*.*?(?=(description:|storage path:|$))/i, "")
-    .replace(/storage path:\s*.*$/i, "")
-    .trim();
-
-  const descriptionMatch = sourceStripped.match(/description:\s*(.*)$/i);
-  if (descriptionMatch?.[1]?.trim()) {
-    return descriptionMatch[1].trim();
-  }
-
-  return sourceStripped
-    .replace(/\([^)]*\/[^)]*\)/g, "")
-    .replace(/\s{2,}/g, " ")
-    .trim();
-}
-
-function formatReportDate(value: string | null | undefined) {
-  if (!value) return "-";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString("en-AU", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
-}
-
-function formatReportTime(value: string | null | undefined) {
-  if (!value) return "-";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleTimeString("en-AU", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-}
-
-function toTitleCaseLabel(value: string) {
-  return value
-    .replaceAll("_", " ")
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(" ");
-}
-
 function normalizeHexColor(value: string, fallback: string) {
   const trimmed = value.trim();
   if (/^#[0-9a-fA-F]{6}$/.test(trimmed)) return trimmed.toUpperCase();
@@ -568,17 +460,6 @@ function autosizeReportTextarea(textarea: HTMLTextAreaElement) {
   textarea.style.height = "auto";
   textarea.style.height = `${Math.max(minHeight, Math.min(textarea.scrollHeight, maxHeight))}px`;
   textarea.style.overflowY = textarea.scrollHeight > maxHeight ? "auto" : "hidden";
-}
-
-function normalizeHeaderKey(value: string) {
-  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ");
-}
-
-function splitBracketedValue(value: string) {
-  const trimmed = value.trim();
-  const match = trimmed.match(/^(.*?)\s*\((.*?)\)\s*$/);
-  if (!match) return { main: trimmed, bracket: "" };
-  return { main: match[1].trim(), bracket: toTitleCaseLabel(match[2].trim()) };
 }
 
 function isScopeManagedSignoffField(field: string) {

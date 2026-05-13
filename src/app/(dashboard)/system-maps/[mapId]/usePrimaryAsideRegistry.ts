@@ -20,6 +20,7 @@ const primaryAsideKeyPrefixByKind: Record<PrimaryAsideKind, string> = {
   system: "system",
   processComponent: "process",
   person: "person",
+  anchor: "anchor",
   grouping: "grouping",
   sticky: "sticky",
   image: "image",
@@ -70,6 +71,9 @@ export const usePrimaryAsideRegistry = ({
             break;
           case "person":
             selectionSetters.setSelectedPersonId(null);
+            break;
+          case "anchor":
+            selectionSetters.setSelectedAnchorId(null);
             break;
           case "grouping":
             selectionSetters.setSelectedGroupingId(null);

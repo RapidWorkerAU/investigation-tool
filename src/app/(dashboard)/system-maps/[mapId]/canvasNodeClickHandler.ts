@@ -16,7 +16,7 @@ import {
 type Setter<T> = Dispatch<SetStateAction<T>>;
 
 type HandleCanvasNodeClickParams = {
-  event: React.MouseEvent;
+  event: React.MouseEvent | React.PointerEvent;
   node: Node<FlowData>;
   mapRole: "read" | "partial_write" | "full_write" | null;
   elements: CanvasElementRow[];
@@ -55,7 +55,11 @@ export const handleCanvasNodeClick = ({
   selectionSetters,
   setMobileNodeMenuId,
 }: HandleCanvasNodeClickParams) => {
-  const markSelected = () => setSelectedFlowIds(new Set<string>([node.id]));
+  const markSelected = () =>
+    setSelectedFlowIds((prev) => {
+      if (prev.size === 1 && prev.has(node.id)) return prev;
+      return new Set<string>([node.id]);
+    });
   const selectNodeTarget = (target: CanvasSelectionTarget, id = parseProcessFlowId(node.id)) => {
     markSelected();
     setCanvasSelection(selectionSetters, target, id);
@@ -113,7 +117,7 @@ export const handleCanvasNodeClick = ({
     return;
   }
 
-  if (node.data.entityKind === "person") {
+  if (node.data.entityKind === "person" || node.data.entityKind === "equipment" || node.data.entityKind === "environment") {
     if (isMobile) {
       if (isMobileDoubleTap(node.id, lastMobileTapRef)) {
         selectNodeTarget("person");
@@ -121,6 +125,17 @@ export const handleCanvasNodeClick = ({
       return;
     }
     selectNodeTarget("person");
+    return;
+  }
+
+  if (node.data.entityKind === "anchor") {
+    if (isMobile) {
+      if (isMobileDoubleTap(node.id, lastMobileTapRef)) {
+        selectNodeTarget("anchor");
+      }
+      return;
+    }
+    selectNodeTarget("anchor");
     return;
   }
 

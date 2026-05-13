@@ -429,7 +429,7 @@ export async function createLeadAccessCodeForEmail({
 
 export async function fetchLeadMapSnapshot(mapId: string): Promise<SystemMapCanvasSnapshot | null> {
   const supabase = createServiceRoleClient();
-  const [mapRes, typeRes, nodeRes, elementRes, relationRes] = await Promise.all([
+  const [mapRes, typeRes, nodeRes, elementRes, relationRes, anchorLinkRes] = await Promise.all([
     supabase
       .schema("ms")
       .from("system_maps")
@@ -460,6 +460,12 @@ export async function fetchLeadMapSnapshot(mapId: string): Promise<SystemMapCanv
       .from("node_relations")
       .select("*")
       .eq("map_id", mapId),
+    supabase
+      .schema("ms")
+      .from("canvas_anchor_links")
+      .select("*")
+      .eq("map_id", mapId)
+      .order("sort_order", { ascending: true }),
   ]);
 
   if (mapRes.error) throw new Error(mapRes.error.message || "Unable to load map.");
@@ -468,6 +474,7 @@ export async function fetchLeadMapSnapshot(mapId: string): Promise<SystemMapCanv
   if (nodeRes.error) throw new Error(nodeRes.error.message || "Unable to load map documents.");
   if (elementRes.error) throw new Error(elementRes.error.message || "Unable to load map elements.");
   if (relationRes.error) throw new Error(relationRes.error.message || "Unable to load map relationships.");
+  if (anchorLinkRes.error) throw new Error(anchorLinkRes.error.message || "Unable to load map anchor links.");
 
   const elements = (elementRes.data ?? []) as CanvasElementRow[];
   const imageUrlsByElementId = await createLeadMapSignedUrls(elements);
@@ -478,6 +485,7 @@ export async function fetchLeadMapSnapshot(mapId: string): Promise<SystemMapCanv
     nodes: (nodeRes.data ?? []) as DocumentNodeRow[],
     elements,
     relations: (relationRes.data ?? []) as NodeRelationRow[],
+    anchorLinks: (anchorLinkRes.data ?? []),
     imageUrlsByElementId,
   };
 }

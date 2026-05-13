@@ -5,6 +5,9 @@ export type NodePaletteKind =
   | "system"
   | "process"
   | "person"
+  | "equipment"
+  | "environment"
+  | "anchor"
   | "category"
   | "grouping_container"
   | "sticky_note"
@@ -55,7 +58,21 @@ export const mapCategoryConfigs: Record<MapCategoryId, MapCategoryConfig> = {
     id: "document_map",
     label: "Document Map",
     // Current behavior baseline; future categories can narrow this safely.
-    allowedNodeKinds: ["document", "system", "process", "person", "category", "grouping_container", "sticky_note", "image_asset", "text_box", "table"],
+    allowedNodeKinds: [
+      "document",
+      "system",
+      "process",
+      "person",
+      "equipment",
+      "environment",
+      "anchor",
+      "category",
+      "grouping_container",
+      "sticky_note",
+      "image_asset",
+      "text_box",
+      "table",
+    ],
   },
   bow_tie: {
     id: "bow_tie",
@@ -63,6 +80,7 @@ export const mapCategoryConfigs: Record<MapCategoryId, MapCategoryConfig> = {
     allowedNodeKinds: [
       "category",
       "grouping_container",
+      "anchor",
       "person",
       "sticky_note",
       "image_asset",
@@ -87,6 +105,9 @@ export const mapCategoryConfigs: Record<MapCategoryId, MapCategoryConfig> = {
       "category",
       "grouping_container",
       "person",
+      "equipment",
+      "environment",
+      "anchor",
       "sticky_note",
       "image_asset",
       "text_box",
@@ -112,7 +133,7 @@ export const mapCategoryConfigs: Record<MapCategoryId, MapCategoryConfig> = {
   org_chart: {
     id: "org_chart",
     label: "Org Chart",
-    allowedNodeKinds: ["person", "category", "grouping_container", "image_asset", "text_box"],
+    allowedNodeKinds: ["person", "anchor", "category", "grouping_container", "image_asset", "text_box"],
   },
   process_flow: {
     id: "process_flow",
@@ -126,6 +147,7 @@ export const mapCategoryConfigs: Record<MapCategoryId, MapCategoryConfig> = {
       "sticky_note",
       "process",
       "system",
+      "anchor",
       "table",
       "shape_rectangle",
       "shape_circle",

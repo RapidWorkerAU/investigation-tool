@@ -1,3 +1,5 @@
+import type { ReportSectionVisibilityId } from "@/lib/investigation-report/sections";
+
 export type ReportRowItem = string[];
 
 export type ReadinessCheck = {
@@ -28,24 +30,7 @@ export type InvestigationReportPayload = {
       section_heading_color?: string;
       table_heading_color?: string;
     };
-    section_visibility?: Partial<Record<
-      | "executive_summary"
-      | "long_description"
-      | "response_and_recovery"
-      | "task_and_conditions"
-      | "incident_outcomes"
-      | "people_involved"
-      | "incident_timeline"
-      | "factors_and_system_factors"
-      | "predisposing_factors"
-      | "controls_and_barriers"
-      | "incident_findings"
-      | "recommendations"
-      | "preliminary_facts"
-      | "evidence"
-      | "signatures",
-      boolean
-    >>;
+    section_visibility?: Partial<Record<ReportSectionVisibilityId, boolean>>;
     front_page: {
       facts_confirmed_heading: string;
       facts_uncertain_heading: string;

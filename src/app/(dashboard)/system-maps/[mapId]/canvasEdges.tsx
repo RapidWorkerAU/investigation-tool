@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import {
   BaseEdge,
   EdgeLabelRenderer,
@@ -9,7 +10,13 @@ import {
 } from "@xyflow/react";
 import { pointInAnyRect, type Rect } from "./canvasShared";
 
-function SmartBezierEdge(props: EdgeProps<Edge<{ displayLabel?: string; obstacleRects?: Rect[] }>>) {
+type SmartBezierEdgeData = {
+  displayLabel?: string;
+  obstacleRects?: Rect[];
+  skipObstacleLabelPlacement?: boolean;
+};
+
+function SmartBezierEdge(props: EdgeProps<Edge<SmartBezierEdgeData>>) {
   const {
     id,
     sourceX,
@@ -40,7 +47,7 @@ function SmartBezierEdge(props: EdgeProps<Edge<{ displayLabel?: string; obstacle
   const obstacles = data?.obstacleRects ?? [];
   let finalLabelX = labelX;
   let finalLabelY = labelY;
-  if (obstacles.length && pointInAnyRect(finalLabelX, finalLabelY, obstacles)) {
+  if (!data?.skipObstacleLabelPlacement && obstacles.length && pointInAnyRect(finalLabelX, finalLabelY, obstacles)) {
     const dx = targetX - sourceX;
     const dy = targetY - sourceY;
     const len = Math.hypot(dx, dy) || 1;
@@ -77,6 +84,5 @@ function SmartBezierEdge(props: EdgeProps<Edge<{ displayLabel?: string; obstacle
 }
 
 export const flowEdgeTypes = {
-  smartBezier: SmartBezierEdge,
+  smartBezier: memo(SmartBezierEdge),
 } as const;
-

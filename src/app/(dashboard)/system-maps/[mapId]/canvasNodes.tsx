@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Handle,
   type Node,
@@ -10,6 +10,10 @@ import {
   Position,
 } from "@xyflow/react";
 import {
+  anchorNodeHeight,
+  anchorNodeMinHeight,
+  anchorNodeMinWidth,
+  anchorNodeWidth,
   bowtieControlHeight,
   bowtieDefaultWidth,
   defaultCategoryColor,
@@ -20,6 +24,8 @@ import {
   incidentCardHeight,
   incidentCardWidth,
   minorGridSize,
+  parseEquipmentLabels,
+  parseEnvironmentLabels,
   parsePersonLabels,
   personIconSize,
   processComponentBodyHeight,
@@ -172,7 +178,7 @@ function DocumentTileNode({ data }: NodeProps<Node<FlowData>>) {
       </div>
       <div className="flex min-h-0 flex-1 flex-col px-2 pt-1 pb-2">
         <div className={`overflow-hidden text-center font-semibold leading-tight text-slate-900 ${data.isLandscape ? "text-[9px]" : "text-[10px]"}`}>
-          {data.title || "Untitled Document"}
+          {data.title ?? "Untitled Document"}
         </div>
         {data.documentNumber ? (
           <div className={`mt-0.5 overflow-hidden text-center font-normal leading-tight text-slate-700 ${data.isLandscape ? "text-[8px]" : "text-[9px]"}`}>
@@ -243,7 +249,7 @@ function ProcessHeadingNode({ data, selected }: NodeProps<Node<FlowData>>) {
       ) : null}
       <div className="text-center text-[9px] font-semibold uppercase tracking-[0.18em]">Category</div>
       <div className="flex flex-1 items-center justify-center overflow-hidden text-center font-semibold leading-tight" style={{ fontSize: `${fontSize}px` }}>
-        <span className="line-clamp-3 break-words whitespace-normal">{data.title || "New Category"}</span>
+        <span className="line-clamp-3 break-words whitespace-normal">{data.title ?? "New Category"}</span>
       </div>
     </div>
   );
@@ -264,7 +270,7 @@ function SystemCircleNode({ data }: NodeProps<Node<FlowData>>) {
         className="flex w-full items-center justify-center rounded-full bg-[#1e3a8a] px-2 text-center text-[11px] font-semibold text-white shadow-[0_8px_20px_rgba(30,58,138,0.35)]"
         style={{ height: systemCircleDiameter }}
       >
-        <span className="line-clamp-3">{data.title || "System Name"}</span>
+        <span className="line-clamp-3">{data.title ?? "System Name"}</span>
       </div>
       <div
         className="flex w-full items-center justify-center text-center text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-700"
@@ -295,7 +301,7 @@ function ProcessComponentNode({ data }: NodeProps<Node<FlowData>>) {
           />
         </svg>
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-2 text-center text-[11px] font-semibold text-white">
-          {data.title || "Process"}
+          {data.title ?? "Process"}
         </div>
       </div>
       <div
@@ -308,8 +314,163 @@ function ProcessComponentNode({ data }: NodeProps<Node<FlowData>>) {
   );
 }
 
+function EditableAnchorIcon({ sequenceNumber, groupColor }: { sequenceNumber: number; groupColor: string }) {
+  const numberText = String(sequenceNumber);
+  const numberFontSize = numberText.length >= 3 ? 44 : numberText.length === 2 ? 56 : 64;
+  const numberTextColor = getContrastTextColor(groupColor, "#ffffff");
+
+  return (
+    <svg viewBox="0 0 375 191" className="h-full w-full" aria-hidden="true">
+      <rect
+        x="8"
+        y="8"
+        width="359"
+        height="175"
+        rx="87.5"
+        fill="#ffffff"
+        stroke="#000000"
+        strokeWidth="12"
+      />
+      <circle cx="98" cy="95.5" r="76" fill="#000000" />
+      <g fill="none" stroke="#ffffff" strokeLinecap="round" strokeLinejoin="round" strokeWidth="8">
+        <circle cx="98" cy="55" r="12" />
+        <path d="M98 69v55" />
+        <path d="M76 82h44" />
+        <path d="M62 111c6 17 18 28 36 35 18-7 30-18 36-35" />
+        <path d="M54 118l8-22 18 14" />
+        <path d="M142 118l-8-22-18 14" />
+      </g>
+      <circle cx="276" cy="95.5" r="76" fill={groupColor} />
+      <text
+        x="276"
+        y="116"
+        textAnchor="middle"
+        fontFamily="Arial, Helvetica, sans-serif"
+        fontSize={numberFontSize}
+        fontWeight="800"
+        fill={numberTextColor}
+      >
+        {numberText}
+      </text>
+    </svg>
+  );
+}
+
+function AnchorNode({ data, selected }: NodeProps<Node<FlowData>>) {
+  const nodeRef = useRef<HTMLDivElement | null>(null);
+  const [nodeSize, setNodeSize] = useState({ width: anchorNodeWidth, height: anchorNodeHeight });
+  const sequenceNumber = Number.isFinite(Number(data.anchorSequenceNumber))
+    ? Math.max(1, Math.round(Number(data.anchorSequenceNumber)))
+    : 1;
+  const anchorId = data.anchorId;
+  const groupColor = /^#[0-9a-fA-F]{6}$/.test(data.anchorGroupColor ?? "")
+    ? String(data.anchorGroupColor).toUpperCase()
+    : "#0F766E";
+  const handleNavigate = (direction: "previous" | "next") => (event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!anchorId) return;
+    data.onNavigateAnchor?.(anchorId, direction);
+  };
+  useEffect(() => {
+    const element = nodeRef.current;
+    if (!element) return;
+    const updateSize = (nextWidth = element.offsetWidth, nextHeight = element.offsetHeight) => {
+      setNodeSize((prev) => {
+        const width = Math.max(anchorNodeMinWidth, nextWidth || anchorNodeWidth);
+        const height = Math.max(anchorNodeMinHeight, nextHeight || anchorNodeHeight);
+        if (Math.abs(prev.width - width) < 0.5 && Math.abs(prev.height - height) < 0.5) return prev;
+        return { width, height };
+      });
+    };
+    updateSize();
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      updateSize(entry?.contentRect.width, entry?.contentRect.height);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  const groupScale = Math.min(nodeSize.width / anchorNodeWidth, nodeSize.height / anchorNodeHeight);
+
+  return (
+    <div ref={nodeRef} className="relative h-full w-full overflow-visible">
+      <HiddenEdgeHandles />
+      {selected && data.canResize !== false ? (
+        <NodeResizeControl
+          position="bottom-right"
+          minWidth={anchorNodeMinWidth}
+          minHeight={anchorNodeMinHeight}
+          keepAspectRatio
+          style={{
+            width: 10,
+            height: 10,
+            borderRadius: 0,
+            border: "1px solid #334155",
+            background: "#ffffff",
+            cursor: "nwse-resize",
+            zIndex: 180,
+          }}
+        />
+      ) : null}
+      <div
+        className="absolute left-1/2 top-1/2 flex origin-center flex-col items-center"
+        style={{
+          width: anchorNodeWidth,
+          height: anchorNodeHeight,
+          transform: `translate(-50%, -50%) scale(${groupScale})`,
+        }}
+      >
+        <div className="h-[60px] w-full shrink-0 drop-shadow-[0_5px_10px_rgba(15,23,42,0.18)]">
+          <EditableAnchorIcon sequenceNumber={sequenceNumber} groupColor={groupColor} />
+        </div>
+        <div className="mt-0.5 h-[24px] w-full px-1 text-center text-[11px] font-semibold leading-tight text-slate-900">
+          <span className="line-clamp-2 break-words">{data.title || "Anchor"}</span>
+        </div>
+        <div className="mt-[1px] h-[10px] w-full truncate px-1 text-center text-[8px] font-medium leading-tight text-slate-500">
+          {data.creatorName || "Unknown user"}
+        </div>
+        <div
+          className="nodrag nopan mt-1 flex h-6 w-full items-center justify-between"
+          onPointerDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+          onMouseDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+        >
+          <button
+            type="button"
+            className="flex h-6 min-w-[60px] items-center justify-center rounded-full border border-slate-300 bg-white px-2.5 text-[9px] font-bold leading-none text-slate-700 shadow-[0_2px_8px_rgba(15,23,42,0.2)] hover:bg-slate-50"
+            title="Previous anchor"
+            aria-label="Previous anchor"
+            onClick={handleNavigate("previous")}
+          >
+            Previous
+          </button>
+          <button
+            type="button"
+            className="flex h-6 min-w-[60px] items-center justify-center rounded-full border border-slate-300 bg-white px-2.5 text-[9px] font-bold leading-none text-slate-700 shadow-[0_2px_8px_rgba(15,23,42,0.2)] hover:bg-slate-50"
+            title="Next anchor"
+            aria-label="Next anchor"
+            onClick={handleNavigate("next")}
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function GroupingContainerNode({ data, selected }: NodeProps<Node<FlowData>>) {
-  const groupingBorderThickness = 10;
+  const outlineWidth = Math.max(1, Math.min(12, Math.round(data.groupingOutlineWidth ?? 1)));
+  const headerFontSize = Math.max(10, Math.min(48, Math.round(data.groupingHeaderFontSize ?? 11)));
+  const groupingBorderThickness = Math.max(10, outlineWidth);
+  const headerVerticalPadding = Math.max(2, Math.round(headerFontSize * 0.22));
+  const headerHorizontalPadding = Math.max(12, Math.round(headerFontSize * 1.05));
   const headerBg = data.bannerBg || "#FFFFFF";
   const headerText = data.bannerText || "#111827";
   return (
@@ -317,6 +478,7 @@ function GroupingContainerNode({ data, selected }: NodeProps<Node<FlowData>>) {
       className="pointer-events-none relative h-full w-full rounded-[10px] border bg-transparent"
       style={{
         borderColor: "#000000",
+        borderWidth: outlineWidth,
         boxShadow: "0 6px 16px rgba(15, 23, 42, 0.12)",
       }}
     >
@@ -369,15 +531,18 @@ function GroupingContainerNode({ data, selected }: NodeProps<Node<FlowData>>) {
         </>
       ) : null}
       <div
-        className="grouping-drag-handle pointer-events-auto absolute left-5 top-0 -translate-y-1/2 cursor-move rounded-[999px] border bg-white px-3 py-0.5 text-center text-[11px] font-normal text-slate-800 whitespace-nowrap"
+        className="grouping-drag-handle pointer-events-auto absolute left-5 top-0 -translate-y-1/2 cursor-move rounded-[999px] border bg-white text-center font-normal text-slate-800 whitespace-nowrap"
         style={{
           borderColor: "#000000",
           boxShadow: "0 3px 8px rgba(15, 23, 42, 0.12)",
           backgroundColor: headerBg,
           color: headerText,
+          fontSize: headerFontSize,
+          lineHeight: `${Math.round(headerFontSize * 1.2)}px`,
+          padding: `${headerVerticalPadding}px ${headerHorizontalPadding}px`,
         }}
       >
-        {data.title || "Group label"}
+        {data.title ?? "Group label"}
       </div>
     </div>
   );
@@ -1391,7 +1556,7 @@ function StickyNoteNode({ data, selected }: NodeProps<Node<FlowData>>) {
       <div className="flex h-full w-full flex-col">
         <div className="truncate text-[10px] font-bold">{data.creatorName || "User"}</div>
         <div className="mt-1 flex-1 overflow-hidden whitespace-pre-wrap break-words text-[11px] font-normal">
-          {data.title || "Enter Text"}
+          {data.title ?? "Enter Text"}
         </div>
         <div className="mt-1 truncate text-right text-[9px] font-normal opacity-80">{data.createdAtLabel || ""}</div>
       </div>
@@ -1439,7 +1604,7 @@ function ImageAssetNode({ data, selected }: NodeProps<Node<FlowData>>) {
         {data.imageUrl ? (
           <img src={data.imageUrl} alt={data.title || "Map image"} className="h-full w-full object-contain" />
         ) : (
-          <div className="px-2 text-center text-[11px] text-slate-500">{data.title || "Image"}</div>
+          <div className="px-2 text-center text-[11px] text-slate-500">{data.title ?? "Image"}</div>
         )}
       </div>
     </div>
@@ -1499,7 +1664,7 @@ function TextBoxNode({ data, selected }: NodeProps<Node<FlowData>>) {
           wordBreak: "break-word",
         }}
       >
-        {data.title || "Click to edit text box"}
+        {data.title ?? "Click to edit text box"}
       </div>
     </div>
   );
@@ -1588,7 +1753,7 @@ function FlowShapeNode({
               shapeRendering="geometricPrecision"
             />
           </svg>
-          <span className="relative z-[1] w-full whitespace-pre-wrap break-words">{data.title || "Shape text"}</span>
+          <span className="relative z-[1] w-full whitespace-pre-wrap break-words">{data.title ?? "Shape text"}</span>
         </div>
       ) : kind === "chevronLeft" ? (
         <div
@@ -1620,7 +1785,7 @@ function FlowShapeNode({
               shapeRendering="geometricPrecision"
             />
           </svg>
-          <span className="relative z-[1] w-full whitespace-pre-wrap break-words">{data.title || "Shape text"}</span>
+          <span className="relative z-[1] w-full whitespace-pre-wrap break-words">{data.title ?? "Shape text"}</span>
         </div>
       ) : kind === "arrow" ? (
         <div className="relative h-full w-full">
@@ -1663,7 +1828,7 @@ function FlowShapeNode({
             textDecoration: underline ? "underline" : "none",
           }}
         >
-          <span className="w-full whitespace-pre-wrap break-words">{data.title || "Shape text"}</span>
+          <span className="w-full whitespace-pre-wrap break-words">{data.title ?? "Shape text"}</span>
         </div>
       )}
     </div>
@@ -1795,6 +1960,62 @@ function PersonNode({ data }: NodeProps<Node<FlowData>>) {
   );
 }
 
+function StandaloneIconNode({
+  iconSrc,
+  title,
+  subtitle,
+}: {
+  iconSrc: string;
+  title: string;
+  subtitle: string;
+}) {
+  return (
+    <div className="relative flex h-full w-full flex-col items-center justify-start overflow-visible pt-2">
+      <HiddenEdgeHandles />
+      <div
+        className="flex items-center justify-center rounded-full border border-slate-300 bg-white shadow-[0_8px_20px_rgba(15,23,42,0.16)]"
+        style={{ width: personIconSize, height: personIconSize }}
+      >
+        <img src={iconSrc} alt="" className="h-full w-full object-contain" />
+      </div>
+      <div
+        className="mt-1 text-center text-[10px] font-semibold leading-tight text-slate-900 whitespace-normal break-words"
+        style={{ width: `${minorGridSize * 7}px`, maxWidth: `${minorGridSize * 7}px` }}
+      >
+        {title}
+      </div>
+      <div
+        className="mt-0.5 text-center text-[9px] font-normal leading-tight text-slate-700 whitespace-normal break-words"
+        style={{ width: `${minorGridSize * 7}px`, maxWidth: `${minorGridSize * 7}px` }}
+      >
+        {subtitle}
+      </div>
+    </div>
+  );
+}
+
+function EquipmentNode({ data }: NodeProps<Node<FlowData>>) {
+  const labels = parseEquipmentLabels(data.title);
+  return (
+    <StandaloneIconNode
+      iconSrc="/icons/equipment.svg"
+      title={labels.equipmentType}
+      subtitle={labels.identifier}
+    />
+  );
+}
+
+function EnvironmentNode({ data }: NodeProps<Node<FlowData>>) {
+  const labels = parseEnvironmentLabels(data.title);
+  return (
+    <StandaloneIconNode
+      iconSrc="/icons/environment.svg"
+      title={labels.factorType}
+      subtitle={labels.detail}
+    />
+  );
+}
+
 function BowtieCard({
   title,
   subtitle,
@@ -1872,7 +2093,7 @@ function BowtieHazardNode({ data }: NodeProps<Node<FlowData>>) {
   return (
     <div className="relative h-full w-full overflow-visible">
       <BowtieCard
-        title={data.title || "Hazard"}
+        title={data.title ?? "Hazard"}
         subtitle={data.description || undefined}
         accent="#facc15"
         background="#f8fafc"
@@ -1888,7 +2109,7 @@ function BowtieTopEventNode({ data }: NodeProps<Node<FlowData>>) {
   return (
     <div className="relative h-full w-full overflow-visible">
       <BowtieCard
-        title={data.title || "Top Event"}
+        title={data.title ?? "Top Event"}
         accent="#22c55e"
         background="#ecfdf5"
         border="#16a34a"
@@ -1906,7 +2127,7 @@ function BowtieThreatNode({ data }: NodeProps<Node<FlowData>>) {
   return (
     <div className="relative h-full w-full overflow-visible">
       <BowtieCard
-        title={data.title || "Threat"}
+        title={data.title ?? "Threat"}
         subtitle={data.description || undefined}
         accent="#f97316"
         background="#fff7ed"
@@ -1921,7 +2142,7 @@ function BowtieConsequenceNode({ data }: NodeProps<Node<FlowData>>) {
   return (
     <div className="relative h-full w-full overflow-visible">
       <BowtieCard
-        title={data.title || "Consequence"}
+        title={data.title ?? "Consequence"}
         accent="#ef4444"
         background="#fef2f2"
         border="#f87171"
@@ -1958,6 +2179,7 @@ function getNodeInfoText(data: FlowData): string {
     case "category": return "Category heading used to group related map content.";
     case "system_circle": return "Represents a system or platform in the workflow.";
     case "process_component": return "Represents a process step or activity.";
+    case "anchor": return "Navigation anchor used to step through a linked map sequence.";
     case "grouping_container": return "Visual container used to group nodes by scope or context.";
     case "sticky_note": return "Annotation note for quick context, comments, or reminders.";
     case "person": return "Represents a role or person connected to the process.";
@@ -2010,7 +2232,7 @@ function BowtieControlNode({ data }: NodeProps<Node<FlowData>>) {
         </div>
       ) : null}
       <BowtieCard
-        title={data.title || "Control"}
+        title={data.title ?? "Control"}
         accent={bannerColor}
         background="#ffffff"
         border="#cbd5e1"
@@ -2030,7 +2252,7 @@ function BowtieControlNode({ data }: NodeProps<Node<FlowData>>) {
         </div>
       ) : null}
       <div className="flex flex-1 items-center justify-center px-2 text-center text-[11px] font-semibold">
-        {data.title || "Control"}
+        {data.title ?? "Control"}
       </div>
     </div>
   );
@@ -2041,7 +2263,7 @@ function BowtieEscalationFactorNode({ data }: NodeProps<Node<FlowData>>) {
   return (
     <div className="relative h-full w-full overflow-visible">
       <BowtieCard
-        title={data.title || "Escalation Factor"}
+        title={data.title ?? "Escalation Factor"}
         subtitle={data.description || undefined}
         accent="#f59e0b"
         background="#fffbeb"
@@ -2055,7 +2277,7 @@ function BowtieRecoveryMeasureNode({ data }: NodeProps<Node<FlowData>>) {
   return (
     <div className="relative h-full w-full overflow-visible">
       <BowtieCard
-        title={data.title || "Recovery Measure"}
+        title={data.title ?? "Recovery Measure"}
         accent="#0f766e"
         background="#f0fdfa"
         border="#5eead4"
@@ -2068,7 +2290,7 @@ function BowtieDegradationIndicatorNode({ data }: NodeProps<Node<FlowData>>) {
   return (
     <div className="relative h-full w-full overflow-visible">
       <BowtieCard
-        title={data.title || "Degradation Indicator"}
+        title={data.title ?? "Degradation Indicator"}
         accent="#06b6d4"
         background="#ecfeff"
         border="#67e8f9"
@@ -2078,7 +2300,7 @@ function BowtieDegradationIndicatorNode({ data }: NodeProps<Node<FlowData>>) {
 }
 
 function BowtieRiskRatingNode({ data }: NodeProps<Node<FlowData>>) {
-  const riskLabel = data.title || "Medium";
+  const riskLabel = data.title ?? "Medium";
   const palette = getBowtieRiskPalette(riskLabel);
   return (
     <div className="relative h-full w-full overflow-visible">
@@ -2326,7 +2548,7 @@ function ModernIncidentNode({
                       </div>
                     ) : null}
                     <div>
-                      {data.description || data.title || fallbackTitle}
+                      {data.description ?? data.title ?? fallbackTitle}
                     </div>
                   </div>
                 </div>
@@ -2366,24 +2588,24 @@ function ModernIncidentNode({
                     </div>
                   ) : null}
                   <div>
-                    {data.description || data.title || fallbackTitle}
+                    {data.description ?? data.title ?? fallbackTitle}
                   </div>
                 </div>
               </div>
             ) : data.entityKind === "incident_finding" ? (
               <div className="flex min-h-0 flex-1 flex-col px-4 pb-3 pt-3">
                 <div className="min-h-0 flex-1 overflow-y-auto pr-1 text-left text-[11px] font-medium leading-[1.35] text-slate-800">
-                  {data.description || data.title || fallbackTitle}
+                  {data.description ?? data.title ?? fallbackTitle}
                 </div>
               </div>
             ) : (
-              <div className="flex flex-1 flex-col px-4 pb-3 pt-3">
-                <div className="flex min-h-0 flex-1 items-start">
-                  <div className="w-full max-h-[60px] overflow-y-auto pr-1 text-left text-[11px] font-medium leading-[1.35] text-slate-800">
-                    {data.description || data.title || fallbackTitle}
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-3 pt-3">
+                <div className="flex min-h-0 flex-1 overflow-hidden">
+                  <div className="h-full min-h-0 flex-1 overflow-y-auto pr-1 text-left text-[11px] font-medium leading-[1.35] text-slate-800">
+                    {data.description ?? data.title ?? fallbackTitle}
                   </div>
                 </div>
-                <div className="mt-2 flex min-h-[26px] items-center gap-2">
+                <div className="mt-2 flex min-h-[26px] shrink-0 items-center gap-2">
                   {tags.map((tag) => (
                     <button
                       key={tag.key}
@@ -2447,8 +2669,8 @@ function ModernIncidentNode({
                 />
               </button>
             </div>
-            <div className="flex flex-1 px-4 pb-3 pt-2">
-              <div className="w-full overflow-y-auto pr-1 text-left text-[11px] font-medium leading-[1.35] text-slate-800">
+            <div className="flex min-h-0 flex-1 px-4 pb-3 pt-2">
+              <div className="min-h-0 flex-1 overflow-y-auto pr-1 text-left text-[11px] font-medium leading-[1.35] text-slate-800">
                 {getNodeInfoText(data)}
               </div>
             </div>
@@ -2585,39 +2807,42 @@ function IncidentRecommendationNode({ data, selected }: NodeProps<Node<FlowData>
 }
 
 export const flowNodeTypes = {
-  documentTile: DocumentTileNode,
-  processHeading: ProcessHeadingNode,
-  systemCircle: SystemCircleNode,
-  processComponent: ProcessComponentNode,
-  groupingContainer: GroupingContainerNode,
-  stickyNote: StickyNoteNode,
-  imageAsset: ImageAssetNode,
-  textBox: TextBoxNode,
-  flowTable: FlowTableNode,
-  flowShapeRectangle: FlowShapeRectangleNode,
-  flowShapeCircle: FlowShapeCircleNode,
-  flowShapePill: FlowShapePillNode,
-  flowShapePentagon: FlowShapePentagonNode,
-  flowShapeChevronLeft: FlowShapeChevronLeftNode,
-  flowShapeArrow: FlowShapeArrowNode,
-  personNode: PersonNode,
-  bowtieHazard: BowtieHazardNode,
-  bowtieTopEvent: BowtieTopEventNode,
-  bowtieThreat: BowtieThreatNode,
-  bowtieConsequence: BowtieConsequenceNode,
-  bowtieControl: BowtieControlNode,
-  bowtieEscalationFactor: BowtieEscalationFactorNode,
-  bowtieRecoveryMeasure: BowtieRecoveryMeasureNode,
-  bowtieDegradationIndicator: BowtieDegradationIndicatorNode,
-  bowtieRiskRating: BowtieRiskRatingNode,
-  incidentSequenceStep: IncidentSequenceStepNode,
-  incidentOutcome: IncidentOutcomeNode,
-  incidentTaskCondition: IncidentTaskConditionNode,
-  incidentFactor: IncidentFactorNode,
-  incidentSystemFactor: IncidentSystemFactorNode,
-  incidentControlBarrier: IncidentControlBarrierNode,
-  incidentEvidence: IncidentEvidenceNode,
-  incidentResponseRecovery: IncidentResponseRecoveryNode,
-  incidentFinding: IncidentFindingNode,
-  incidentRecommendation: IncidentRecommendationNode,
+  documentTile: memo(DocumentTileNode),
+  processHeading: memo(ProcessHeadingNode),
+  systemCircle: memo(SystemCircleNode),
+  processComponent: memo(ProcessComponentNode),
+  anchorNode: memo(AnchorNode),
+  groupingContainer: memo(GroupingContainerNode),
+  stickyNote: memo(StickyNoteNode),
+  imageAsset: memo(ImageAssetNode),
+  textBox: memo(TextBoxNode),
+  flowTable: memo(FlowTableNode),
+  flowShapeRectangle: memo(FlowShapeRectangleNode),
+  flowShapeCircle: memo(FlowShapeCircleNode),
+  flowShapePill: memo(FlowShapePillNode),
+  flowShapePentagon: memo(FlowShapePentagonNode),
+  flowShapeChevronLeft: memo(FlowShapeChevronLeftNode),
+  flowShapeArrow: memo(FlowShapeArrowNode),
+  personNode: memo(PersonNode),
+  equipmentNode: memo(EquipmentNode),
+  environmentNode: memo(EnvironmentNode),
+  bowtieHazard: memo(BowtieHazardNode),
+  bowtieTopEvent: memo(BowtieTopEventNode),
+  bowtieThreat: memo(BowtieThreatNode),
+  bowtieConsequence: memo(BowtieConsequenceNode),
+  bowtieControl: memo(BowtieControlNode),
+  bowtieEscalationFactor: memo(BowtieEscalationFactorNode),
+  bowtieRecoveryMeasure: memo(BowtieRecoveryMeasureNode),
+  bowtieDegradationIndicator: memo(BowtieDegradationIndicatorNode),
+  bowtieRiskRating: memo(BowtieRiskRatingNode),
+  incidentSequenceStep: memo(IncidentSequenceStepNode),
+  incidentOutcome: memo(IncidentOutcomeNode),
+  incidentTaskCondition: memo(IncidentTaskConditionNode),
+  incidentFactor: memo(IncidentFactorNode),
+  incidentSystemFactor: memo(IncidentSystemFactorNode),
+  incidentControlBarrier: memo(IncidentControlBarrierNode),
+  incidentEvidence: memo(IncidentEvidenceNode),
+  incidentResponseRecovery: memo(IncidentResponseRecoveryNode),
+  incidentFinding: memo(IncidentFindingNode),
+  incidentRecommendation: memo(IncidentRecommendationNode),
 } as const;

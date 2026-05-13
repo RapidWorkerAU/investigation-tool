@@ -81,6 +81,9 @@ type CanvasActionButtonsProps = {
   handleAddSystemCircle: () => void;
   handleAddProcessComponent: () => void;
   handleAddPerson: () => void;
+  handleAddEquipment: () => void;
+  handleAddEnvironment: () => void;
+  handleAddAnchor: () => void;
   handleAddProcessHeading: () => void;
   handleAddGroupingContainer: () => void;
   handleAddStickyNote: () => void;
@@ -185,6 +188,9 @@ export function CanvasActionButtons({
   handleAddSystemCircle,
   handleAddProcessComponent,
   handleAddPerson,
+  handleAddEquipment,
+  handleAddEnvironment,
+  handleAddAnchor,
   handleAddProcessHeading,
   handleAddGroupingContainer,
   handleAddStickyNote,
@@ -250,16 +256,17 @@ export function CanvasActionButtons({
   const [activeAddFilter, setActiveAddFilter] = useState<"all" | AddItemGroup>("all");
   const searchTriggerRef = useRef<HTMLDivElement | null>(null);
   const templateTriggerRef = useRef<HTMLDivElement | null>(null);
-  const printTriggerRef = useRef<HTMLDivElement | null>(null);
   const [templateMenuStyle, setTemplateMenuStyle] = useState<CSSProperties>({});
   const [searchMenuStyle, setSearchMenuStyle] = useState<CSSProperties>({});
-  const [printMenuStyle, setPrintMenuStyle] = useState<CSSProperties>({});
   const addItems: AddItem[] = [];
   if (canWriteMap) {
     if (allowed.has("document")) addItems.push({ key: "document", label: "Document", group: "core", onClick: handleAddBlankDocument });
     if (allowed.has("system")) addItems.push({ key: "system", label: "System", group: "core", onClick: handleAddSystemCircle });
     if (allowed.has("process")) addItems.push({ key: "process", label: "Process", group: "core", onClick: handleAddProcessComponent });
     if (allowed.has("person")) addItems.push({ key: "person", label: "Person", group: "investigation", onClick: handleAddPerson });
+    if (allowed.has("equipment")) addItems.push({ key: "equipment", label: "Equipment", group: "investigation", onClick: handleAddEquipment });
+    if (allowed.has("environment")) addItems.push({ key: "environment", label: "Environment", group: "investigation", onClick: handleAddEnvironment });
+    if (allowed.has("anchor")) addItems.push({ key: "anchor", label: "Anchor", group: "investigation", onClick: handleAddAnchor });
     if (allowed.has("category")) addItems.push({ key: "category", label: "Category", group: "investigation", onClick: handleAddProcessHeading });
     if (allowed.has("grouping_container")) {
       addItems.push({ key: "grouping_container", label: "Group", group: "investigation", onClick: handleAddGroupingContainer });
@@ -433,6 +440,16 @@ export function CanvasActionButtons({
             </svg>
           </div>
         );
+      case "anchor":
+        return (
+          <div className="flex h-12 w-20 items-center justify-center">
+            <img
+              src="/icons/anchor.svg"
+              alt=""
+              className="h-full w-full object-contain drop-shadow-[0_6px_16px_rgba(15,23,42,0.16)]"
+            />
+          </div>
+        );
       case "incident_sequence_step":
         return renderMiniDocumentTile("#bfdbfe", "#111827", "Step");
       case "incident_outcome":
@@ -457,6 +474,18 @@ export function CanvasActionButtons({
         return (
           <div className="flex h-14 w-14 items-center justify-center rounded-full border border-slate-300 bg-white shadow-[0_8px_20px_rgba(15,23,42,0.16)]">
             <img src="/icons/account.svg" alt="" className="h-full w-full object-contain" />
+          </div>
+        );
+      case "equipment":
+        return (
+          <div className="flex h-14 w-14 items-center justify-center rounded-full border border-slate-300 bg-white shadow-[0_8px_20px_rgba(15,23,42,0.16)]">
+            <img src="/icons/equipment.svg" alt="" className="h-full w-full object-contain" />
+          </div>
+        );
+      case "environment":
+        return (
+          <div className="flex h-14 w-14 items-center justify-center rounded-full border border-slate-300 bg-white shadow-[0_8px_20px_rgba(15,23,42,0.16)]">
+            <img src="/icons/environment.svg" alt="" className="h-full w-full object-contain" />
           </div>
         );
       case "category":
@@ -558,23 +587,26 @@ export function CanvasActionButtons({
     ): CSSProperties => {
       if (!trigger || !menu || typeof window === "undefined") return {};
       const triggerRect = trigger.getBoundingClientRect();
+      const menuRect = menu.getBoundingClientRect();
+      const menuWidth = Math.min(menuRect.width || 220, window.innerWidth - viewportPadding * 2);
+      const preferredLeft = triggerRect.right + horizontalGap;
+      const maxLeft = Math.max(viewportPadding, window.innerWidth - viewportPadding - menuWidth);
+      const left = Math.min(Math.max(preferredLeft, viewportPadding), maxLeft);
       const stableTopTriggerRect = options?.stableTopFrom?.getBoundingClientRect();
       if (stableTopTriggerRect) {
         const top = Math.max(viewportPadding, stableTopTriggerRect.top);
         return {
           top,
-          left: triggerRect.right + horizontalGap,
-          maxHeight: `calc(100vh - ${Math.round(top) + viewportPadding}px)`,
+          left,
+          maxHeight: `${Math.max(0, window.innerHeight - Math.round(top) - viewportPadding)}px`,
           overflowY: "auto",
         };
       }
-      const menuRect = menu.getBoundingClientRect();
       const maxHeight = window.innerHeight - viewportPadding * 2;
       const menuHeight = Math.min(menuRect.height || maxHeight, maxHeight);
       const unclampedTop = triggerRect.top;
       const maxTop = Math.max(viewportPadding, window.innerHeight - viewportPadding - menuHeight);
       const top = Math.min(Math.max(unclampedTop, viewportPadding), maxTop);
-      const left = triggerRect.right + horizontalGap;
       return {
         top,
         left,
@@ -589,12 +621,10 @@ export function CanvasActionButtons({
           : {},
       );
       setSearchMenuStyle(showSearchMenu ? computeStyle(searchTriggerRef.current, searchMenuRef.current) : {});
-      setPrintMenuStyle(showPrintMenu ? computeStyle(printTriggerRef.current, printMenuRef.current) : {});
     };
     if (typeof window === "undefined") return;
-    const frame = window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(updateStyles);
-    });
+    updateStyles();
+    const frame = window.requestAnimationFrame(updateStyles);
     const resizeObserver =
       typeof ResizeObserver !== "undefined"
         ? new ResizeObserver(() => {
@@ -603,10 +633,8 @@ export function CanvasActionButtons({
         : null;
     if (showTemplateMenu && templateMenuRef.current) resizeObserver?.observe(templateMenuRef.current);
     if (showSearchMenu && searchMenuRef.current) resizeObserver?.observe(searchMenuRef.current);
-    if (showPrintMenu && printMenuRef.current) resizeObserver?.observe(printMenuRef.current);
     if (searchTriggerRef.current) resizeObserver?.observe(searchTriggerRef.current);
     if (templateTriggerRef.current) resizeObserver?.observe(templateTriggerRef.current);
-    if (printTriggerRef.current) resizeObserver?.observe(printTriggerRef.current);
     window.addEventListener("resize", updateStyles);
     return () => {
       window.cancelAnimationFrame(frame);
@@ -615,12 +643,9 @@ export function CanvasActionButtons({
     };
   }, [
     isLoadingTemplates,
-    isPreparingPrint,
-    printMenuRef,
     searchMenuRef,
     searchQuery,
     searchResults.length,
-    showPrintMenu,
     showSearchMenu,
     showTemplateMenu,
     templateMenuRef,
@@ -1496,7 +1521,7 @@ export function CanvasActionButtons({
             </button>
             {!isGuestViewer ? (
               <>
-                <div ref={printTriggerRef} className="relative w-full">
+                <div className="relative w-full">
                   <span title={!canPrint ? printDisabledReason : "Print to PDF"}>
                     <button
                       type="button"
@@ -1521,8 +1546,7 @@ export function CanvasActionButtons({
                   {showPrintMenu && canPrint ? (
                     <div
                       ref={printMenuRef}
-                      className="fixed z-[170] min-w-[220px] rounded-[24px] border border-slate-200 bg-white p-1.5 text-sm shadow-[0_22px_44px_rgba(15,23,42,0.18)]"
-                      style={printMenuStyle}
+                      className="absolute bottom-0 left-[calc(100%+24px)] z-[170] max-h-[calc(100vh-30px)] min-w-[220px] overflow-y-auto rounded-[24px] border border-slate-200 bg-white p-1.5 text-sm shadow-[0_22px_44px_rgba(15,23,42,0.18)]"
                     >
                       <button className="block w-full rounded-xl px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100 disabled:opacity-50" onClick={onPrintCurrentView} disabled={isPreparingPrint}>
                         Current View
@@ -1924,8 +1948,7 @@ export function CanvasActionButtons({
               {showPrintMenu && canPrint ? (
                 <div
                   ref={printMenuRef}
-                  className="fixed z-[170] min-w-[220px] rounded-[20px] border border-slate-200 bg-white/97 p-1.5 text-sm shadow-[0_22px_44px_rgba(15,23,42,0.18)] backdrop-blur"
-                  style={printMenuStyle}
+                  className="absolute bottom-[calc(100%+8px)] left-0 z-[170] max-h-[calc(100vh-30px)] min-w-[220px] overflow-y-auto rounded-[20px] border border-slate-200 bg-white/97 p-1.5 text-sm shadow-[0_22px_44px_rgba(15,23,42,0.18)] backdrop-blur"
                 >
                   <button className="block w-full rounded-none px-3 py-2 text-left font-normal text-slate-800 hover:bg-slate-100 disabled:opacity-50" onClick={onPrintCurrentView} disabled={isPreparingPrint}>
                     Current View

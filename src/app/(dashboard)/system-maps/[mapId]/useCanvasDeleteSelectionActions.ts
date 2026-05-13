@@ -2,7 +2,7 @@
 
 import { useCallback } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
-import type { CanvasElementRow, NodeRelationRow } from "./canvasShared";
+import type { AnchorLinkRow, CanvasElementRow, NodeRelationRow } from "./canvasShared";
 
 type UseCanvasDeleteSelectionActionsParams = {
   canWriteMap: boolean;
@@ -12,6 +12,7 @@ type UseCanvasDeleteSelectionActionsParams = {
   setError: (value: string | null) => void;
   setElements: React.Dispatch<React.SetStateAction<CanvasElementRow[]>>;
   setRelations: React.Dispatch<React.SetStateAction<NodeRelationRow[]>>;
+  setAnchorLinks: React.Dispatch<React.SetStateAction<AnchorLinkRow[]>>;
   setSelectedFlowIds: React.Dispatch<React.SetStateAction<Set<string>>>;
   processFlowId: (id: string) => string;
   parseProcessFlowId: (id: string) => string;
@@ -23,6 +24,8 @@ type UseCanvasDeleteSelectionActionsParams = {
   setSelectedProcessComponentId: React.Dispatch<React.SetStateAction<string | null>>;
   selectedPersonId: string | null;
   setSelectedPersonId: React.Dispatch<React.SetStateAction<string | null>>;
+  selectedAnchorId: string | null;
+  setSelectedAnchorId: React.Dispatch<React.SetStateAction<string | null>>;
   selectedGroupingId: string | null;
   setSelectedGroupingId: React.Dispatch<React.SetStateAction<string | null>>;
   selectedStickyId: string | null;
@@ -48,6 +51,7 @@ export function useCanvasDeleteSelectionActions({
   setError,
   setElements,
   setRelations,
+  setAnchorLinks,
   setSelectedFlowIds,
   processFlowId,
   parseProcessFlowId,
@@ -59,6 +63,8 @@ export function useCanvasDeleteSelectionActions({
   setSelectedProcessComponentId,
   selectedPersonId,
   setSelectedPersonId,
+  selectedAnchorId,
+  setSelectedAnchorId,
   selectedGroupingId,
   setSelectedGroupingId,
   selectedStickyId,
@@ -110,6 +116,7 @@ export function useCanvasDeleteSelectionActions({
           r.target_grouping_element_id !== id
       )
     );
+    setAnchorLinks((prev) => prev.filter((link) => link.anchor_id !== id && link.linked_anchor_id !== id));
     setSelectedFlowIds((prev) => {
       const next = new Set(prev);
       next.delete(processFlowId(id));
@@ -119,6 +126,7 @@ export function useCanvasDeleteSelectionActions({
     if (selectedSystemId === id) setSelectedSystemId(null);
     if (selectedProcessComponentId === id) setSelectedProcessComponentId(null);
     if (selectedPersonId === id) setSelectedPersonId(null);
+    if (selectedAnchorId === id) setSelectedAnchorId(null);
     if (selectedGroupingId === id) setSelectedGroupingId(null);
     if (selectedStickyId === id) setSelectedStickyId(null);
     if (selectedImageId === id) setSelectedImageId(null);
@@ -130,6 +138,7 @@ export function useCanvasDeleteSelectionActions({
     elements,
     mapId,
     processFlowId,
+    selectedAnchorId,
     selectedGroupingId,
     selectedPersonId,
     selectedProcessComponentId,
@@ -142,8 +151,10 @@ export function useCanvasDeleteSelectionActions({
     selectedSystemId,
     setElements,
     setError,
+    setAnchorLinks,
     setRelations,
     setSelectedFlowIds,
+    setSelectedAnchorId,
     setSelectedGroupingId,
     setSelectedPersonId,
     setSelectedProcessComponentId,

@@ -12,7 +12,7 @@ type Params = {
   snapToMinorGrid: (value: number) => number;
   findNearestFreePosition: (nodeId: string, x: number, y: number) => { x: number; y: number } | null;
   selectedFlowIds: Set<string>;
-  flowNodes: Node<FlowData>[];
+  flowNodesRef: React.MutableRefObject<Node<FlowData>[]>;
   setError: (value: string | null) => void;
   setElements: React.Dispatch<React.SetStateAction<CanvasElementRow[]>>;
   setNodes: React.Dispatch<React.SetStateAction<DocumentNodeRow[]>>;
@@ -29,13 +29,14 @@ export function useCanvasNodeDragStop({
   snapToMinorGrid,
   findNearestFreePosition,
   selectedFlowIds,
-  flowNodes,
+  flowNodesRef,
   setError,
   setElements,
   setNodes,
   setFlowNodes,
   savedPos,
 }: Params) {
+  const savedPositionsRef = savedPos;
   const isFlowShapeElementType = useCallback(
     (elementType: CanvasElementRow["element_type"]) =>
       elementType === "shape_rectangle" ||
@@ -140,6 +141,7 @@ export function useCanvasNodeDragStop({
 
   const onNodeDragStop = useCallback(
     async (_event: unknown, node: Node<FlowData>) => {
+      const flowNodes = flowNodesRef.current;
       if (selectedFlowIds.size > 1 && selectedFlowIds.has(node.id)) {
         if (!canWriteMap) {
           setError("You have view access only for this map.");
@@ -231,36 +233,17 @@ export function useCanvasNodeDragStop({
           );
         }
 
-        const persistCalls: Promise<{ error: { message?: string } | null }>[] = [];
         documentUpdates.forEach((u) => {
-          persistCalls.push(
-            (async () =>
-              await supabaseBrowser
-                .schema("ms")
-                .from("document_nodes")
-                .update({ pos_x: u.x, pos_y: u.y })
-                .eq("id", u.id)
-                .eq("map_id", mapId))()
-          );
-          savedPos.current[u.id] = { x: u.x, y: u.y };
+          savedPositionsRef.current[u.id] = { x: u.x, y: u.y };
         });
-        finalizedElementUpdates.forEach((u) => {
-          persistCalls.push(
-            (async () =>
-              await supabaseBrowser
-                .schema("ms")
-                .from("canvas_elements")
-                .update({ pos_x: u.x, pos_y: u.y })
-                .eq("id", u.id)
-                .eq("map_id", mapId))()
-          );
-        });
-        const results = await Promise.all(persistCalls);
-        const failed = results.find((r) => {
-          const maybe = r as { error?: { message?: string } | null };
-          return !!maybe.error;
-        }) as { error?: { message?: string } | null } | undefined;
-        if (failed?.error?.message) setError(failed.error.message || "Unable to save group position.");
+        if (documentUpdates.length || finalizedElementUpdates.length) {
+          const { error: e } = await supabaseBrowser.rpc("update_system_map_item_positions", {
+            p_map_id: mapId,
+            p_document_positions: documentUpdates,
+            p_element_positions: finalizedElementUpdates,
+          });
+          if (e) setError(e.message || "Unable to save group position.");
+        }
         return;
       }
 
@@ -270,6 +253,9 @@ export function useCanvasNodeDragStop({
         node.data.entityKind === "grouping_container" ||
         node.data.entityKind === "process_component" ||
         node.data.entityKind === "person" ||
+        node.data.entityKind === "equipment" ||
+        node.data.entityKind === "environment" ||
+        node.data.entityKind === "anchor" ||
         node.data.entityKind === "sticky_note" ||
         node.data.entityKind === "image_asset" ||
         node.data.entityKind === "text_box" ||
@@ -361,7 +347,7 @@ export function useCanvasNodeDragStop({
       }
       const x = snapToMinorGrid(node.position.x);
       const y = snapToMinorGrid(node.position.y);
-      const old = savedPos.current[node.id] ?? { x: source.pos_x, y: source.pos_y };
+      const old = savedPositionsRef.current[node.id] ?? { x: source.pos_x, y: source.pos_y };
       const freePosition = findNearestFreePosition(node.id, x, y) ?? old;
       const finalX = freePosition.x;
       const finalY = freePosition.y;
@@ -381,24 +367,25 @@ export function useCanvasNodeDragStop({
         setNodes((prev) => prev.map((n) => (n.id === node.id ? { ...n, pos_x: old.x, pos_y: old.y } : n)));
         return;
       }
-      savedPos.current[node.id] = { x: finalX, y: finalY };
+      savedPositionsRef.current[node.id] = { x: finalX, y: finalY };
     },
     [
       selectedFlowIds,
       canWriteMap,
       setError,
-      flowNodes,
+      flowNodesRef,
       snapToMinorGrid,
       setNodes,
       setElements,
       mapId,
-      savedPos,
+      savedPositionsRef,
       elements,
       canEditElement,
       nodes,
       findNearestFreePosition,
       setFlowNodes,
       findNearestAvailableShapePosition,
+      getFlowNodeRect,
       getFlowShapeDimensions,
       isFlowShapeElementType,
     ]

@@ -17,6 +17,7 @@ export type InvestigationTemplateSnapshot = {
   nodes: Array<Record<string, unknown>>;
   elements: Array<Record<string, unknown>>;
   relations: Array<Record<string, unknown>>;
+  anchorLinks?: Array<Record<string, unknown>>;
   outlineItems: Array<Record<string, unknown>>;
 };
 

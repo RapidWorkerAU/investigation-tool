@@ -12,6 +12,7 @@ type Params = {
   selectedSystemId: string | null;
   selectedProcessComponentId: string | null;
   selectedPersonId: string | null;
+  selectedAnchorId: string | null;
   selectedGroupingId: string | null;
   selectedStickyId: string | null;
   selectedImageId: string | null;
@@ -32,6 +33,7 @@ export function useCanvasAsideController({
   selectedSystemId,
   selectedProcessComponentId,
   selectedPersonId,
+  selectedAnchorId,
   selectedGroupingId,
   selectedStickyId,
   selectedImageId,
@@ -64,6 +66,7 @@ export function useCanvasAsideController({
     if (selectedSystemId) return `system:${selectedSystemId}`;
     if (selectedProcessComponentId) return `process:${selectedProcessComponentId}`;
     if (selectedPersonId) return `person:${selectedPersonId}`;
+    if (selectedAnchorId) return `anchor:${selectedAnchorId}`;
     if (selectedBowtieElementId) return `bowtie:${selectedBowtieElementId}`;
     if (selectedGroupingId) return `grouping:${selectedGroupingId}`;
     if (selectedNodeId) return `document:${selectedNodeId}`;
@@ -76,6 +79,7 @@ export function useCanvasAsideController({
     selectedGroupingId,
     selectedImageId,
     selectedNodeId,
+    selectedAnchorId,
     selectedPersonId,
     selectedProcessComponentId,
     selectedProcessId,

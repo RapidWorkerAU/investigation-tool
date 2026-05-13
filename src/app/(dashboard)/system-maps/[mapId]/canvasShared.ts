@@ -52,6 +52,16 @@ export type NodeRelationRow = {
   relationship_category: string | null;
   relationship_custom_type: string | null;
 };
+export type AnchorLinkRow = {
+  id: string;
+  map_id: string;
+  anchor_id: string;
+  linked_anchor_id: string;
+  sort_order: number;
+  created_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
 export type CanvasElementRow = {
   id: string;
   map_id: string;
@@ -60,6 +70,9 @@ export type CanvasElementRow = {
     | "system_circle"
     | "grouping_container"
     | "process_component"
+    | "equipment"
+    | "environment"
+    | "anchor"
     | "sticky_note"
     | "person"
     | "image_asset"
@@ -132,6 +145,9 @@ export type FlowData = {
     | "system_circle"
     | "grouping_container"
     | "process_component"
+    | "equipment"
+    | "environment"
+    | "anchor"
     | "sticky_note"
     | "person"
     | "image_asset"
@@ -184,6 +200,12 @@ export type FlowData = {
   disciplineKeys: string[];
   bannerBg: string;
   bannerText: string;
+  groupingOutlineWidth?: number;
+  groupingHeaderFontSize?: number;
+  anchorSequenceNumber?: number;
+  anchorId?: string;
+  anchorGroupColor?: string;
+  onNavigateAnchor?: (anchorId: string, direction: "previous" | "next") => void;
   incidentTags?: Array<{
     key: string;
     label: string;
@@ -275,6 +297,7 @@ export type SystemMapCanvasSnapshot = {
   nodes: DocumentNodeRow[];
   elements: CanvasElementRow[];
   relations: NodeRelationRow[];
+  anchorLinks?: AnchorLinkRow[];
   imageUrlsByElementId?: Record<string, string>;
 };
 export type DisciplineKey = "health" | "safety" | "environment" | "security" | "communities" | "training";
@@ -336,6 +359,10 @@ export const personElementWidth = personIconSize;
 export const personElementHeight = personIconSize + personRoleLabelHeight + personDepartmentLabelHeight;
 export const orgChartPersonWidth = minorGridSize * 13;
 export const orgChartPersonHeight = minorGridSize * 4;
+export const anchorNodeWidth = minorGridSize * 8;
+export const anchorNodeHeight = 128;
+export const anchorNodeMinWidth = minorGridSize * 5;
+export const anchorNodeMinHeight = Math.round((anchorNodeMinWidth / anchorNodeWidth) * anchorNodeHeight);
 export const groupingDefaultWidth = minorGridSize * 22;
 export const groupingDefaultHeight = minorGridSize * 12;
 export const groupingMinWidth = minorGridSize * 8;
@@ -431,6 +458,48 @@ export const parsePersonLabels = (heading: string | null | undefined) => {
 };
 export const buildPersonHeading = (role: string, department: string) =>
   `${role.trim() || "Role Name"}\n${department.trim() || "Department"}`;
+export const parseEquipmentLabels = (heading: string | null | undefined) => {
+  const raw = heading ?? "";
+  const [typeLine, ...rest] = raw.split("\n");
+  const equipmentType = typeLine?.trim() || "Equipment Type";
+  const identifier = rest.join("\n").trim() || "Brand / type / asset ID";
+  return { equipmentType, identifier };
+};
+export const buildEquipmentHeading = (equipmentType: string, identifier: string) =>
+  `${equipmentType.trim() || "Equipment Type"}\n${identifier.trim() || "Brand / type / asset ID"}`;
+export const environmentFactorTypeOptions = [
+  "Weather",
+  "Time of Day",
+  "Visibility",
+  "Terrain",
+  "Flora / Fauna",
+  "Lighting",
+  "Temperature",
+  "Noise",
+  "Vibration",
+  "Air Quality",
+  "Housekeeping",
+  "Access / Egress",
+  "Work Area Layout",
+  "Ground / Floor Conditions",
+  "Other",
+] as const;
+export const parseEnvironmentLabels = (heading: string | null | undefined) => {
+  const raw = heading ?? "";
+  const [detailLine, ...rest] = raw.split("\n");
+  const detail = detailLine?.trim() || "Environment detail";
+  const factorTypeRaw = rest.join("\n").trim();
+  const factorType = environmentFactorTypeOptions.includes(factorTypeRaw as (typeof environmentFactorTypeOptions)[number])
+    ? factorTypeRaw
+    : "Weather";
+  return { detail, factorType };
+};
+export const buildEnvironmentHeading = (detail: string, factorType: string) => {
+  const normalizedFactorType = environmentFactorTypeOptions.includes(factorType.trim() as (typeof environmentFactorTypeOptions)[number])
+    ? factorType.trim()
+    : "Weather";
+  return `${detail.trim() || "Environment detail"}\n${normalizedFactorType}`;
+};
 export type OrgChartEmploymentType = "fte" | "contractor";
 export type OrgChartPersonConfig = {
   position_title: string;
@@ -690,6 +759,9 @@ export const getElementRelationshipTypeLabel = (elementType: CanvasElementRow["e
   if (elementType === "system_circle") return "System";
   if (elementType === "process_component") return "Process";
   if (elementType === "person") return "Person";
+  if (elementType === "equipment") return "Equipment";
+  if (elementType === "environment") return "Environment";
+  if (elementType === "anchor") return "Anchor";
   if (elementType === "grouping_container") return "Grouping Container";
   if (elementType === "category") return "Category";
   if (elementType === "sticky_note") return "Sticky Note";
@@ -727,6 +799,14 @@ export const getElementDisplayName = (element: CanvasElementRow) => {
   if (element.element_type === "person") {
     const labels = parsePersonLabels(element.heading);
     return labels.role;
+  }
+  if (element.element_type === "equipment") {
+    const labels = parseEquipmentLabels(element.heading);
+    return labels.equipmentType;
+  }
+  if (element.element_type === "environment") {
+    const labels = parseEnvironmentLabels(element.heading);
+    return labels.detail;
   }
   return element.heading || "Untitled";
 };

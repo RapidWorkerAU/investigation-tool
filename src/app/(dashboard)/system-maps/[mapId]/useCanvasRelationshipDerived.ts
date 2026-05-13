@@ -139,11 +139,11 @@ export function useCanvasRelationshipDerived({
     (r: NodeRelationRow) => {
       const fromNode = nodes.find((n) => n.id === r.from_node_id) ?? null;
       const fromSystem = r.source_system_element_id
-        ? elements.find((el) => el.id === r.source_system_element_id && el.element_type !== "grouping_container") ?? null
+        ? elements.find((el) => el.id === r.source_system_element_id && el.element_type !== "grouping_container" && el.element_type !== "anchor") ?? null
         : null;
       const toNode = r.to_node_id ? nodes.find((n) => n.id === r.to_node_id) ?? null : null;
       const toSystem = r.target_system_element_id
-        ? elements.find((el) => el.id === r.target_system_element_id && el.element_type !== "grouping_container") ?? null
+        ? elements.find((el) => el.id === r.target_system_element_id && el.element_type !== "grouping_container" && el.element_type !== "anchor") ?? null
         : null;
       return {
         sourceLabel: fromNode?.title || (fromSystem ? getElementDisplayName(fromSystem) : null) || "Unknown source",
@@ -175,11 +175,11 @@ export function useCanvasRelationshipDerived({
     (r: NodeRelationRow) => {
       const fromNode = nodes.find((n) => n.id === r.from_node_id) ?? null;
       const fromSystem = r.source_system_element_id
-        ? elements.find((el) => el.id === r.source_system_element_id && el.element_type !== "grouping_container") ?? null
+        ? elements.find((el) => el.id === r.source_system_element_id && el.element_type !== "grouping_container" && el.element_type !== "anchor") ?? null
         : null;
       const toNode = r.to_node_id ? nodes.find((n) => n.id === r.to_node_id) ?? null : null;
       const toSystem = r.target_system_element_id
-        ? elements.find((el) => el.id === r.target_system_element_id && el.element_type !== "grouping_container") ?? null
+        ? elements.find((el) => el.id === r.target_system_element_id && el.element_type !== "grouping_container" && el.element_type !== "anchor") ?? null
         : null;
       return {
         sourceLabel: fromNode?.title || (fromSystem ? getElementDisplayName(fromSystem) : null) || "Unknown document",
@@ -210,7 +210,7 @@ export function useCanvasRelationshipDerived({
   const relationshipSourceSystem = useMemo(
     () =>
       relationshipSourceSystemId
-        ? elements.find((el) => el.id === relationshipSourceSystemId && el.element_type !== "grouping_container") ?? null
+        ? elements.find((el) => el.id === relationshipSourceSystemId && el.element_type !== "grouping_container" && el.element_type !== "anchor") ?? null
         : null,
     [elements, relationshipSourceSystemId]
   );
@@ -258,6 +258,7 @@ export function useCanvasRelationshipDerived({
       .filter(
         (el) =>
           el.element_type !== "grouping_container" &&
+          el.element_type !== "anchor" &&
           el.element_type !== "sticky_note" &&
           el.element_type !== "text_box" &&
           el.element_type !== "table"

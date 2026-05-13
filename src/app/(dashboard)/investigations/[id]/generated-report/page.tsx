@@ -10,7 +10,22 @@ import pageStyles from "./GeneratedReportPage.module.css";
 import InvestigationReportPdfDocument from "@/components/investigation-report/InvestigationReportPdfDocument";
 import { ReportProgressLoadingView } from "@/components/loading/ReportProgressLoadingView";
 import { type OrganisationBranding, type ResolvedOrganisationBranding, normalizeOrganisationBranding } from "@/lib/organisationBranding";
+import {
+  cleanEvidenceDescription,
+  getConfigValue,
+  getEvidenceFileType,
+  getEvidenceMediaPath,
+  getEvidenceMediaUrl,
+  isPdfEvidence,
+} from "@/lib/investigation-report/evidence";
+import {
+  formatHeaderReportSubtitle,
+  formatReportDate,
+  formatReportTime,
+} from "@/lib/investigation-report/formatters";
 import { normalizeInvestigationReportPayload } from "@/lib/investigation-report/helpers";
+import { isReportSectionVisible, type ReportSectionVisibilityId } from "@/lib/investigation-report/sections";
+import { normalizeHeaderKey, splitBracketedValue, toTitleCaseLabel } from "@/lib/investigation-report/text";
 import type { InvestigationSavedReportPayload, ReadinessCheck } from "@/lib/investigation-report/types";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
 import { parsePersonLabels } from "@/app/(dashboard)/system-maps/[mapId]/canvasShared";
@@ -169,23 +184,6 @@ type FlowSection = {
   content: React.ReactNode;
 };
 
-type PdfVisibleSectionId =
-  | "executive_summary"
-  | "long_description"
-  | "response_and_recovery"
-  | "task_and_conditions"
-  | "incident_outcomes"
-  | "people_involved"
-  | "incident_timeline"
-  | "factors_and_system_factors"
-  | "predisposing_factors"
-  | "controls_and_barriers"
-  | "incident_findings"
-  | "recommendations"
-  | "preliminary_facts"
-  | "evidence"
-  | "signatures";
-
 type EvidencePreviewLayout = {
   src: string;
   orientation: "portrait" | "landscape";
@@ -211,65 +209,6 @@ async function blobToDataUrl(blob: Blob) {
   });
 }
 
-function formatDateTime(value: string | null | undefined) {
-  if (!value) return "-";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString("en-AU", { day: "numeric", month: "long", year: "numeric", hour: "numeric", minute: "2-digit" });
-}
-
-function formatHeaderReportSubtitle(value: string | null | undefined) {
-  if (!value) return "-";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  const datePart = parsed.toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" });
-  const timePart = parsed.toLocaleTimeString("en-AU", { hour: "numeric", minute: "2-digit", hour12: true }).toLowerCase();
-  return `${datePart} at ${timePart}`;
-}
-
-function formatDateOnly(value: string | null | undefined) {
-  if (!value) return "-";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric" });
-}
-
-function formatReportDateTime(value: string | null | undefined) {
-  if (!value) return "-";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString("en-AU", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-}
-
-function formatReportDate(value: string | null | undefined) {
-  if (!value) return "-";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString("en-AU", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
-}
-
-function formatReportTime(value: string | null | undefined) {
-  if (!value) return "";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "";
-  return parsed.toLocaleTimeString("en-AU", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-}
-
 function buildCaseData(map: MapRow, elements: CanvasElementRow[]) {
   return {
     map: {
@@ -285,72 +224,6 @@ function buildCaseData(map: MapRow, elements: CanvasElementRow[]) {
     },
     elements,
   };
-}
-
-function getConfigValue(config: Record<string, unknown> | null | undefined, ...keys: string[]) {
-  if (!config) return "";
-  for (const key of keys) {
-    const value = config[key];
-    if (typeof value === "string" && value.trim()) return value.trim();
-  }
-  return "";
-}
-
-function getEvidenceMediaPath(config: Record<string, unknown> | null | undefined) {
-  return getConfigValue(config, "media_storage_path", "mediaStoragePath", "storage_path", "storagePath");
-}
-
-function getEvidenceMediaUrl(config: Record<string, unknown> | null | undefined) {
-  return getConfigValue(config, "preview_url", "previewUrl", "file_url", "fileUrl", "public_url", "publicUrl", "url");
-}
-
-function getEvidenceMediaMime(config: Record<string, unknown> | null | undefined) {
-  return getConfigValue(config, "media_mime", "mediaMime", "mime_type", "mimeType");
-}
-
-function getEvidenceMediaName(config: Record<string, unknown> | null | undefined) {
-  return getConfigValue(config, "media_name", "mediaName", "file_name", "fileName");
-}
-
-function isPdfEvidence(config: Record<string, unknown> | null | undefined) {
-  const mime = getEvidenceMediaMime(config).toLowerCase();
-  const name = getEvidenceMediaName(config).toLowerCase();
-  const path = getEvidenceMediaPath(config).toLowerCase();
-  return mime.includes("pdf") || name.endsWith(".pdf") || path.endsWith(".pdf");
-}
-
-function getEvidenceFileType(config: Record<string, unknown> | null | undefined) {
-  const mime = getEvidenceMediaMime(config).toLowerCase();
-  if (mime.includes("/")) {
-    return mime.split("/").pop()?.toUpperCase() || "FILE";
-  }
-
-  const name = getEvidenceMediaName(config).toLowerCase();
-  const path = getEvidenceMediaPath(config).toLowerCase();
-  const source = name || path;
-  const match = source.match(/\.([a-z0-9]+)$/i);
-  return match?.[1]?.toUpperCase() || "FILE";
-}
-
-function cleanEvidenceDescription(value: string | null | undefined) {
-  const trimmed = (value ?? "").trim();
-  if (!trimmed) return "";
-
-  const sourceStripped = trimmed
-    .replace(/source:\s*.*?(?=(media:|description:|storage path:|$))/i, "")
-    .replace(/media:\s*.*?(?=(description:|storage path:|$))/i, "")
-    .replace(/storage path:\s*.*$/i, "")
-    .trim();
-
-  const descriptionMatch = sourceStripped.match(/description:\s*(.*)$/i);
-  if (descriptionMatch?.[1]?.trim()) {
-    return descriptionMatch[1].trim();
-  }
-
-  return sourceStripped
-    .replace(/\([^)]*\/[^)]*\)/g, "")
-    .replace(/\s{2,}/g, " ")
-    .trim();
 }
 
 function normalizeParagraphText(value: string | null | undefined) {
@@ -378,15 +251,6 @@ function renderParagraphBlocks(value: string | null | undefined, keyPrefix: stri
 function parseReportPersonLabels(heading: string | null | undefined) {
   const normalized = (heading ?? "").replaceAll("\\n", "\n");
   return parsePersonLabels(normalized);
-}
-
-function toTitleCaseLabel(value: string) {
-  return value
-    .replaceAll("_", " ")
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(" ");
 }
 
 function stripActivityTimestamp(entry: string) {
@@ -464,24 +328,6 @@ function renderFactorPrimaryCell(value: string) {
 
 function renderFactorTypeCell(value: string) {
   return renderFactorPrimaryCell(value);
-}
-
-function normalizeHeaderKey(value: string) {
-  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ");
-}
-
-function splitBracketedValue(value: string) {
-  const trimmed = value.trim();
-  const match = trimmed.match(/^(.*?)\s*\((.*?)\)\s*$/);
-
-  if (!match) {
-    return { main: trimmed, bracket: "" };
-  }
-
-  return {
-    main: match[1].trim(),
-    bracket: toTitleCaseLabel(match[2].trim()),
-  };
 }
 
 function getFactorPillClass(value: string) {
@@ -1124,8 +970,8 @@ export default function GeneratedInvestigationReportPage() {
         }),
     [elements],
   );
-  const isPdfSectionVisible = (sectionId: PdfVisibleSectionId) =>
-    report?.report.section_visibility?.[sectionId] !== false;
+  const isPdfSectionVisible = (sectionId: ReportSectionVisibilityId) =>
+    isReportSectionVisible(report?.report.section_visibility, sectionId);
   const pdfViewerReady = Boolean(stablePdfDocument && !pdfPreparing && pdfBlobUrl);
   const showLoadingExperience = loading || generating || (!!report && !pdfError && !pdfViewerReady);
   const latestActivityMessage = activityLog.length > 0 ? stripActivityTimestamp(activityLog[activityLog.length - 1]) : "";

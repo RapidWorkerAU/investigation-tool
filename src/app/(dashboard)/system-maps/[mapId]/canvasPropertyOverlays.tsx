@@ -2,6 +2,7 @@
 
 import {
   BowtiePropertiesAside,
+  AnchorAside,
   CategoryPropertiesAside,
   DocumentPropertiesAside,
   FlowShapeAside,
@@ -20,6 +21,7 @@ type CanvasElementPropertyOverlaysProps = {
   systemProps: Parameters<typeof SystemPropertiesAside>[0];
   processProps: Parameters<typeof ProcessPropertiesAside>[0];
   personProps: Parameters<typeof PersonPropertiesAside>[0];
+  anchorProps: Parameters<typeof AnchorAside>[0];
   bowtieProps: Parameters<typeof BowtiePropertiesAside>[0];
   groupingProps: Parameters<typeof GroupingContainerAside>[0];
   stickyProps: Parameters<typeof StickyNoteAside>[0];
@@ -35,6 +37,7 @@ export function CanvasElementPropertyOverlays({
   systemProps,
   processProps,
   personProps,
+  anchorProps,
   bowtieProps,
   groupingProps,
   stickyProps,
@@ -50,6 +53,7 @@ export function CanvasElementPropertyOverlays({
       <SystemPropertiesAside {...systemProps} />
       <ProcessPropertiesAside {...processProps} />
       <PersonPropertiesAside {...personProps} />
+      <AnchorAside {...anchorProps} />
       <BowtiePropertiesAside {...bowtieProps} />
       <GroupingContainerAside {...groupingProps} />
       <StickyNoteAside {...stickyProps} />

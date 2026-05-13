@@ -8,6 +8,9 @@ import {
   Text,
   View,
 } from "@react-pdf/renderer";
+import { formatReportDateTime } from "@/lib/investigation-report/formatters";
+import { isReportSectionVisible, type ReportSectionVisibilityId } from "@/lib/investigation-report/sections";
+import { splitBracketedValue, toTitleCaseLabel } from "@/lib/investigation-report/text";
 
 type TableData = {
   columns: string[];
@@ -53,24 +56,7 @@ type PdfReportPayload = {
       section_heading_color?: string;
       table_heading_color?: string;
     };
-    section_visibility?: Partial<Record<
-      | "executive_summary"
-      | "long_description"
-      | "response_and_recovery"
-      | "task_and_conditions"
-      | "incident_outcomes"
-      | "people_involved"
-      | "incident_timeline"
-      | "factors_and_system_factors"
-      | "predisposing_factors"
-      | "controls_and_barriers"
-      | "incident_findings"
-      | "recommendations"
-      | "preliminary_facts"
-      | "evidence"
-      | "signatures",
-      boolean
-    >>;
+    section_visibility?: Partial<Record<ReportSectionVisibilityId, boolean>>;
     front_page: {
       facts_uncertain_heading: string;
       missing_information_heading: string;
@@ -624,47 +610,6 @@ const styles = StyleSheet.create({
   },
 });
 
-function toTitleCaseLabel(value: string) {
-  return value
-    .replaceAll("_", " ")
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(" ");
-}
-
-function splitBracketedValue(value: string) {
-  const trimmed = value.trim();
-  const match = trimmed.match(/^(.*?)\s*\((.*?)\)\s*$/);
-  if (!match) return { main: trimmed, bracket: "" };
-  return { main: match[1].trim(), bracket: toTitleCaseLabel(match[2].trim()) };
-}
-
-function formatReportDate(value: string | null | undefined) {
-  if (!value) return "-";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString("en-AU", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
-}
-
-function formatReportDateTime(value: string | null | undefined) {
-  if (!value) return "-";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString("en-AU", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-}
-
 function renderFooter() {
   return (
     <View fixed style={styles.footer}>
@@ -1135,24 +1080,8 @@ export default function InvestigationReportPdfDocument({
     item || "-",
     report.report.sections.preliminary_facts?.missing_information_notes?.[index] || "-",
   ]);
-  const isPdfSectionVisible = (
-    sectionId:
-      | "executive_summary"
-      | "long_description"
-      | "response_and_recovery"
-      | "task_and_conditions"
-      | "incident_outcomes"
-      | "people_involved"
-      | "incident_timeline"
-      | "factors_and_system_factors"
-      | "predisposing_factors"
-      | "controls_and_barriers"
-      | "incident_findings"
-      | "recommendations"
-      | "preliminary_facts"
-      | "evidence"
-      | "signatures",
-  ) => report.report.section_visibility?.[sectionId] !== false;
+  const isPdfSectionVisible = (sectionId: ReportSectionVisibilityId) =>
+    isReportSectionVisible(report.report.section_visibility, sectionId);
 
   return (
     <Document title={`${report.report.cover_page.incident_name || map?.title || "Investigation Report"} Report`}>

@@ -1,22 +1,5 @@
 import type { InvestigationReportPayload } from "@/lib/investigation-report/types";
-
-const pdfSectionVisibilityDefaults = {
-  executive_summary: true,
-  long_description: true,
-  response_and_recovery: true,
-  task_and_conditions: true,
-  incident_outcomes: true,
-  people_involved: true,
-  incident_timeline: true,
-  factors_and_system_factors: true,
-  predisposing_factors: true,
-  controls_and_barriers: true,
-  incident_findings: true,
-  recommendations: true,
-  preliminary_facts: true,
-  evidence: true,
-  signatures: true,
-} as const;
+import { reportSectionVisibilityDefaults } from "@/lib/investigation-report/sections";
 
 export function buildDraftReportText(report: InvestigationReportPayload) {
   return [
@@ -60,7 +43,7 @@ export function normalizeInvestigationReportPayload(report: InvestigationReportP
         table_heading_color: report.report.branding?.table_heading_color ?? "#7c8793",
       },
       section_visibility: {
-        ...pdfSectionVisibilityDefaults,
+        ...reportSectionVisibilityDefaults,
         ...(report.report.section_visibility ?? {}),
       },
       sections: {

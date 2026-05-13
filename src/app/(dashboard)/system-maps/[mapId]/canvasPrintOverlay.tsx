@@ -105,7 +105,7 @@ export function CanvasPrintOverlay({
 
       {showPrintSelectionConfirm ? (
         <div className="fixed inset-0 z-[91] flex items-center justify-center bg-slate-900/45 p-4 print-hidden">
-          <div className="w-full max-w-2xl rounded-none border border-slate-300 bg-white p-6 shadow-2xl">
+          <div className="max-h-[calc(100vh-2rem)] w-full max-w-2xl overflow-y-auto rounded-none border border-slate-300 bg-white p-6 shadow-2xl">
             <h2 className="text-lg font-semibold text-slate-900">Print selected area?</h2>
             <p className="mt-2 text-sm text-slate-700">Use this selected area for the PDF export.</p>
             {printSelectionCopyMessage ? (
@@ -146,7 +146,7 @@ export function CanvasPrintOverlay({
 
       {showPrintPreview && printPreviewHtml ? (
         <div className="fixed inset-0 z-[95] flex items-center justify-center bg-slate-900/60 p-4 print-hidden">
-          <div className="flex h-[92vh] w-[92vw] max-w-[1280px] flex-col rounded-none border border-slate-300 bg-white shadow-2xl">
+          <div className="flex h-[92vh] max-h-[calc(100vh-2rem)] w-[92vw] max-w-[1280px] flex-col rounded-none border border-slate-300 bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
               <h2 className="text-base font-semibold text-slate-900">PDF Preview</h2>
               <div className="flex items-center gap-2">

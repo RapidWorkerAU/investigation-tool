@@ -75,6 +75,7 @@ export const buildFlowEdgesBase = (params: {
   const relationshipElementsById = new Map(
     elements
       .filter((el) => el.element_type !== "sticky_note")
+      .filter((el) => el.element_type !== "anchor")
       .map((el) => [el.id, el])
   );
   const getElementDimensions = (el: CanvasElementRow) => {
@@ -89,6 +90,7 @@ export const buildFlowEdgesBase = (params: {
       }
       return { width: personElementWidth, height: personElementHeight };
     }
+    if (el.element_type === "equipment" || el.element_type === "environment") return { width: personElementWidth, height: personElementHeight };
     if (el.element_type === "image_asset") return { width: Math.max(imageMinWidth, el.width || imageDefaultWidth), height: Math.max(imageMinHeight, el.height || imageDefaultWidth) };
     if (el.element_type === "text_box") return { width: Math.max(textBoxMinWidth, el.width || textBoxDefaultWidth), height: Math.max(textBoxMinHeight, el.height || textBoxDefaultHeight) };
     if (el.element_type === "table") return { width: Math.max(tableMinWidth, el.width || tableDefaultWidth), height: Math.max(tableMinHeight, el.height || tableDefaultHeight) };

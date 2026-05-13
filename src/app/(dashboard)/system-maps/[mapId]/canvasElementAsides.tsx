@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useRef, useState, type DragEvent, type ReactNode, type RefObject } from "react";
 import type { CanvasElementRow, DisciplineKey, NodeRelationRow, RelationshipCategory, RelationshipCategoryOption } from "./canvasShared";
 import type { MapCategoryId } from "./mapCategories";
-import { getDisplayRelationType } from "./canvasShared";
+import { environmentFactorTypeOptions, getDisplayRelationType } from "./canvasShared";
 
 const formatBowtieOptionLabel = (value: string) =>
   value
@@ -227,14 +227,14 @@ function DualPaletteSelector({ backgroundColor, outlineColor, activeTarget, onTo
   );
 }
 
-function OutlineWeightField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+function OutlineWeightField({ value, onChange, label = "Outline Weight (max 12)" }: { value: string; onChange: (value: string) => void; label?: string }) {
   const outlineWeightValue = (() => {
     const parsed = Number(value.trim());
     if (!Number.isFinite(parsed)) return 1;
     return Math.max(1, Math.min(12, Math.round(parsed)));
   })();
   return (
-    <label className="text-sm text-white">Outline Weight (max 12)
+    <label className="text-sm text-white">{label}
       <div className="mt-1 flex items-stretch">
         <input
           type="text"
@@ -1618,6 +1618,7 @@ type PersonPropertiesAsideProps = {
   isMobile: boolean;
   leftAsideSlideIn: boolean;
   mapCategoryId: MapCategoryId;
+  selectedElementType: "person" | "equipment" | "environment" | null;
   personTypeDraft: string;
   setPersonTypeDraft: (value: string) => void;
   personRoleDraft: string;
@@ -1640,6 +1641,14 @@ type PersonPropertiesAsideProps = {
   setPersonRecruitingDraft: (value: boolean) => void;
   personProposedRoleDraft: boolean;
   setPersonProposedRoleDraft: (value: boolean) => void;
+  equipmentTypeDraft: string;
+  setEquipmentTypeDraft: (value: string) => void;
+  equipmentIdentifierDraft: string;
+  setEquipmentIdentifierDraft: (value: string) => void;
+  environmentDetailDraft: string;
+  setEnvironmentDetailDraft: (value: string) => void;
+  environmentFactorTypeDraft: string;
+  setEnvironmentFactorTypeDraft: (value: string) => void;
   orgChartDepartmentOptions: readonly string[];
   onDelete: () => Promise<void>;
   onSave: () => Promise<void>;
@@ -1656,6 +1665,7 @@ export function PersonPropertiesAside({
   isMobile,
   leftAsideSlideIn,
   mapCategoryId,
+  selectedElementType,
   personTypeDraft,
   setPersonTypeDraft,
   personRoleDraft,
@@ -1678,6 +1688,14 @@ export function PersonPropertiesAside({
   setPersonRecruitingDraft,
   personProposedRoleDraft,
   setPersonProposedRoleDraft,
+  equipmentTypeDraft,
+  setEquipmentTypeDraft,
+  equipmentIdentifierDraft,
+  setEquipmentIdentifierDraft,
+  environmentDetailDraft,
+  setEnvironmentDetailDraft,
+  environmentFactorTypeDraft,
+  setEnvironmentFactorTypeDraft,
   orgChartDepartmentOptions,
   onDelete,
   onSave,
@@ -1689,7 +1707,11 @@ export function PersonPropertiesAside({
   actionDisabledReason,
 }: PersonPropertiesAsideProps) {
   if (!open) return null;
-  const isOrgChart = mapCategoryId === "org_chart";
+  const isEquipment = selectedElementType === "equipment";
+  const isEnvironment = selectedElementType === "environment";
+  const isOrgChart = selectedElementType === "person" && mapCategoryId === "org_chart";
+  const asideTitle = isEquipment ? "Equipment Properties" : isEnvironment ? "Environment Properties" : "Person Properties";
+  const nodeNoun = isEquipment ? "equipment" : isEnvironment ? "environment" : "person";
   const investigationPersonTypeOptions = [
     "Injured Person",
     "Witness",
@@ -1701,9 +1723,52 @@ export function PersonPropertiesAside({
     "Other",
   ] as const;
   return (
-    <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title="Person Properties" onClose={onClose} readOnly={!!actionDisabledReason}>
+    <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title={asideTitle} onClose={onClose} readOnly={!!actionDisabledReason}>
       <div className="mt-4 space-y-3">
-        {isOrgChart ? (
+        {isEquipment ? (
+          <>
+            <label className="text-sm text-white">Equipment Type
+              <input
+                className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 font-normal text-black"
+                value={equipmentTypeDraft}
+                onChange={(e) => setEquipmentTypeDraft(e.target.value)}
+                placeholder="Enter equipment type"
+              />
+            </label>
+            <label className="text-sm text-white">Brand / Type / Asset ID
+              <input
+                className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 font-normal text-black"
+                value={equipmentIdentifierDraft}
+                onChange={(e) => setEquipmentIdentifierDraft(e.target.value)}
+                placeholder="Enter brand, model, asset ID or identifier"
+              />
+            </label>
+          </>
+        ) : isEnvironment ? (
+          <>
+            <label className="text-sm text-white">Environment Detail
+              <input
+                className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 font-normal text-black"
+                value={environmentDetailDraft}
+                onChange={(e) => setEnvironmentDetailDraft(e.target.value)}
+                placeholder="Enter environment detail"
+              />
+            </label>
+            <label className="text-sm text-white">Environment Factor Type
+              <select
+                className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 font-normal text-black"
+                value={environmentFactorTypeDraft}
+                onChange={(e) => setEnvironmentFactorTypeDraft(e.target.value)}
+              >
+                {environmentFactorTypeOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </>
+        ) : isOrgChart ? (
           <>
             <label className="text-sm text-white">Position Title
               <input
@@ -1827,11 +1892,11 @@ export function PersonPropertiesAside({
           onClick={() => void onDelete()}
           disabled={!!actionDisabledReason}
         >
-          Delete person
+          Delete {nodeNoun}
         </button>
         {wrapWithReason(
           actionDisabledReason,
-          <button className={`flex-1 rounded-none border border-black bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-slate-100 ${disabledAsideActionClass}`} onClick={() => void onSave()} disabled={!!actionDisabledReason}>Save person</button>
+          <button className={`flex-1 rounded-none border border-black bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-slate-100 ${disabledAsideActionClass}`} onClick={() => void onSave()} disabled={!!actionDisabledReason}>Save {nodeNoun}</button>
         )}
       </div>
     </AsideShell>
@@ -2654,6 +2719,10 @@ type GroupingContainerAsideProps = {
   setGroupingLabelDraft: (value: string) => void;
   groupingHeaderColorDraft: string;
   setGroupingHeaderColorDraft: (value: string) => void;
+  groupingHeaderFontSizeDraft: string;
+  setGroupingHeaderFontSizeDraft: (value: string) => void;
+  groupingOutlineWidthDraft: string;
+  setGroupingOutlineWidthDraft: (value: string) => void;
   onDelete: () => Promise<void>;
   onSave: () => Promise<void>;
   onClose: () => void;
@@ -2672,6 +2741,10 @@ export function GroupingContainerAside({
   setGroupingLabelDraft,
   groupingHeaderColorDraft,
   setGroupingHeaderColorDraft,
+  groupingHeaderFontSizeDraft,
+  setGroupingHeaderFontSizeDraft,
+  groupingOutlineWidthDraft,
+  setGroupingOutlineWidthDraft,
   onDelete,
   onSave,
   onClose,
@@ -2683,6 +2756,7 @@ export function GroupingContainerAside({
 }: GroupingContainerAsideProps) {
   if (!open) return null;
   const safeHeaderColor = /^#[0-9a-fA-F]{6}$/.test(groupingHeaderColorDraft) ? groupingHeaderColorDraft.toUpperCase() : "#FFFFFF";
+  const groupingTextSizeOptions = [10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48] as const;
   return (
     <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title="Grouping Container" onClose={onClose} readOnly={!!actionDisabledReason}>
       <div className="mt-4 space-y-3">
@@ -2713,6 +2787,10 @@ export function GroupingContainerAside({
             />
           </div>
         </div>
+        <label className="text-sm text-white">Text Size
+          <FontSizePicker value={groupingHeaderFontSizeDraft} onChange={setGroupingHeaderFontSizeDraft} options={groupingTextSizeOptions} />
+        </label>
+        <OutlineWeightField value={groupingOutlineWidthDraft} onChange={setGroupingOutlineWidthDraft} label="Container Outline Weight (max 12)" />
       </div>
       <div className="mt-4 flex items-stretch gap-2">
         <button
@@ -2725,6 +2803,316 @@ export function GroupingContainerAside({
         {wrapWithReason(
           actionDisabledReason,
           <button className={`flex-1 rounded-none border border-black bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-slate-100 ${disabledAsideActionClass}`} onClick={() => void onSave()} disabled={!!actionDisabledReason}>Save container</button>
+        )}
+      </div>
+    </AsideShell>
+  );
+}
+
+type AnchorListItem = {
+  id: string;
+  title: string;
+  creatorName: string;
+  sequenceNumber: number;
+  isCurrent?: boolean;
+  isDirectLink?: boolean;
+};
+
+type AnchorAsideProps = {
+  open: boolean;
+  isMobile: boolean;
+  leftAsideSlideIn: boolean;
+  anchorTitleDraft: string;
+  setAnchorTitleDraft: (value: string) => void;
+  anchorColorDraft: string;
+  setAnchorColorDraft: (value: string) => void;
+  anchorSearchDraft: string;
+  setAnchorSearchDraft: (value: string) => void;
+  selectedAnchorSequenceNumber: number;
+  anchorGroupSize: number;
+  linkedAnchors: AnchorListItem[];
+  searchResults: AnchorListItem[];
+  onAddLink: (anchorId: string) => Promise<void>;
+  onRemoveLink: (anchorId: string) => Promise<void>;
+  onReorderLinkedAnchors: (orderedIds: string[]) => void;
+  onDelete: () => Promise<void>;
+  onSave: () => Promise<void>;
+  onClose: () => void;
+  actionDisabledReason?: string;
+};
+
+const getReorderedAnchorIds = (
+  ids: string[],
+  draggedId: string,
+  targetId: string,
+  placement: "before" | "after"
+) => {
+  if (draggedId === targetId) return ids;
+  const withoutDragged = ids.filter((id) => id !== draggedId);
+  const targetIndex = withoutDragged.indexOf(targetId);
+  if (targetIndex < 0) return ids;
+  const insertIndex = placement === "after" ? targetIndex + 1 : targetIndex;
+  const nextIds = [...withoutDragged];
+  nextIds.splice(insertIndex, 0, draggedId);
+  return nextIds;
+};
+
+const anchorIdArraysEqual = (left: string[], right: string[]) =>
+  left.length === right.length && left.every((id, index) => id === right[index]);
+
+export function AnchorAside({
+  open,
+  isMobile,
+  leftAsideSlideIn,
+  anchorTitleDraft,
+  setAnchorTitleDraft,
+  anchorColorDraft,
+  setAnchorColorDraft,
+  anchorSearchDraft,
+  setAnchorSearchDraft,
+  selectedAnchorSequenceNumber,
+  anchorGroupSize,
+  linkedAnchors,
+  searchResults,
+  onAddLink,
+  onRemoveLink,
+  onReorderLinkedAnchors,
+  onDelete,
+  onSave,
+  onClose,
+  actionDisabledReason,
+}: AnchorAsideProps) {
+  const [draggedAnchorId, setDraggedAnchorId] = useState<string | null>(null);
+  const [dragPreviewIds, setDragPreviewIds] = useState<string[] | null>(null);
+  const [dragOverAnchorId, setDragOverAnchorId] = useState<string | null>(null);
+  const [anchorColourPickerOpen, setAnchorColourPickerOpen] = useState(false);
+  useEffect(() => {
+    if (!draggedAnchorId) return;
+    const previousCursor = document.body.style.cursor;
+    document.body.style.cursor = "grabbing";
+    return () => {
+      document.body.style.cursor = previousCursor;
+    };
+  }, [draggedAnchorId]);
+  if (!open) return null;
+  const safeAnchorColor = /^#[0-9a-fA-F]{6}$/.test(anchorColorDraft) ? anchorColorDraft.toUpperCase() : "#0F766E";
+  const linkedAnchorIds = linkedAnchors.map((anchor) => anchor.id);
+  const linkedAnchorById = new Map(linkedAnchors.map((anchor) => [anchor.id, anchor]));
+  const displayedLinkedAnchors = (dragPreviewIds ?? linkedAnchorIds)
+    .map((id) => linkedAnchorById.get(id))
+    .filter((anchor): anchor is AnchorListItem => Boolean(anchor));
+
+  const resetAnchorDragState = () => {
+    setDraggedAnchorId(null);
+    setDragPreviewIds(null);
+    setDragOverAnchorId(null);
+  };
+  const handleAnchorDragStart = (anchorId: string, event: DragEvent<HTMLDivElement>) => {
+    if (actionDisabledReason) return;
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", anchorId);
+    event.dataTransfer.setDragImage(event.currentTarget, 24, Math.round(event.currentTarget.offsetHeight / 2));
+    setDraggedAnchorId(anchorId);
+    setDragPreviewIds(linkedAnchorIds);
+    setDragOverAnchorId(anchorId);
+  };
+  const handleAnchorDragOver = (targetAnchorId: string, event: DragEvent<HTMLDivElement>) => {
+    if (actionDisabledReason || !draggedAnchorId) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    const rect = event.currentTarget.getBoundingClientRect();
+    const placement = event.clientY > rect.top + rect.height / 2 ? "after" : "before";
+    setDragOverAnchorId(targetAnchorId);
+    setDragPreviewIds((currentPreviewIds) => {
+      const currentIds = currentPreviewIds?.length ? currentPreviewIds : linkedAnchorIds;
+      const nextIds = getReorderedAnchorIds(currentIds, draggedAnchorId, targetAnchorId, placement);
+      return anchorIdArraysEqual(currentIds, nextIds) ? currentIds : nextIds;
+    });
+  };
+  const handleAnchorDrop = (event: DragEvent<HTMLDivElement>) => {
+    if (actionDisabledReason) return;
+    event.preventDefault();
+    const nextIds = dragPreviewIds?.length ? dragPreviewIds : linkedAnchorIds;
+    if (draggedAnchorId && !anchorIdArraysEqual(linkedAnchorIds, nextIds)) {
+      onReorderLinkedAnchors(nextIds);
+    }
+    resetAnchorDragState();
+  };
+  const trimmedAnchorSearch = anchorSearchDraft.trim();
+
+  return (
+    <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title="Anchor" onClose={onClose} readOnly={!!actionDisabledReason}>
+      <div className="mt-4 space-y-3">
+        <label className="text-sm text-white">Sequence Number
+          <input
+            className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 font-normal text-black"
+            value={String(selectedAnchorSequenceNumber)}
+            readOnly
+          />
+        </label>
+        <label className="text-sm text-white">Title
+          <input
+            className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 font-normal text-black"
+            value={anchorTitleDraft}
+            onChange={(e) => setAnchorTitleDraft(e.target.value)}
+            placeholder="Enter anchor title"
+            disabled={!!actionDisabledReason}
+          />
+        </label>
+        <div className="text-sm text-slate-100">
+          <div>Anchor Group Colour</div>
+          <div className="mt-1.5 grid grid-cols-[auto_72px] items-center gap-3">
+            <span>Colour</span>
+            <button
+              type="button"
+              className={`h-9 w-[72px] rounded-[8px] border transition ${
+                anchorColourPickerOpen ? "border-white ring-2 ring-white/80" : "border-white/40"
+              } ${actionDisabledReason ? "cursor-not-allowed opacity-60" : ""}`}
+              style={{ backgroundColor: safeAnchorColor }}
+              onClick={() => setAnchorColourPickerOpen((current) => !current)}
+              aria-label="Select anchor group colour"
+              title="Select anchor group colour"
+              disabled={!!actionDisabledReason}
+            />
+          </div>
+          <p className="mt-1 text-xs leading-snug text-slate-300">
+            Updates all {Math.max(1, anchorGroupSize)} anchor{Math.max(1, anchorGroupSize) === 1 ? "" : "s"} in this linked anchor group.
+          </p>
+          {anchorColourPickerOpen ? (
+            <div className="mt-3">
+              <PaletteSwatchGrid
+                selectedColor={safeAnchorColor}
+                swatchKeyPrefix="anchor-group-swatch"
+                onSelect={(hex) => {
+                  setAnchorColorDraft(hex);
+                  setAnchorColourPickerOpen(false);
+                }}
+              />
+            </div>
+          ) : null}
+        </div>
+        <div>
+          <div className="text-sm font-semibold text-white">Anchor Sequence</div>
+          <div className="mt-2 space-y-2">
+            {displayedLinkedAnchors.length ? (
+              displayedLinkedAnchors.map((anchor, index) => {
+                const isDragging = draggedAnchorId === anchor.id;
+                const isDragTarget = dragOverAnchorId === anchor.id && draggedAnchorId !== anchor.id;
+                return (
+                  <div
+                    key={anchor.id}
+                    draggable={!actionDisabledReason}
+                    onDragStart={(event) => handleAnchorDragStart(anchor.id, event)}
+                    onDragEnd={resetAnchorDragState}
+                    onDragOver={(event) => handleAnchorDragOver(anchor.id, event)}
+                    onDrop={handleAnchorDrop}
+                    aria-grabbed={isDragging}
+                    className={`flex select-none items-center gap-2 rounded border bg-white px-2 py-2 text-black shadow-sm transition duration-150 ${
+                      actionDisabledReason ? "" : "cursor-grab active:cursor-grabbing"
+                    } ${
+                      isDragging ? "cursor-grabbing border-[#0f766e] bg-[#ecfdf5] opacity-80 shadow-lg ring-2 ring-teal-400/40 scale-[0.98]" : "border-slate-500/60"
+                    } ${
+                      isDragTarget ? "border-[#0f766e] ring-2 ring-teal-400/30" : ""
+                    }`}
+                  >
+                    <span
+                      className={`flex h-7 w-7 shrink-0 items-center justify-center border border-slate-300 text-xs font-bold text-slate-600 ${
+                        actionDisabledReason ? "" : isDragging ? "cursor-grabbing" : "cursor-grab"
+                      }`}
+                      title="Drag to reorder"
+                    >
+                      {index + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <div className="truncate text-sm font-semibold">{anchor.title}</div>
+                        {anchor.isCurrent ? (
+                          <span className="shrink-0 border border-[#0f766e]/25 bg-[#ccfbf1] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-normal text-[#0f766e]">
+                            Current
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="truncate text-[11px] text-slate-500">{anchor.creatorName}</div>
+                    </div>
+                    {anchor.isCurrent ? (
+                      <span className="h-8 w-8 shrink-0" aria-hidden="true" />
+                    ) : anchor.isDirectLink ? (
+                      <button
+                        type="button"
+                        className={`flex h-8 w-8 shrink-0 items-center justify-center border border-slate-300 hover:bg-slate-100 ${disabledAsideActionClass}`}
+                        onClick={() => void onRemoveLink(anchor.id)}
+                        disabled={!!actionDisabledReason}
+                        aria-label={`Delink ${anchor.title}`}
+                        title="Delink anchor"
+                      >
+                        <img src="/icons/delink.svg" alt="" className="h-4 w-4" />
+                      </button>
+                    ) : (
+                      <span className="h-8 w-8 shrink-0" title="Linked through this anchor group" aria-hidden="true" />
+                    )}
+                  </div>
+                );
+              })
+            ) : (
+              <div className="rounded border border-slate-300 bg-white px-3 py-3 text-sm text-slate-600">
+                No linked anchors yet.
+              </div>
+            )}
+          </div>
+        </div>
+        <div>
+          <label className="text-sm font-semibold text-white">Search Anchors
+            <input
+              className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 font-normal text-black"
+              value={anchorSearchDraft}
+              onChange={(e) => setAnchorSearchDraft(e.target.value)}
+              placeholder="Search by anchor name or user"
+              disabled={!!actionDisabledReason}
+            />
+          </label>
+          {trimmedAnchorSearch ? (
+            <>
+              <p className="mt-2 text-xs text-white/70">
+                {searchResults.length} result{searchResults.length === 1 ? "" : "s"} found for &quot;{trimmedAnchorSearch}&quot;
+              </p>
+              <div className="mt-3 max-h-56 overflow-y-auto rounded border border-slate-300 bg-white">
+                {searchResults.length ? (
+                  searchResults.map((anchor) => (
+                    <button
+                      key={anchor.id}
+                      type="button"
+                      className={`flex w-full items-center gap-2 border-b border-slate-100 px-3 py-2.5 text-left text-slate-800 last:border-b-0 hover:bg-slate-50 ${disabledAsideActionClass}`}
+                      onClick={() => void onAddLink(anchor.id)}
+                      disabled={!!actionDisabledReason}
+                    >
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center border border-slate-300 text-xs font-bold text-[#0f766e]">
+                        {anchor.sequenceNumber}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold text-slate-900">{anchor.title}</span>
+                        <span className="block truncate text-[11px] text-slate-500">{anchor.creatorName}</span>
+                      </span>
+                    </button>
+                  ))
+                ) : (
+                  <div className="px-3 py-2.5 text-sm text-slate-500">No available anchors match that search.</div>
+                )}
+              </div>
+            </>
+          ) : null}
+        </div>
+      </div>
+      <div className="mt-4 flex items-stretch gap-2">
+        <button
+          className={`flex-1 rounded-none border border-black bg-white px-3 py-2 text-sm text-rose-700 hover:bg-slate-100 ${disabledAsideActionClass}`}
+          onClick={() => void onDelete()}
+          disabled={!!actionDisabledReason}
+        >
+          Delete anchor
+        </button>
+        {wrapWithReason(
+          actionDisabledReason,
+          <button className={`flex-1 rounded-none border border-black bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-slate-100 ${disabledAsideActionClass}`} onClick={() => void onSave()} disabled={!!actionDisabledReason}>Save anchor</button>
         )}
       </div>
     </AsideShell>

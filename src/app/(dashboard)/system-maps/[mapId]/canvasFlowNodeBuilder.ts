@@ -3,11 +3,17 @@
 import type { Node } from "@xyflow/react";
 import type { CanvasElementRow, NodeRelationRow } from "./canvasShared";
 import {
+  anchorNodeHeight,
+  anchorNodeMinHeight,
+  anchorNodeMinWidth,
+  anchorNodeWidth,
   bowtieControlHeight,
   bowtieDefaultWidth,
   bowtieHazardHeight,
   bowtieRiskRatingHeight,
   bowtieSquareHeight,
+  buildEquipmentHeading,
+  buildEnvironmentHeading,
   buildPersonHeading,
   defaultCategoryColor,
   type DocumentNodeRow,
@@ -207,13 +213,12 @@ const getMethodologyBodyDisplayMode = (
 };
 
 const getMethodologyNodeText = (element: CanvasElementRow) => {
-  const defaultLabel = methodologyDefaultLabelByType[element.element_type] ?? "Node";
   const config = (element.element_config as Record<string, unknown> | null) ?? {};
   const label = getMethodologyCustomLabel(element.element_type, element.heading);
   const description = String(config.description ?? "").trim();
   const bodyDisplayMode = getMethodologyBodyDisplayMode(label, description, config.body_display_mode);
-  if (bodyDisplayMode === "label") return label || description || defaultLabel;
-  return description || label || defaultLabel;
+  if (bodyDisplayMode === "label") return label || description;
+  return description || label;
 };
 
 const buildIncidentTag = (
@@ -498,11 +503,15 @@ export const buildGroupingFlowNodes = (params: {
     const canEditThis = canEditElement(el);
     const cfg = (el.element_config as Record<string, unknown> | null) ?? {};
     const bannerBg = typeof cfg.header_bg_color === "string" && /^#[0-9a-fA-F]{6}$/.test(cfg.header_bg_color) ? cfg.header_bg_color.toUpperCase() : "#FFFFFF";
+    const outlineWidthRaw = Number(cfg.outline_width ?? 1);
+    const outlineWidth = Number.isFinite(outlineWidthRaw) ? Math.max(1, Math.min(12, Math.round(outlineWidthRaw))) : 1;
+    const headerFontSizeRaw = Number(cfg.header_font_size ?? 11);
+    const headerFontSize = Number.isFinite(headerFontSizeRaw) ? Math.max(10, Math.min(48, Math.round(headerFontSizeRaw))) : 11;
     return {
       id: flowId,
       type: "groupingContainer",
       position: { x: el.pos_x, y: el.pos_y },
-      zIndex: 1,
+      zIndex: 0,
       selected: isMarked,
       draggable: canEditThis,
       selectable: canWriteMap,
@@ -526,6 +535,8 @@ export const buildGroupingFlowNodes = (params: {
         disciplineKeys: [],
         bannerBg,
         bannerText: getContrastText(bannerBg),
+        groupingOutlineWidth: outlineWidth,
+        groupingHeaderFontSize: headerFontSize,
         isLandscape: true,
         isUnconfigured: false,
       },
@@ -599,6 +610,9 @@ export const buildPrimaryElementFlowNode = (params: {
   imageUrlsByElementId: Record<string, string | undefined>;
   directReportCountByPersonNormalizedId: Map<string, number>;
   orgDirectReportCountByPersonId: Map<string, number>;
+  anchorSequenceNumberById?: Map<string, number>;
+  anchorGroupColorById?: Map<string, string>;
+  onNavigateAnchor?: (anchorId: string, direction: "previous" | "next") => void;
   onTableCellCommit?: (elementId: string, rowIndex: number, columnIndex: number, value: string) => void;
   onTableCellStyleCommit?: (
     elementId: string,
@@ -632,12 +646,62 @@ export const buildPrimaryElementFlowNode = (params: {
     imageUrlsByElementId,
     directReportCountByPersonNormalizedId,
     orgDirectReportCountByPersonId,
+    anchorSequenceNumberById,
+    anchorGroupColorById,
+    onNavigateAnchor,
     onTableCellCommit,
     onTableCellStyleCommit,
     onToggleIncidentDetail,
   } = params;
 
   if (el.element_type === "grouping_container") return null;
+
+  if (el.element_type === "anchor") {
+    const flowId = processFlowId(el.id);
+    const isMarked = selectedFlowIds.has(flowId);
+    const canEditThis = canEditElement(el);
+    const creatorName =
+      (el.created_by_user_id ? memberDisplayNameByUserId.get(el.created_by_user_id) : null) ||
+      (el.created_by_user_id === userId ? userEmail : null) ||
+      "Unknown user";
+    const anchorWidth = Math.max(anchorNodeMinWidth, el.width || anchorNodeWidth);
+    const anchorHeight = Math.max(anchorNodeMinHeight, Math.round((anchorWidth / anchorNodeWidth) * anchorNodeHeight));
+    return {
+      id: flowId,
+      type: "anchorNode",
+      position: { x: el.pos_x, y: el.pos_y },
+      zIndex: 50,
+      selected: isMarked,
+      draggable: canEditThis,
+      selectable: canWriteMap,
+      style: {
+        width: anchorWidth,
+        height: anchorHeight,
+        borderRadius: 0,
+        border: "none",
+        background: "transparent",
+        boxShadow: isMarked ? "0 0 0 2px rgba(15,23,42,0.9)" : "none",
+        padding: 0,
+        overflow: "visible",
+      },
+      data: {
+        entityKind: "anchor",
+        typeName: "Anchor",
+        title: el.heading ?? "Anchor",
+        creatorName,
+        anchorId: el.id,
+        anchorSequenceNumber: anchorSequenceNumberById?.get(el.id) ?? 1,
+        anchorGroupColor: anchorGroupColorById?.get(el.id) ?? el.color_hex ?? "#0F766E",
+        onNavigateAnchor,
+        userGroup: "",
+        disciplineKeys: [],
+        bannerBg: "#0f766e",
+        bannerText: "#ffffff",
+        isLandscape: false,
+        isUnconfigured: false,
+      },
+    };
+  }
 
   if (el.element_type === "sticky_note") {
     const flowId = processFlowId(el.id);
@@ -952,7 +1016,7 @@ export const buildPrimaryElementFlowNode = (params: {
           ? "flowShapeArrow"
           : "flowShapeRectangle",
       position: { x: el.pos_x, y: el.pos_y },
-      zIndex: 40,
+      zIndex: 1,
       selected: isMarked,
       draggable: canEditThis,
       selectable: canWriteMap,
@@ -965,6 +1029,7 @@ export const buildPrimaryElementFlowNode = (params: {
         boxShadow: isMarked ? "0 0 0 2px rgba(15,23,42,0.9)" : "none",
         padding: 0,
         overflow: "visible",
+        zIndex: 1,
       },
       data: {
         entityKind: el.element_type,
@@ -1147,6 +1212,78 @@ export const buildPrimaryElementFlowNode = (params: {
             }
           : undefined,
         personBadge: !orgConfig && personBadge ? personBadge : undefined,
+      },
+    };
+  }
+
+  if (el.element_type === "equipment") {
+    const flowId = processFlowId(el.id);
+    const isMarked = selectedFlowIds.has(flowId);
+    const canEditThis = canEditElement(el);
+    return {
+      id: flowId,
+      type: "equipmentNode",
+      position: { x: el.pos_x, y: el.pos_y },
+      zIndex: 30,
+      selected: isMarked,
+      draggable: canEditThis,
+      selectable: canWriteMap,
+      style: {
+        width: personElementWidth,
+        height: personElementHeight,
+        borderRadius: 0,
+        border: "none",
+        background: "transparent",
+        boxShadow: isMarked ? "0 0 0 2px rgba(15,23,42,0.9)" : "none",
+        padding: 0,
+        overflow: "visible",
+      },
+      data: {
+        entityKind: "equipment",
+        typeName: "Equipment",
+        title: el.heading ?? buildEquipmentHeading("Equipment Type", "Brand / type / asset ID"),
+        userGroup: "",
+        disciplineKeys: [],
+        bannerBg: "#ffffff",
+        bannerText: "#111827",
+        isLandscape: true,
+        isUnconfigured: false,
+      },
+    };
+  }
+
+  if (el.element_type === "environment") {
+    const flowId = processFlowId(el.id);
+    const isMarked = selectedFlowIds.has(flowId);
+    const canEditThis = canEditElement(el);
+    return {
+      id: flowId,
+      type: "environmentNode",
+      position: { x: el.pos_x, y: el.pos_y },
+      zIndex: 30,
+      selected: isMarked,
+      draggable: canEditThis,
+      selectable: canWriteMap,
+      style: {
+        width: personElementWidth,
+        height: personElementHeight,
+        borderRadius: 0,
+        border: "none",
+        background: "transparent",
+        boxShadow: isMarked ? "0 0 0 2px rgba(15,23,42,0.9)" : "none",
+        padding: 0,
+        overflow: "visible",
+      },
+      data: {
+        entityKind: "environment",
+        typeName: "Environment",
+        title: el.heading ?? buildEnvironmentHeading("Environment detail", "Weather"),
+        userGroup: "",
+        disciplineKeys: [],
+        bannerBg: "#ffffff",
+        bannerText: "#111827",
+        isLandscape: true,
+        isUnconfigured: false,
       },
     };
   }

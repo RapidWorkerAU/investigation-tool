@@ -3,7 +3,7 @@
 import { useCallback } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import type { CanvasElementRow, DisciplineKey, DocumentNodeRow } from "./canvasShared";
-import { boxesOverlap, parseOrgChartPersonConfig } from "./canvasShared";
+import { boxesOverlap, buildEquipmentHeading, buildEnvironmentHeading, environmentFactorTypeOptions, parseOrgChartPersonConfig } from "./canvasShared";
 import type { MapCategoryId } from "./mapCategories";
 
 type UseCanvasElementActionsParams = {
@@ -35,6 +35,8 @@ type UseCanvasElementActionsParams = {
   systemCircleElementHeight: number;
   processComponentWidth: number;
   processComponentElementHeight: number;
+  anchorNodeWidth: number;
+  anchorNodeHeight: number;
   buildPersonHeading: (role: string, department: string) => string;
   personElementWidth: number;
   personElementHeight: number;
@@ -113,10 +115,16 @@ type UseCanvasElementActionsParams = {
   personActingStartDateDraft: string;
   personRecruitingDraft: boolean;
   personProposedRoleDraft: boolean;
+  equipmentTypeDraft: string;
+  equipmentIdentifierDraft: string;
+  environmentDetailDraft: string;
+  environmentFactorTypeDraft: string;
   setSelectedPersonId: React.Dispatch<React.SetStateAction<string | null>>;
   selectedGroupingId: string | null;
   groupingLabelDraft: string;
   groupingHeaderColorDraft: string;
+  groupingHeaderFontSizeDraft: string;
+  groupingOutlineWidthDraft: string;
   groupingWidthDraft: string;
   groupingHeightDraft: string;
   groupingMinWidthSquares: number;
@@ -176,6 +184,58 @@ type UseCanvasElementActionsParams = {
   setSelectedFlowShapeId: React.Dispatch<React.SetStateAction<string | null>>;
 };
 
+type PlacementRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  elementType?: CanvasElementRow["element_type"];
+};
+
+const placementIndexCellSize = 240;
+
+const getPlacementCellRange = (rect: { x: number; y: number; width: number; height: number }) => ({
+  minX: Math.floor(rect.x / placementIndexCellSize),
+  maxX: Math.floor((rect.x + rect.width) / placementIndexCellSize),
+  minY: Math.floor(rect.y / placementIndexCellSize),
+  maxY: Math.floor((rect.y + rect.height) / placementIndexCellSize),
+});
+
+const getPlacementCellKey = (x: number, y: number) => `${x}:${y}`;
+
+const buildPlacementIndex = (rects: PlacementRect[]) => {
+  const index = new Map<string, PlacementRect[]>();
+  rects.forEach((rect) => {
+    const range = getPlacementCellRange(rect);
+    for (let cellX = range.minX; cellX <= range.maxX; cellX += 1) {
+      for (let cellY = range.minY; cellY <= range.maxY; cellY += 1) {
+        const key = getPlacementCellKey(cellX, cellY);
+        const bucket = index.get(key);
+        if (bucket) {
+          bucket.push(rect);
+        } else {
+          index.set(key, [rect]);
+        }
+      }
+    }
+  });
+  return index;
+};
+
+const getPlacementCandidates = (
+  index: Map<string, PlacementRect[]>,
+  candidate: { x: number; y: number; width: number; height: number }
+) => {
+  const range = getPlacementCellRange(candidate);
+  const candidates = new Set<PlacementRect>();
+  for (let cellX = range.minX; cellX <= range.maxX; cellX += 1) {
+    for (let cellY = range.minY; cellY <= range.maxY; cellY += 1) {
+      index.get(getPlacementCellKey(cellX, cellY))?.forEach((rect) => candidates.add(rect));
+    }
+  }
+  return candidates;
+};
+
 export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
   const {
     mapCategoryId,
@@ -206,6 +266,8 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
     systemCircleElementHeight,
     processComponentWidth,
     processComponentElementHeight,
+    anchorNodeWidth,
+    anchorNodeHeight,
     buildPersonHeading,
     personElementWidth,
     personElementHeight,
@@ -281,10 +343,16 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
     personActingStartDateDraft,
     personRecruitingDraft,
     personProposedRoleDraft,
+    equipmentTypeDraft,
+    equipmentIdentifierDraft,
+    environmentDetailDraft,
+    environmentFactorTypeDraft,
     setSelectedPersonId,
     selectedGroupingId,
     groupingLabelDraft,
     groupingHeaderColorDraft,
+    groupingHeaderFontSizeDraft,
+    groupingOutlineWidthDraft,
     groupingWidthDraft,
     groupingHeightDraft,
     groupingMinWidthSquares,
@@ -422,7 +490,7 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
         const overlapHeight = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
         return overlapWidth > allowed && overlapHeight > allowed;
       };
-      const blocked: Array<{ x: number; y: number; width: number; height: number; elementType?: CanvasElementRow["element_type"] }> =
+      const blocked: PlacementRect[] =
         movingType === "shape_arrow"
           ? [
               ...nodes
@@ -467,15 +535,20 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
                 const dims = getShapeDimensions(el);
                 return { x: el.pos_x, y: el.pos_y, width: dims.width, height: dims.height, elementType: el.element_type };
               });
+      const blockedIndex = buildPlacementIndex(blocked);
       const overlapsAt = (candidateX: number, candidateY: number) =>
-        blocked.some((box) => {
+        (() => {
           const candidate = { x: candidateX, y: candidateY, width, height };
-          if (!boxesOverlap(candidate, box, 0)) return false;
-          if (box.elementType && isPentagonChevronPair(movingType, box.elementType)) {
-            return exceedsAllowedOverlap(candidate, box, minorGridSize * 2);
+          for (const box of getPlacementCandidates(blockedIndex, candidate)) {
+            if (!boxesOverlap(candidate, box, 0)) continue;
+            if (box.elementType && isPentagonChevronPair(movingType, box.elementType)) {
+              if (exceedsAllowedOverlap(candidate, box, minorGridSize * 2)) return true;
+              continue;
+            }
+            return true;
           }
-          return true;
-        });
+          return false;
+        })();
       const startX = snapToMinorGrid(x);
       const startY = snapToMinorGrid(y);
       if (!overlapsAt(startX, startY)) return { x: startX, y: startY };
@@ -513,8 +586,15 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
           height: Math.max(1, Number(el.height ?? 1)),
         })),
       ];
+      const blockedIndex = buildPlacementIndex(blocked);
       const overlapsAt = (candidateX: number, candidateY: number) =>
-        blocked.some((box) => boxesOverlap({ x: candidateX, y: candidateY, width, height }, box, 0));
+        (() => {
+          const candidate = { x: candidateX, y: candidateY, width, height };
+          for (const box of getPlacementCandidates(blockedIndex, candidate)) {
+            if (boxesOverlap(candidate, box, 0)) return true;
+          }
+          return false;
+        })();
       const startX = snapToMinorGrid(x);
       const startY = snapToMinorGrid(y);
       if (!overlapsAt(startX, startY)) return { x: startX, y: startY };
@@ -698,6 +778,58 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
     }, "Unable to create person component.");
   }, [canWriteMap, setError, getCenter, addElement, mapId, mapCategoryId, buildPersonHeading, userId, orgChartPersonWidth, orgChartPersonHeight, personElementWidth, personElementHeight]);
 
+  const handleAddEquipment = useCallback(async () => {
+    if (!canWriteMap) return setError("You have view access only for this map.");
+    const center = getCenter();
+    if (!center) return;
+    await addElement({
+      map_id: mapId,
+      element_type: "equipment",
+      heading: buildEquipmentHeading("Equipment Type", "Brand / type / asset ID"),
+      color_hex: null,
+      created_by_user_id: userId,
+      pos_x: center.x,
+      pos_y: center.y,
+      width: personElementWidth,
+      height: personElementHeight,
+    }, "Unable to create equipment component.");
+  }, [canWriteMap, setError, getCenter, addElement, mapId, userId, personElementWidth, personElementHeight]);
+
+  const handleAddEnvironment = useCallback(async () => {
+    if (!canWriteMap) return setError("You have view access only for this map.");
+    const center = getCenter();
+    if (!center) return;
+    await addElement({
+      map_id: mapId,
+      element_type: "environment",
+      heading: buildEnvironmentHeading("Environment detail", environmentFactorTypeOptions[0]),
+      color_hex: null,
+      created_by_user_id: userId,
+      pos_x: center.x,
+      pos_y: center.y,
+      width: personElementWidth,
+      height: personElementHeight,
+    }, "Unable to create environment component.");
+  }, [canWriteMap, setError, getCenter, addElement, mapId, userId, personElementWidth, personElementHeight]);
+
+  const handleAddAnchor = useCallback(async () => {
+    if (!canWriteMap) return setError("You have view access only for this map.");
+    const center = getCenter();
+    if (!center) return;
+    await addElement({
+      map_id: mapId,
+      element_type: "anchor",
+      heading: "Anchor",
+      color_hex: "#0F766E",
+      created_by_user_id: userId,
+      element_config: {},
+      pos_x: center.x,
+      pos_y: center.y,
+      width: anchorNodeWidth,
+      height: anchorNodeHeight,
+    }, "Unable to create anchor.");
+  }, [canWriteMap, setError, getCenter, addElement, mapId, userId, anchorNodeWidth, anchorNodeHeight]);
+
   const handleAddGroupingContainer = useCallback(async () => {
     if (!canWriteMap) return setError("You have view access only for this map.");
     const center = getCenter();
@@ -801,7 +933,7 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
     return await addElement({
       map_id: mapId,
       element_type: "image_asset",
-      heading: args.description.trim() || "Image",
+      heading: args.description.trim(),
       color_hex: null,
       created_by_user_id: userId,
       element_config: {
@@ -1463,7 +1595,7 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
   const handleSaveProcessHeading = useCallback(async (closeAfterSave = true) => {
     if (!canWriteMap) return setError("You have view access only for this map.");
     if (!selectedProcessId) return;
-    const heading = processHeadingDraft.trim() || "New Category";
+    const heading = processHeadingDraft.trim();
     const widthSquares = Number(processWidthDraft.trim());
     const heightSquares = Number(processHeightDraft.trim());
     if (!Number.isInteger(widthSquares) || !Number.isInteger(heightSquares)) {
@@ -1499,7 +1631,7 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
   const handleSaveSystemName = useCallback(async (closeAfterSave = true) => {
     if (!canWriteMap) return setError("You have view access only for this map.");
     if (!selectedSystemId) return;
-    const { data, error: e } = await supabaseBrowser.schema("ms").from("canvas_elements").update({ heading: systemNameDraft.trim() || "System Name" }).eq("id", selectedSystemId).eq("map_id", mapId).select(canvasElementSelectColumns).single();
+    const { data, error: e } = await supabaseBrowser.schema("ms").from("canvas_elements").update({ heading: systemNameDraft.trim() }).eq("id", selectedSystemId).eq("map_id", mapId).select(canvasElementSelectColumns).single();
     if (e || !data) return setError(e?.message || "Unable to save system name.");
     const updated = data as unknown as CanvasElementRow;
     setElements((prev) => prev.map((el) => (el.id === updated.id ? updated : el)));
@@ -1509,7 +1641,7 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
   const handleSaveProcessComponent = useCallback(async (closeAfterSave = true) => {
     if (!canWriteMap) return setError("You have view access only for this map.");
     if (!selectedProcessComponentId) return;
-    const { data, error: e } = await supabaseBrowser.schema("ms").from("canvas_elements").update({ heading: processComponentLabelDraft.trim() || "Process" }).eq("id", selectedProcessComponentId).eq("map_id", mapId).select(canvasElementSelectColumns).single();
+    const { data, error: e } = await supabaseBrowser.schema("ms").from("canvas_elements").update({ heading: processComponentLabelDraft.trim() }).eq("id", selectedProcessComponentId).eq("map_id", mapId).select(canvasElementSelectColumns).single();
     if (e || !data) return setError(e?.message || "Unable to save process.");
     const updated = data as unknown as CanvasElementRow;
     setElements((prev) => prev.map((el) => (el.id === updated.id ? updated : el)));
@@ -1521,19 +1653,34 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
     if (!selectedPersonId) return;
     const isOrgChart = mapCategoryId === "org_chart";
     const currentPerson =
-      selectedPersonId ? elements.find((el) => el.id === selectedPersonId && el.element_type === "person") ?? null : null;
+      selectedPersonId
+        ? elements.find((el) => el.id === selectedPersonId && (el.element_type === "person" || el.element_type === "equipment" || el.element_type === "environment")) ?? null
+        : null;
+    if (!currentPerson) return;
     const currentDirectReportCount = currentPerson
       ? Math.max(
           Number(parseOrgChartPersonConfig(currentPerson.element_config).direct_report_count || 0)
         )
       : 0;
-    const payload = isOrgChart
+    const payload = currentPerson.element_type === "equipment"
+      ? {
+          heading: buildEquipmentHeading(equipmentTypeDraft, equipmentIdentifierDraft),
+          width: personElementWidth,
+          height: personElementHeight,
+        }
+      : currentPerson.element_type === "environment"
+      ? {
+          heading: buildEnvironmentHeading(environmentDetailDraft, environmentFactorTypeDraft),
+          width: personElementWidth,
+          height: personElementHeight,
+        }
+      : isOrgChart
         ? {
-          heading: personRoleDraft.trim() || "Position Title",
+          heading: personRoleDraft.trim(),
           width: orgChartPersonWidth,
           height: orgChartPersonHeight,
           element_config: {
-            position_title: personRoleDraft.trim() || "Position Title",
+            position_title: personRoleDraft.trim(),
             role_id: personRoleIdDraft.trim(),
             department: personDepartmentDraft.trim(),
             occupant_name: personOccupantNameDraft.trim(),
@@ -1555,8 +1702,14 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
             person_type: personTypeDraft.trim(),
           },
         };
+    const saveLabel =
+      currentPerson.element_type === "equipment"
+        ? "equipment"
+        : currentPerson.element_type === "environment"
+          ? "environment"
+          : "person";
     const { data, error: e } = await supabaseBrowser.schema("ms").from("canvas_elements").update(payload).eq("id", selectedPersonId).eq("map_id", mapId).select(canvasElementSelectColumns).single();
-    if (e || !data) return setError(e?.message || "Unable to save person.");
+    if (e || !data) return setError(e?.message || `Unable to save ${saveLabel}.`);
     const updated = data as unknown as CanvasElementRow;
     setElements((prev) => prev.map((el) => (el.id === updated.id ? updated : el)));
     if (closeAfterSave) setSelectedPersonId(null);
@@ -1577,6 +1730,10 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
     personActingStartDateDraft,
     personRecruitingDraft,
     personProposedRoleDraft,
+    equipmentTypeDraft,
+    equipmentIdentifierDraft,
+    environmentDetailDraft,
+    environmentFactorTypeDraft,
     elements,
     personElementWidth,
     personElementHeight,
@@ -1591,7 +1748,7 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
   const handleSaveGroupingContainer = useCallback(async (closeAfterSave = true) => {
     if (!canWriteMap) return setError("You have view access only for this map.");
     if (!selectedGroupingId) return;
-    const heading = groupingLabelDraft.trim() || "Group label";
+    const heading = groupingLabelDraft.trim();
     const widthSquares = Number(groupingWidthDraft.trim());
     const heightSquares = Number(groupingHeightDraft.trim());
     if (!Number.isInteger(widthSquares) || !Number.isInteger(heightSquares)) {
@@ -1604,19 +1761,28 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
     }
     const width = Math.max(groupingMinWidth, snapToMinorGrid(widthSquares * minorGridSize));
     const height = Math.max(groupingMinHeight, snapToMinorGrid(heightSquares * minorGridSize));
+    const current = elements.find((el) => el.id === selectedGroupingId && el.element_type === "grouping_container");
+    const currentConfig = (current?.element_config as Record<string, unknown> | null) ?? {};
+    const headerFontSizeRaw = Number(groupingHeaderFontSizeDraft.trim());
+    const headerFontSize = Number.isFinite(headerFontSizeRaw) ? Math.max(10, Math.min(48, Math.round(headerFontSizeRaw))) : 11;
+    const outlineWidthRaw = Number(groupingOutlineWidthDraft.trim());
+    const outlineWidth = Number.isFinite(outlineWidthRaw) ? Math.max(1, Math.min(12, Math.round(outlineWidthRaw))) : 1;
     const { data, error: e } = await supabaseBrowser.schema("ms").from("canvas_elements").update({
       heading,
       width,
       height,
       element_config: {
+        ...currentConfig,
         header_bg_color: normalizeColorHex(groupingHeaderColorDraft) ?? "#FFFFFF",
+        header_font_size: headerFontSize,
+        outline_width: outlineWidth,
       },
     }).eq("id", selectedGroupingId).eq("map_id", mapId).select(canvasElementSelectColumns).single();
     if (e || !data) return setError(e?.message || "Unable to save grouping container.");
     const updated = data as unknown as CanvasElementRow;
     setElements((prev) => prev.map((el) => (el.id === updated.id ? updated : el)));
     if (closeAfterSave) setSelectedGroupingId(null);
-  }, [canWriteMap, setError, selectedGroupingId, groupingLabelDraft, groupingHeaderColorDraft, groupingWidthDraft, groupingHeightDraft, groupingMinWidthSquares, groupingMinHeightSquares, groupingMinWidth, snapToMinorGrid, minorGridSize, groupingMinHeight, normalizeColorHex, mapId, canvasElementSelectColumns, setElements, setSelectedGroupingId]);
+  }, [canWriteMap, setError, selectedGroupingId, groupingLabelDraft, groupingHeaderColorDraft, groupingHeaderFontSizeDraft, groupingOutlineWidthDraft, groupingWidthDraft, groupingHeightDraft, groupingMinWidthSquares, groupingMinHeightSquares, groupingMinWidth, snapToMinorGrid, minorGridSize, groupingMinHeight, elements, normalizeColorHex, mapId, canvasElementSelectColumns, setElements, setSelectedGroupingId]);
 
   const handleSaveStickyNote = useCallback(async (closeAfterSave = true) => {
     if (!selectedStickyId) return;
@@ -1628,7 +1794,7 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
     const outlineWidthRaw = Number(stickyOutlineWidthDraft.trim());
     const outlineWidth = Number.isFinite(outlineWidthRaw) ? Math.max(1, Math.min(12, Math.round(outlineWidthRaw))) : 2;
     const { data, error: e } = await supabaseBrowser.schema("ms").from("canvas_elements").update({
-      heading: stickyTextDraft.trim() || "Enter Text",
+      heading: stickyTextDraft.trim(),
       element_config: {
         background_color: normalizeColorHex(stickyBackgroundColorDraft) ?? "#FEF08A",
         outline_color: normalizeColorHex(stickyOutlineColorDraft) ?? "#F59E0B",
@@ -1652,7 +1818,7 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
       .schema("ms")
       .from("canvas_elements")
       .update({
-        heading: imageDescriptionDraft.trim() || "Image",
+        heading: imageDescriptionDraft.trim(),
         element_config: nextConfig,
       })
       .eq("id", selectedImageId)
@@ -1676,7 +1842,7 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
       .schema("ms")
       .from("canvas_elements")
       .update({
-        heading: textBoxContentDraft.trim() || "Click to edit text box",
+        heading: textBoxContentDraft.trim(),
         element_config: {
           bold: textBoxBoldDraft,
           italic: textBoxItalicDraft,
@@ -1811,7 +1977,7 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
     const currentIsVertical = currentRotation === 90 || currentRotation === 270;
     const nextIsVertical = flowShapeRotationDraft === 90 || flowShapeRotationDraft === 270;
     const payload: Partial<CanvasElementRow> = {
-      heading: isArrow ? "" : flowShapeTextDraft.trim() || "Shape text",
+      heading: isArrow ? "" : flowShapeTextDraft.trim(),
       color_hex: normalizedColor,
       element_config: {
         ...((current.element_config as Record<string, unknown> | null) ?? {}),
@@ -1919,6 +2085,9 @@ export function useCanvasElementActions(params: UseCanvasElementActionsParams) {
     handleAddSystemCircle,
     handleAddProcessComponent,
     handleAddPerson,
+    handleAddEquipment,
+    handleAddEnvironment,
+    handleAddAnchor,
     handleAddGroupingContainer,
     handleAddStickyNote,
     handleAddTextBox,

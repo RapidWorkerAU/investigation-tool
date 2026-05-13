@@ -157,6 +157,10 @@ const baseTopics: HelpTopic[] = [
             text: "People nodes help show who was involved, who owned a control, who made a decision, or who sat within a reporting structure.",
             nodePreviews: ["person"],
           },
+          {
+            text: "Equipment and environment nodes capture the physical items and contextual conditions that can be tested against factor statements.",
+            nodePreviews: ["equipment", "environment"],
+          },
         ],
       },
       {
@@ -564,6 +568,13 @@ function buildNodeTypesTopic(allowedNodeKinds: NodePaletteKind[]): HelpTopic {
     });
   }
 
+  if (allowed.has("anchor")) {
+    organisationLines.push({
+      text: "Anchors create invisible navigation sequences so viewers can step through the map in a planned order without drawing extra relationship lines.",
+      nodePreviews: ["anchor"],
+    });
+  }
+
   if (allowed.has("sticky_note")) {
     supportingLines.push({
       text: "Sticky notes are lightweight and fast. They are useful for provisional thinking, reminders, unanswered questions, and workshop capture before content is formalised elsewhere.",
@@ -800,6 +811,8 @@ export function CanvasHelpModal({
         return <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#1e3a8a] px-2 text-[7px] font-semibold text-white shadow-[0_8px_20px_rgba(30,58,138,0.35)]">SYS</div>;
       case "process":
         return <div className="relative h-12 w-16 overflow-hidden"><svg viewBox="0 0 700 500" preserveAspectRatio="none" className="h-full w-full drop-shadow-[0_6px_16px_rgba(15,23,42,0.18)]"><path d="M0 0H700V500C640 458 560 450 486 485C435 510 389 509 338 484C260 447 186 446 112 479C74 496 37 503 0 500V0Z" fill="#ff751f" /></svg></div>;
+      case "anchor":
+        return <div className="flex h-12 w-16 flex-col overflow-hidden rounded-lg border border-[#0f766e] bg-white shadow-[0_6px_16px_rgba(15,23,42,0.14)]"><div className="flex h-5 items-center justify-between bg-[#0f766e] px-1 text-white"><svg viewBox="0 0 24 24" className="h-3.5 w-3.5" aria-hidden="true"><path d="M12 3.5v14m-4.5-8H16.5M8 17.5c-2.4-.8-4-2.6-4-4.9h3m9 4.9c2.4-.8 4-2.6 4-4.9h-3M9.2 5.8a2.8 2.8 0 1 0 5.6 0 2.8 2.8 0 0 0-5.6 0Z" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" /></svg><span className="rounded-full bg-white px-1 text-[7px] font-bold text-[#0f766e]">1</span></div><div className="flex flex-1 items-center justify-center px-1"><div className="h-1.5 w-9 rounded bg-slate-700" /></div></div>;
       case "incident_sequence_step":
         return renderMiniDocumentTile("#bfdbfe", "#111827", "Step");
       case "incident_outcome":
@@ -822,6 +835,10 @@ export function CanvasHelpModal({
         return renderMiniDocumentTile("#14b8a6", "#111827", "Recommend");
       case "person":
         return <div className="flex h-14 w-14 items-center justify-center rounded-full border border-slate-300 bg-white shadow-[0_8px_20px_rgba(15,23,42,0.16)]"><img src="/icons/account.svg" alt="" className="h-full w-full object-contain" /></div>;
+      case "equipment":
+        return <div className="flex h-14 w-14 items-center justify-center rounded-full border border-slate-300 bg-white shadow-[0_8px_20px_rgba(15,23,42,0.16)]"><img src="/icons/equipment.svg" alt="" className="h-full w-full object-contain" /></div>;
+      case "environment":
+        return <div className="flex h-14 w-14 items-center justify-center rounded-full border border-slate-300 bg-white shadow-[0_8px_20px_rgba(15,23,42,0.16)]"><img src="/icons/environment.svg" alt="" className="h-full w-full object-contain" /></div>;
       case "category":
         return <div className="flex h-12 w-16 flex-col border bg-[#249BC7] px-1 py-1 text-white shadow-[0_6px_20px_rgba(15,23,42,0.18)]" style={{ borderColor: "#249BC7" }}><div className="text-center text-[5px] font-semibold uppercase tracking-[0.14em]">Category</div><div className="flex flex-1 items-center justify-center"><div className="h-1.5 w-8 rounded bg-white/80" /></div></div>;
       case "grouping_container":

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  applyNodeChanges,
   Background,
   BackgroundVariant,
   type Edge,
@@ -9,7 +10,6 @@ import {
   type Node,
   ReactFlow,
   ReactFlowProvider,
-  useNodesState,
   type Viewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -21,6 +21,10 @@ import {
 } from "@/lib/investigationTemplates";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import {
+  anchorNodeHeight,
+  anchorNodeMinHeight,
+  anchorNodeMinWidth,
+  anchorNodeWidth,
   bowtieControlHeight,
   bowtieDefaultWidth,
   bowtieHazardHeight,
@@ -33,6 +37,7 @@ import {
   incidentSquareSize,
   incidentThreeOneHeight,
   incidentThreeTwoHeight,
+  type AnchorLinkRow,
   type CanvasElementRow,
   categoryColorOptions,
   clamp,
@@ -71,6 +76,8 @@ import {
   type NodeRelationRow,
   type OutlineItemRow,
   parseDisciplines,
+  parseEquipmentLabels,
+  parseEnvironmentLabels,
   buildPersonHeading,
   parsePersonLabels,
   parseOrgChartPersonConfig,
@@ -328,6 +335,8 @@ function SystemMapCanvasInner({
   const mapInfoButtonRef = useRef<HTMLButtonElement | null>(null);
   const disciplineMenuRef = useRef<HTMLDivElement | null>(null);
   const saveViewportTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const anchorNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const anchorNavigateRef = useRef<((anchorId: string, direction: "previous" | "next") => void) | null>(null);
   const resizePersistTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const resizePersistValuesRef = useRef<Map<string, { width: number; height: number }>>(new Map());
   const savedPos = useRef<Record<string, { x: number; y: number }>>({});
@@ -335,6 +344,9 @@ function SystemMapCanvasInner({
   const lastMobileTapRef = useRef<{ id: string; ts: number } | null>(null);
   const clipboardPasteCountRef = useRef(1);
   const isNodeDragActiveRef = useRef(false);
+  const flowNodesRef = useRef<Node<FlowData>[]>([]);
+  const pendingFlowNodePositionChangesRef = useRef<NodeChange<Node<FlowData>>[]>([]);
+  const flowNodeChangeFrameRef = useRef<number | null>(null);
   const imagePathPairsRef = useRef<Array<{ id: string; path: string }>>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string>("");
@@ -346,6 +358,7 @@ function SystemMapCanvasInner({
   const [nodes, setNodes] = useState<DocumentNodeRow[]>([]);
   const [elements, setElements] = useState<CanvasElementRow[]>([]);
   const [relations, setRelations] = useState<NodeRelationRow[]>([]);
+  const [anchorLinks, setAnchorLinks] = useState<AnchorLinkRow[]>([]);
   const [outlineItems, setOutlineItems] = useState<OutlineItemRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingProgress, setLoadingProgress] = useState(25);
@@ -384,6 +397,11 @@ function SystemMapCanvasInner({
   const [pendingViewport, setPendingViewport] = useState<Viewport | null>(null);
   const [hasStoredViewport, setHasStoredViewport] = useState(false);
   const mobileViewportInitializedRef = useRef<string | null>(null);
+  useEffect(() => {
+    return () => {
+      if (anchorNoticeTimerRef.current) clearTimeout(anchorNoticeTimerRef.current);
+    };
+  }, []);
 
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [showSuggestionsMenu, setShowSuggestionsMenu] = useState(false);
@@ -552,6 +570,7 @@ function SystemMapCanvasInner({
     nodes,
     elements,
     relations,
+    anchorLinks,
     outlineItems,
   });
   const memberDisplayNameByUserId = useMemo(() => {
@@ -562,6 +581,120 @@ function SystemMapCanvasInner({
     });
     return m;
   }, [mapMembers]);
+  const anchorElements = useMemo(
+    () => elements.filter((element) => element.element_type === "anchor"),
+    [elements]
+  );
+  const anchorById = useMemo(
+    () => new Map(anchorElements.map((anchor) => [anchor.id, anchor])),
+    [anchorElements]
+  );
+  const getAnchorCreatorName = useCallback(
+    (anchor: CanvasElementRow) =>
+      (anchor.created_by_user_id ? memberDisplayNameByUserId.get(anchor.created_by_user_id) : null) ||
+      (anchor.created_by_user_id === userId ? userEmail : null) ||
+      "Unknown user",
+    [memberDisplayNameByUserId, userEmail, userId]
+  );
+  const anchorSequenceNumberById = useMemo(() => {
+    const sequenceNumbers = new Map<string, number>();
+    const anchors = anchorElements
+      .slice()
+      .sort((a, b) => {
+        const createdA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const createdB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        if (createdA !== createdB) return createdA - createdB;
+        return a.id.localeCompare(b.id);
+      });
+    const anchorIds = new Set(anchors.map((anchor) => anchor.id));
+    const adjacency = new Map<string, Set<string>>();
+    anchorLinks.forEach((link) => {
+      if (!anchorIds.has(link.anchor_id) || !anchorIds.has(link.linked_anchor_id)) return;
+      if (!adjacency.has(link.anchor_id)) adjacency.set(link.anchor_id, new Set());
+      if (!adjacency.has(link.linked_anchor_id)) adjacency.set(link.linked_anchor_id, new Set());
+      adjacency.get(link.anchor_id)?.add(link.linked_anchor_id);
+      adjacency.get(link.linked_anchor_id)?.add(link.anchor_id);
+    });
+    const fallbackOrderById = new Map(anchors.map((anchor, index) => [anchor.id, index]));
+    const visited = new Set<string>();
+    anchors.forEach((startAnchor) => {
+      if (visited.has(startAnchor.id)) return;
+      const componentIds = new Set<string>();
+      const stack = [startAnchor.id];
+      while (stack.length) {
+        const id = stack.pop();
+        if (!id || componentIds.has(id)) continue;
+        componentIds.add(id);
+        adjacency.get(id)?.forEach((nextId) => {
+          if (!componentIds.has(nextId)) stack.push(nextId);
+        });
+      }
+      const orderByAnchorId = new Map<string, number>();
+      anchorLinks.forEach((link) => {
+        if (!componentIds.has(link.anchor_id) || !componentIds.has(link.linked_anchor_id)) return;
+        const order = Number(link.sort_order);
+        if (!Number.isFinite(order)) return;
+        const current = orderByAnchorId.get(link.linked_anchor_id);
+        if (current == null || order < current) orderByAnchorId.set(link.linked_anchor_id, order);
+      });
+      const orderedIds = anchors
+        .filter((anchor) => componentIds.has(anchor.id))
+        .sort((a, b) => {
+          const orderA = orderByAnchorId.get(a.id);
+          const orderB = orderByAnchorId.get(b.id);
+          if (orderA != null && orderB != null && orderA !== orderB) return orderA - orderB;
+          if (orderA != null && orderB == null) return -1;
+          if (orderA == null && orderB != null) return 1;
+          return (fallbackOrderById.get(a.id) ?? 0) - (fallbackOrderById.get(b.id) ?? 0);
+        })
+        .map((anchor) => anchor.id);
+      orderedIds.forEach((id, index) => {
+        visited.add(id);
+        sequenceNumbers.set(id, index + 1);
+      });
+    });
+    return sequenceNumbers;
+  }, [anchorElements, anchorLinks]);
+  const anchorGroupIdsById = useMemo(() => {
+    const groups = new Map<string, string[]>();
+    const anchors = anchorElements
+      .slice()
+      .sort((a, b) => {
+        const createdA = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const createdB = b.created_at ? new Date(b.created_at).getTime() : 0;
+        if (createdA !== createdB) return createdA - createdB;
+        return a.id.localeCompare(b.id);
+      });
+    const anchorIds = new Set(anchors.map((anchor) => anchor.id));
+    const adjacency = new Map<string, Set<string>>();
+    anchorLinks.forEach((link) => {
+      if (!anchorIds.has(link.anchor_id) || !anchorIds.has(link.linked_anchor_id)) return;
+      if (!adjacency.has(link.anchor_id)) adjacency.set(link.anchor_id, new Set());
+      if (!adjacency.has(link.linked_anchor_id)) adjacency.set(link.linked_anchor_id, new Set());
+      adjacency.get(link.anchor_id)?.add(link.linked_anchor_id);
+      adjacency.get(link.linked_anchor_id)?.add(link.anchor_id);
+    });
+    const visited = new Set<string>();
+    anchors.forEach((startAnchor) => {
+      if (visited.has(startAnchor.id)) return;
+      const componentIds = new Set<string>();
+      const stack = [startAnchor.id];
+      while (stack.length) {
+        const id = stack.pop();
+        if (!id || componentIds.has(id) || !anchorIds.has(id)) continue;
+        componentIds.add(id);
+        adjacency.get(id)?.forEach((nextId) => {
+          if (!componentIds.has(nextId)) stack.push(nextId);
+        });
+      }
+      const orderedIds = anchors.filter((anchor) => componentIds.has(anchor.id)).map((anchor) => anchor.id);
+      orderedIds.forEach((id) => {
+        visited.add(id);
+        groups.set(id, orderedIds);
+      });
+    });
+    return groups;
+  }, [anchorElements, anchorLinks]);
   const applyHistorySnapshotLocally = useCallback((snapshot: MapSessionHistorySnapshot) => {
     if (!map) return;
     const restored = resolveMapSessionHistorySnapshotState(snapshot);
@@ -578,6 +711,7 @@ function SystemMapCanvasInner({
     setNodes(restored.nodes);
     setElements(restored.elements);
     setRelations(restored.relations);
+    setAnchorLinks(restored.anchorLinks);
     setOutlineItems(restored.outlineItems);
   }, [map]);
   const {
@@ -595,6 +729,7 @@ function SystemMapCanvasInner({
     nodes,
     elements,
     relations,
+    anchorLinks,
     outlineItems,
     applyHistorySnapshotLocally,
     setError,
@@ -749,6 +884,7 @@ function SystemMapCanvasInner({
   const [selectedSystemId, setSelectedSystemId] = useState<string | null>(null);
   const [selectedProcessComponentId, setSelectedProcessComponentId] = useState<string | null>(null);
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
+  const [selectedAnchorId, setSelectedAnchorId] = useState<string | null>(null);
   const [selectedGroupingId, setSelectedGroupingId] = useState<string | null>(null);
   const [selectedStickyId, setSelectedStickyId] = useState<string | null>(null);
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
@@ -756,6 +892,7 @@ function SystemMapCanvasInner({
   const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
   const [selectedFlowShapeId, setSelectedFlowShapeId] = useState<string | null>(null);
   const [selectedBowtieElementId, setSelectedBowtieElementId] = useState<string | null>(null);
+  const selectedFlowIdsRef = useRef<Set<string>>(new Set());
   const canvasSelectionSetters = useMemo<CanvasSelectionSetters>(
     () => ({
       setSelectedNodeId,
@@ -763,6 +900,7 @@ function SystemMapCanvasInner({
       setSelectedSystemId,
       setSelectedProcessComponentId,
       setSelectedPersonId,
+      setSelectedAnchorId,
       setSelectedGroupingId,
       setSelectedStickyId,
       setSelectedImageId,
@@ -802,8 +940,19 @@ function SystemMapCanvasInner({
   const [personActingStartDateDraft, setPersonActingStartDateDraft] = useState("");
   const [personRecruitingDraft, setPersonRecruitingDraft] = useState(false);
   const [personProposedRoleDraft, setPersonProposedRoleDraft] = useState(false);
+  const [equipmentTypeDraft, setEquipmentTypeDraft] = useState("");
+  const [equipmentIdentifierDraft, setEquipmentIdentifierDraft] = useState("");
+  const [environmentDetailDraft, setEnvironmentDetailDraft] = useState("");
+  const [environmentFactorTypeDraft, setEnvironmentFactorTypeDraft] = useState("Weather");
+  const [anchorTitleDraft, setAnchorTitleDraft] = useState("");
+  const [anchorColorDraft, setAnchorColorDraft] = useState("#0F766E");
+  const [anchorSearchDraft, setAnchorSearchDraft] = useState("");
+  const [anchorLinkedOrderDraft, setAnchorLinkedOrderDraft] = useState<string[]>([]);
+  const [anchorNavigationNotice, setAnchorNavigationNotice] = useState<{ message: string; left: number; top: number } | null>(null);
   const [groupingLabelDraft, setGroupingLabelDraft] = useState("");
   const [groupingHeaderColorDraft, setGroupingHeaderColorDraft] = useState("#FFFFFF");
+  const [groupingHeaderFontSizeDraft, setGroupingHeaderFontSizeDraft] = useState("11");
+  const [groupingOutlineWidthDraft, setGroupingOutlineWidthDraft] = useState("1");
   const [groupingWidthDraft, setGroupingWidthDraft] = useState<string>(String(Math.round(groupingDefaultWidth / minorGridSize)));
   const [groupingHeightDraft, setGroupingHeightDraft] = useState<string>(String(Math.round(groupingDefaultHeight / minorGridSize)));
   const [processFontSizeDraft, setProcessFontSizeDraft] = useState("12");
@@ -876,6 +1025,7 @@ function SystemMapCanvasInner({
     setNodes,
     setElements,
     setRelations,
+    setAnchorLinks,
     setImageUrlsByElementId,
     setHasStoredViewport,
     setPendingViewport,
@@ -1010,6 +1160,17 @@ function SystemMapCanvasInner({
     if (!/^#[0-9a-fA-F]{6}$/.test(trimmed)) return null;
     return trimmed.toUpperCase();
   }, []);
+  const selectedAnchorGroupIds = useMemo(
+    () => (selectedAnchorId ? (anchorGroupIdsById.get(selectedAnchorId) ?? [selectedAnchorId]) : []),
+    [anchorGroupIdsById, selectedAnchorId]
+  );
+  const selectedAnchorGroupColor = useMemo(() => {
+    const color =
+      selectedAnchorGroupIds
+        .map((id) => normalizePreviewHex(anchorById.get(id)?.color_hex ?? null))
+        .find((value): value is string => Boolean(value)) ?? "#0F766E";
+    return color;
+  }, [anchorById, normalizePreviewHex, selectedAnchorGroupIds]);
   const isHeicLike = useCallback((mimeRaw: string | null | undefined, nameRaw: string | null | undefined) => {
     const mime = String(mimeRaw ?? "").toLowerCase();
     const name = String(nameRaw ?? "").toLowerCase();
@@ -1055,7 +1216,7 @@ function SystemMapCanvasInner({
     const cfg = (selectedShape.element_config as Record<string, unknown> | null) ?? {};
     const isArrow = selectedShape.element_type === "shape_arrow";
     const canFlipDirection = selectedShape.element_type === "shape_pentagon" || selectedShape.element_type === "shape_chevron_left";
-    const persistedHeading = isArrow ? "" : selectedShape.heading ?? "Shape text";
+    const persistedHeading = isArrow ? "" : selectedShape.heading ?? "";
     const persistedAlignRaw = String(cfg.align ?? "center");
     const persistedAlign = persistedAlignRaw === "left" || persistedAlignRaw === "right" ? persistedAlignRaw : "center";
     const persistedFontSizeRaw = Number(cfg.font_size ?? 24);
@@ -1107,9 +1268,19 @@ function SystemMapCanvasInner({
     normalizePreviewHex,
   ]);
   const canvasPreviewElements = useMemo(() => {
-    if (!selectedProcessId && !selectedGroupingId && !selectedStickyId && !selectedTextBoxId && !selectedTableId && !selectedFlowShapeId) return elements;
+    if (!selectedProcessId && !selectedAnchorId && !selectedGroupingId && !selectedStickyId && !selectedTextBoxId && !selectedTableId && !selectedFlowShapeId) return elements;
     let changed = false;
+    const anchorGroupPreviewColor = normalizePreviewHex(anchorColorDraft) ?? selectedAnchorGroupColor;
+    const selectedAnchorGroupIdSet = new Set(selectedAnchorGroupIds);
     const next = elements.map((el) => {
+      if (selectedAnchorId && selectedAnchorGroupIdSet.has(el.id) && el.element_type === "anchor") {
+        changed = true;
+        return {
+          ...el,
+          heading: el.id === selectedAnchorId ? anchorTitleDraft : el.heading,
+          color_hex: anchorGroupPreviewColor,
+        };
+      }
       if (selectedProcessId && el.id === selectedProcessId && el.element_type === "category") {
         changed = true;
         const parsedProcessSize = Number(processFontSizeDraft.trim());
@@ -1156,12 +1327,18 @@ function SystemMapCanvasInner({
       }
       if (selectedGroupingId && el.id === selectedGroupingId && el.element_type === "grouping_container") {
         changed = true;
+        const parsedHeaderFontSize = Number(groupingHeaderFontSizeDraft.trim());
+        const headerFontSize = Number.isFinite(parsedHeaderFontSize) ? Math.max(10, Math.min(48, Math.round(parsedHeaderFontSize))) : 11;
+        const parsedOutlineWidth = Number(groupingOutlineWidthDraft.trim());
+        const outlineWidth = Number.isFinite(parsedOutlineWidth) ? Math.max(1, Math.min(12, Math.round(parsedOutlineWidth))) : 1;
         return {
           ...el,
           heading: groupingLabelDraft,
           element_config: {
             ...((el.element_config as Record<string, unknown> | null) ?? {}),
             header_bg_color: normalizePreviewHex(groupingHeaderColorDraft) ?? (el.element_config as Record<string, unknown> | null)?.header_bg_color,
+            header_font_size: headerFontSize,
+            outline_width: outlineWidth,
           },
         };
       }
@@ -1280,6 +1457,9 @@ function SystemMapCanvasInner({
   }, [
     elements,
     selectedProcessId,
+    selectedAnchorId,
+    selectedAnchorGroupIds,
+    selectedAnchorGroupColor,
     selectedGroupingId,
     selectedStickyId,
     selectedTextBoxId,
@@ -1291,8 +1471,12 @@ function SystemMapCanvasInner({
     processOutlineColorDraft,
     processOutlineWidthDraft,
     processFontSizeDraft,
+    anchorTitleDraft,
+    anchorColorDraft,
     groupingLabelDraft,
     groupingHeaderColorDraft,
+    groupingHeaderFontSizeDraft,
+    groupingOutlineWidthDraft,
     stickyTextDraft,
     stickyBackgroundColorDraft,
     stickyOutlineColorDraft,
@@ -1332,6 +1516,30 @@ function SystemMapCanvasInner({
     flowShapeRotationDraft,
     normalizePreviewHex,
   ]);
+  const anchorGroupColorById = useMemo(() => {
+    const colors = new Map<string, string>();
+    const previewAnchorById = new Map(
+      canvasPreviewElements
+        .filter((element) => element.element_type === "anchor")
+        .map((anchor) => [anchor.id, anchor] as const)
+    );
+    const seen = new Set<string>();
+    anchorGroupIdsById.forEach((groupIds, anchorId) => {
+      if (seen.has(anchorId)) return;
+      const groupColor =
+        groupIds
+          .map((id) => normalizePreviewHex(previewAnchorById.get(id)?.color_hex ?? null))
+          .find((value): value is string => Boolean(value)) ?? "#0F766E";
+      groupIds.forEach((id) => {
+        seen.add(id);
+        colors.set(id, groupColor);
+      });
+    });
+    previewAnchorById.forEach((anchor, id) => {
+      if (!colors.has(id)) colors.set(id, normalizePreviewHex(anchor.color_hex ?? null) ?? "#0F766E");
+    });
+    return colors;
+  }, [anchorGroupIdsById, canvasPreviewElements, normalizePreviewHex]);
 
   const typesById = useMemo(() => new Map(types.map((t) => [t.id, t])), [types]);
   const elementsById = useMemo(() => new Map(elements.map((el) => [el.id, el])), [elements]);
@@ -1427,6 +1635,15 @@ function SystemMapCanvasInner({
           y: el.pos_y,
           width: mapCategoryId === "org_chart" ? orgChartPersonWidth : personElementWidth,
           height: mapCategoryId === "org_chart" ? orgChartPersonHeight : personElementHeight,
+        });
+        return;
+      }
+      if (el.element_type === "equipment" || el.element_type === "environment") {
+        bounds.set(el.id, {
+          x: el.pos_x,
+          y: el.pos_y,
+          width: personElementWidth,
+          height: personElementHeight,
         });
         return;
       }
@@ -1540,7 +1757,52 @@ function SystemMapCanvasInner({
     return { x: node.pos_x, y: node.pos_y, width: size.width, height: size.height };
   }, [flowElementBoundsById, nodesById, getNodeSize]);
 
-  const [flowNodes, setFlowNodes, onFlowNodesChange] = useNodesState<Node<FlowData>>([]);
+  const [flowNodes, setFlowNodesState] = useState<Node<FlowData>[]>([]);
+  const setFlowNodes = useCallback<React.Dispatch<React.SetStateAction<Node<FlowData>[]>>>((value) => {
+    const next =
+      typeof value === "function"
+        ? (value as (previous: Node<FlowData>[]) => Node<FlowData>[])(flowNodesRef.current)
+        : value;
+    flowNodesRef.current = next;
+    setFlowNodesState(next);
+  }, []);
+  useEffect(() => {
+    flowNodesRef.current = flowNodes;
+  }, [flowNodes]);
+  const applyFlowNodeChanges = useCallback(
+    (changes: NodeChange<Node<FlowData>>[]) => {
+      if (!changes.length) return;
+      setFlowNodes((previous) => applyNodeChanges(changes, previous));
+    },
+    [setFlowNodes]
+  );
+  const flushPendingFlowNodePositionChanges = useCallback(() => {
+    if (flowNodeChangeFrameRef.current !== null) {
+      cancelAnimationFrame(flowNodeChangeFrameRef.current);
+      flowNodeChangeFrameRef.current = null;
+    }
+    const pending = pendingFlowNodePositionChangesRef.current;
+    if (!pending.length) return;
+    pendingFlowNodePositionChangesRef.current = [];
+    const latestByNodeId = new Map<string, NodeChange<Node<FlowData>>>();
+    pending.forEach((change) => {
+      const id = (change as { id?: string }).id;
+      if (!id) return;
+      latestByNodeId.set(id, change);
+    });
+    applyFlowNodeChanges(Array.from(latestByNodeId.values()));
+  }, [applyFlowNodeChanges]);
+  const scheduleFlowNodePositionChanges = useCallback(
+    (changes: NodeChange<Node<FlowData>>[]) => {
+      pendingFlowNodePositionChangesRef.current.push(...changes);
+      if (flowNodeChangeFrameRef.current !== null) return;
+      flowNodeChangeFrameRef.current = requestAnimationFrame(() => {
+        flowNodeChangeFrameRef.current = null;
+        flushPendingFlowNodePositionChanges();
+      });
+    },
+    [flushPendingFlowNodePositionChanges]
+  );
   const scheduleHoveredNodeId = useCallback((value: string | null) => {
     if (isNodeDragActiveRef.current) return;
     queuedHoveredNodeRef.current = value;
@@ -1563,12 +1825,20 @@ function SystemMapCanvasInner({
   }, []);
   useEffect(() => {
     return () => {
+      if (flowNodeChangeFrameRef.current !== null) cancelAnimationFrame(flowNodeChangeFrameRef.current);
       if (hoveredNodeFrameRef.current !== null) cancelAnimationFrame(hoveredNodeFrameRef.current);
       if (hoveredEdgeFrameRef.current !== null) cancelAnimationFrame(hoveredEdgeFrameRef.current);
+      pendingFlowNodePositionChangesRef.current = [];
     };
   }, []);
   const handleFlowNodesChange = useCallback((changes: NodeChange<Node<FlowData>>[]) => {
-    onFlowNodesChange(changes);
+    const positionOnly = changes.length > 0 && changes.every((change) => (change as { type?: string }).type === "position");
+    if (positionOnly) {
+      scheduleFlowNodePositionChanges(changes);
+      return;
+    }
+    flushPendingFlowNodePositionChanges();
+    applyFlowNodeChanges(changes);
     const dimensionChanges = changes.filter((c) => {
       const change = c as { type?: string; id?: string; dimensions?: { width: number; height: number } };
       return (
@@ -1593,6 +1863,17 @@ function SystemMapCanvasInner({
         const height = Math.max(processMinHeight, snapToMinorGrid(change.dimensions.height));
         const currentWidth = Math.max(processMinWidth, snapToMinorGrid(current.width || processHeadingWidth));
         const currentHeight = Math.max(processMinHeight, snapToMinorGrid(current.height || processHeadingHeight));
+        if (width !== currentWidth || height !== currentHeight) {
+          nextSizes.set(elementId, { width, height });
+          if (change.resizing === false) completedResizeIds.add(elementId);
+        }
+        return;
+      }
+      if (current.element_type === "anchor") {
+        const width = Math.max(anchorNodeMinWidth, snapToMinorGrid(change.dimensions.width));
+        const height = Math.max(anchorNodeMinHeight, Math.round((width / anchorNodeWidth) * anchorNodeHeight));
+        const currentWidth = Math.max(anchorNodeMinWidth, snapToMinorGrid(current.width || anchorNodeWidth));
+        const currentHeight = Math.max(anchorNodeMinHeight, Math.round((currentWidth / anchorNodeWidth) * anchorNodeHeight));
         if (width !== currentWidth || height !== currentHeight) {
           nextSizes.set(elementId, { width, height });
           if (change.resizing === false) completedResizeIds.add(elementId);
@@ -1852,7 +2133,9 @@ function SystemMapCanvasInner({
       resizePersistTimersRef.current.set(elementId, timer);
     });
   }, [
-    onFlowNodesChange,
+    applyFlowNodeChanges,
+    flushPendingFlowNodePositionChanges,
+    scheduleFlowNodePositionChanges,
     elementsById,
     elements,
     nodes,
@@ -2067,9 +2350,13 @@ function SystemMapCanvasInner({
     });
     return counts;
   }, [elements, mapCategoryId, relations]);
+  const handleAnchorNodeNavigate = useCallback((anchorId: string, direction: "previous" | "next") => {
+    anchorNavigateRef.current?.(anchorId, direction);
+  }, []);
 
   useEffect(() => {
     if (isNodeDragActiveRef.current) return;
+    const currentSelectedFlowIds = selectedFlowIdsRef.current;
     const directReportCountByPersonNormalizedId = buildOrgDirectReportCountByPersonNormalizedId({
       elements: canvasPreviewElements,
       relations,
@@ -2085,14 +2372,14 @@ function SystemMapCanvasInner({
     const builtNodes: Node<FlowData>[] = [
         ...buildGroupingFlowNodes({
           groupingElements,
-          selectedFlowIds,
+          selectedFlowIds: currentSelectedFlowIds,
           canWriteMap: canManipulateCanvasElements,
           canEditElement,
         }),
         ...buildDocumentFlowNodes({
           nodes,
           typesById,
-          selectedFlowIds,
+          selectedFlowIds: currentSelectedFlowIds,
           canWriteMap: canManipulateCanvasElements,
           getNodeSize,
           unconfiguredDocumentTitle,
@@ -2100,7 +2387,7 @@ function SystemMapCanvasInner({
         ...canvasPreviewElements.map((el) => {
           const primaryElementNode = buildPrimaryElementFlowNode({
             element: el,
-            selectedFlowIds,
+            selectedFlowIds: currentSelectedFlowIds,
             selectedTableId,
             canEditElement,
             canWriteMap: canManipulateCanvasElements,
@@ -2114,6 +2401,9 @@ function SystemMapCanvasInner({
             imageUrlsByElementId,
             directReportCountByPersonNormalizedId,
             orgDirectReportCountByPersonId,
+            anchorSequenceNumberById,
+            anchorGroupColorById,
+            onNavigateAnchor: handleAnchorNodeNavigate,
             onTableCellCommit: handleTableCellCommit,
             onTableCellStyleCommit: handleTableCellStyleCommit,
             onToggleIncidentDetail: handleToggleIncidentDetail,
@@ -2121,7 +2411,7 @@ function SystemMapCanvasInner({
           if (primaryElementNode !== undefined) return primaryElementNode;
           return buildSecondaryElementFlowNode({
             element: el,
-            selectedFlowIds,
+            selectedFlowIds: currentSelectedFlowIds,
             canEditElement,
             canWriteMap: canManipulateCanvasElements,
             imageUrlsByElementId,
@@ -2140,7 +2430,32 @@ function SystemMapCanvasInner({
       },
     }));
     setFlowNodes(nextNodes);
-  }, [nodes, canvasPreviewElements, typesById, setFlowNodes, getNodeSize, selectedFlowIds, selectedTableId, canManipulateCanvasElements, canEditElement, selectedFlowShapeId, hasUnsavedFlowShapeDraftChanges, mapCategoryId, memberDisplayNameByUserId, userEmail, userId, formatStickyDate, imageUrlsByElementId, handleTableCellCommit, handleTableCellStyleCommit, handleOpenEvidenceMediaOverlay, handleToggleIncidentDetail, canvasInteractionLocked, orgDirectReportCountByPersonId, relations]);
+  }, [nodes, canvasPreviewElements, typesById, setFlowNodes, getNodeSize, selectedTableId, canManipulateCanvasElements, canEditElement, selectedFlowShapeId, hasUnsavedFlowShapeDraftChanges, mapCategoryId, memberDisplayNameByUserId, userEmail, userId, formatStickyDate, imageUrlsByElementId, handleAnchorNodeNavigate, handleTableCellCommit, handleTableCellStyleCommit, handleOpenEvidenceMediaOverlay, handleToggleIncidentDetail, canvasInteractionLocked, orgDirectReportCountByPersonId, anchorSequenceNumberById, anchorGroupColorById, relations]);
+
+  useEffect(() => {
+    const previousSelectedFlowIds = selectedFlowIdsRef.current;
+    selectedFlowIdsRef.current = selectedFlowIds;
+    if (areStringSetsEqual(previousSelectedFlowIds, selectedFlowIds)) return;
+    const changedIds = new Set<string>();
+    previousSelectedFlowIds.forEach((id) => changedIds.add(id));
+    selectedFlowIds.forEach((id) => changedIds.add(id));
+    setFlowNodes((prev) =>
+      prev.map((node) => {
+        if (!changedIds.has(node.id)) return node;
+        const selected = selectedFlowIds.has(node.id);
+        const boxShadow = selected ? "0 0 0 2px rgba(15,23,42,0.9)" : "none";
+        if (node.selected === selected && node.style?.boxShadow === boxShadow) return node;
+        return {
+          ...node,
+          selected,
+          style: {
+            ...node.style,
+            boxShadow,
+          },
+        };
+      })
+    );
+  }, [selectedFlowIds, setFlowNodes]);
 
   const highlightedRelatedDocumentIds = useMemo(() => {
     if (isNodeDragActive) return new Set<string>();
@@ -2206,6 +2521,16 @@ function SystemMapCanvasInner({
 
   const relationById = useMemo(() => new Map(relations.map((rel) => [rel.id, rel])), [relations]);
   const flowEdges = useMemo(() => {
+    if (isNodeDragActive) {
+      return flowEdgesBase.map((edge) => ({
+        ...edge,
+        data: {
+          ...(edge.data ?? {}),
+          displayLabel: "",
+          skipObstacleLabelPlacement: true,
+        },
+      }));
+    }
     const hoveredNodeElementId = hoveredNodeId?.startsWith("process:") ? parseProcessFlowId(hoveredNodeId) : null;
     const hoveredGroupingId = hoveredNodeElementId;
     const isConnectedToHoveredNode = (rel: NodeRelationRow) =>
@@ -2234,7 +2559,7 @@ function SystemMapCanvasInner({
         labelStyle: { ...(edge.labelStyle ?? {}), fill: labelFill },
       };
     });
-  }, [flowEdgesBase, relationById, hoveredNodeId, hoveredEdgeId, relations]);
+  }, [flowEdgesBase, isNodeDragActive, relationById, hoveredNodeId, hoveredEdgeId, relations]);
 
   const selectedNode = useMemo(
     () => (selectedNodeId ? nodes.find((n) => n.id === selectedNodeId) ?? null : null),
@@ -2253,8 +2578,15 @@ function SystemMapCanvasInner({
     [selectedProcessComponentId, elements]
   );
   const selectedPerson = useMemo(
-    () => (selectedPersonId ? elements.find((el) => el.id === selectedPersonId && el.element_type === "person") ?? null : null),
+    () =>
+      selectedPersonId
+        ? elements.find((el) => el.id === selectedPersonId && (el.element_type === "person" || el.element_type === "equipment" || el.element_type === "environment")) ?? null
+        : null,
     [selectedPersonId, elements]
+  );
+  const selectedAnchor = useMemo(
+    () => (selectedAnchorId ? elements.find((el) => el.id === selectedAnchorId && el.element_type === "anchor") ?? null : null),
+    [selectedAnchorId, elements]
   );
   const selectedGrouping = useMemo(
     () => (selectedGroupingId ? elements.find((el) => el.id === selectedGroupingId && el.element_type === "grouping_container") ?? null : null),
@@ -2299,6 +2631,80 @@ function SystemMapCanvasInner({
         : null,
     [selectedBowtieElementId, elements]
   );
+  const selectedAnchorOrderIds = useMemo(
+    () => {
+      if (!selectedAnchorId) return [];
+      const knownGroupIds = selectedAnchorGroupIds.length ? selectedAnchorGroupIds : [selectedAnchorId];
+      const groupIdSet = new Set(knownGroupIds.filter((id) => anchorById.has(id)));
+      groupIdSet.add(selectedAnchorId);
+      const orderedDraftIds = anchorLinkedOrderDraft.filter((id) => groupIdSet.has(id));
+      const missingIds = [...groupIdSet]
+        .filter((id) => !orderedDraftIds.includes(id))
+        .sort(
+          (a, b) =>
+            (anchorSequenceNumberById.get(a) ?? 1) - (anchorSequenceNumberById.get(b) ?? 1) ||
+            (anchorById.get(a)?.heading ?? "").localeCompare(anchorById.get(b)?.heading ?? "")
+        );
+      return [...orderedDraftIds, ...missingIds];
+    },
+    [anchorById, anchorLinkedOrderDraft, anchorSequenceNumberById, selectedAnchorGroupIds, selectedAnchorId]
+  );
+  const selectedAnchorSequenceNumber = selectedAnchorId
+    ? Math.max(1, selectedAnchorOrderIds.indexOf(selectedAnchorId) + 1 || anchorSequenceNumberById.get(selectedAnchorId) || 1)
+    : 1;
+  const selectedAnchorOrderIdSet = useMemo(
+    () => new Set(selectedAnchorOrderIds),
+    [selectedAnchorOrderIds]
+  );
+  const selectedAnchorDirectLinkedIdSet = useMemo(
+    () =>
+      new Set(
+        selectedAnchorId
+          ? anchorLinks
+              .filter((link) => link.anchor_id === selectedAnchorId && anchorById.has(link.linked_anchor_id))
+              .map((link) => link.linked_anchor_id)
+          : []
+      ),
+    [anchorById, anchorLinks, selectedAnchorId]
+  );
+  const selectedAnchorOrderItems = useMemo(
+    () =>
+      selectedAnchorOrderIds
+        .map((id, index) => {
+          const anchor = anchorById.get(id);
+          if (!anchor) return null;
+          return {
+            id: anchor.id,
+            title: anchor.heading || "Anchor",
+            creatorName: getAnchorCreatorName(anchor),
+            sequenceNumber: index + 1,
+            isCurrent: anchor.id === selectedAnchorId,
+            isDirectLink: anchor.id !== selectedAnchorId && selectedAnchorDirectLinkedIdSet.has(anchor.id),
+          };
+        })
+        .filter(Boolean) as Array<{ id: string; title: string; creatorName: string; sequenceNumber: number; isCurrent?: boolean; isDirectLink?: boolean }>,
+    [anchorById, getAnchorCreatorName, selectedAnchorDirectLinkedIdSet, selectedAnchorId, selectedAnchorOrderIds]
+  );
+  const anchorSearchResults = useMemo(() => {
+    if (!selectedAnchorId) return [];
+    const query = anchorSearchDraft.trim().toLowerCase();
+    if (!query) return [];
+    return anchorElements
+      .filter((anchor) => !selectedAnchorOrderIdSet.has(anchor.id))
+      .filter((anchor) => {
+        const creatorName = getAnchorCreatorName(anchor).toLowerCase();
+        const title = (anchor.heading || "Anchor").toLowerCase();
+        return title.includes(query) || creatorName.includes(query);
+      })
+      .sort((a, b) => (anchorSequenceNumberById.get(a.id) ?? 1) - (anchorSequenceNumberById.get(b.id) ?? 1) || a.heading.localeCompare(b.heading))
+      .slice(0, 12)
+      .map((anchor) => ({
+        id: anchor.id,
+        title: anchor.heading || "Anchor",
+        creatorName: getAnchorCreatorName(anchor),
+        sequenceNumber: anchorSequenceNumberById.get(anchor.id) ?? 1,
+      }));
+  }, [anchorElements, anchorSearchDraft, anchorSequenceNumberById, getAnchorCreatorName, selectedAnchorId, selectedAnchorOrderIdSet]);
   const selectedSingleFlowId = useMemo(() => {
     if (selectedFlowIds.size !== 1) return null;
     const [flowId] = Array.from(selectedFlowIds);
@@ -2310,6 +2716,7 @@ function SystemMapCanvasInner({
     if (selectedSystemId) return processFlowId(selectedSystemId);
     if (selectedProcessComponentId) return processFlowId(selectedProcessComponentId);
     if (selectedPersonId) return processFlowId(selectedPersonId);
+    if (selectedAnchorId) return processFlowId(selectedAnchorId);
     if (selectedGroupingId) return processFlowId(selectedGroupingId);
     if (selectedStickyId) return processFlowId(selectedStickyId);
     if (selectedImageId) return processFlowId(selectedImageId);
@@ -2321,6 +2728,7 @@ function SystemMapCanvasInner({
   }, [
     selectedBowtieElementId,
     selectedFlowShapeId,
+    selectedAnchorId,
     selectedGroupingId,
     selectedImageId,
     selectedNodeId,
@@ -2334,18 +2742,24 @@ function SystemMapCanvasInner({
   ]);
   const desktopToolbarSelection = useMemo(() => {
     if (!selectedSingleFlowId) return null;
-    const flowNode = flowNodes.find((node) => node.id === selectedSingleFlowId);
-    if (!flowNode) return null;
-    const elementId = flowNode.id.startsWith("process:") ? parseProcessFlowId(flowNode.id) : flowNode.id;
-    switch (flowNode.data.entityKind) {
-      case "document":
-        return { kind: "document" as const, id: flowNode.id, supportsRelationships: true };
+    if (!selectedSingleFlowId.startsWith("process:")) {
+      if (!nodesById.has(selectedSingleFlowId)) return null;
+      return { kind: "document" as const, id: selectedSingleFlowId, supportsRelationships: true };
+    }
+    const elementId = parseProcessFlowId(selectedSingleFlowId);
+    const element = elementsById.get(elementId);
+    if (!element) return null;
+    switch (element.element_type) {
       case "system_circle":
         return { kind: "system" as const, id: elementId, supportsRelationships: true };
       case "process_component":
         return { kind: "process_component" as const, id: elementId, supportsRelationships: true };
       case "person":
+      case "equipment":
+      case "environment":
         return { kind: "person" as const, id: elementId, supportsRelationships: true };
+      case "anchor":
+        return { kind: "anchor" as const, id: elementId, supportsRelationships: false };
       case "grouping_container":
         return { kind: "grouping" as const, id: elementId, supportsRelationships: true };
       case "image_asset":
@@ -2372,7 +2786,7 @@ function SystemMapCanvasInner({
           supportsRelationships: true,
         };
     }
-  }, [flowNodes, selectedSingleFlowId]);
+  }, [elementsById, nodesById, selectedSingleFlowId]);
   const availableFactorPeople = useMemo(
     () =>
       elements
@@ -2451,6 +2865,7 @@ function SystemMapCanvasInner({
     selectedSystemId,
     selectedProcessComponentId,
     selectedPersonId,
+    selectedAnchorId,
     selectedGroupingId,
     selectedStickyId,
     selectedImageId,
@@ -2587,6 +3002,18 @@ function SystemMapCanvasInner({
   }, [selectedProcessComponent]);
   useEffect(() => {
     if (!selectedPerson) return;
+    if (selectedPerson.element_type === "equipment") {
+      const labels = parseEquipmentLabels(selectedPerson.heading);
+      setEquipmentTypeDraft(labels.equipmentType);
+      setEquipmentIdentifierDraft(labels.identifier);
+      return;
+    }
+    if (selectedPerson.element_type === "environment") {
+      const labels = parseEnvironmentLabels(selectedPerson.heading);
+      setEnvironmentDetailDraft(labels.detail);
+      setEnvironmentFactorTypeDraft(labels.factorType);
+      return;
+    }
     if (mapCategoryId === "org_chart") {
       const cfg = parseOrgChartPersonConfig(selectedPerson.element_config);
       setPersonRoleDraft(cfg.position_title);
@@ -2626,9 +3053,34 @@ function SystemMapCanvasInner({
     setGroupingLabelDraft(selectedGrouping.heading ?? "");
     const cfg = (selectedGrouping.element_config as Record<string, unknown> | null) ?? {};
     setGroupingHeaderColorDraft(typeof cfg.header_bg_color === "string" && /^#[0-9a-fA-F]{6}$/.test(cfg.header_bg_color) ? cfg.header_bg_color.toUpperCase() : "#FFFFFF");
+    const headerFontSizeRaw = Number(cfg.header_font_size ?? 11);
+    setGroupingHeaderFontSizeDraft(String(Number.isFinite(headerFontSizeRaw) ? Math.max(10, Math.min(48, Math.round(headerFontSizeRaw))) : 11));
+    const outlineWidthRaw = Number(cfg.outline_width ?? 1);
+    setGroupingOutlineWidthDraft(String(Number.isFinite(outlineWidthRaw) ? Math.max(1, Math.min(12, Math.round(outlineWidthRaw))) : 1));
     setGroupingWidthDraft(String(Math.max(groupingMinWidthSquares, Math.round((selectedGrouping.width || groupingDefaultWidth) / minorGridSize))));
     setGroupingHeightDraft(String(Math.max(groupingMinHeightSquares, Math.round((selectedGrouping.height || groupingDefaultHeight) / minorGridSize))));
   }, [selectedGrouping]);
+  useEffect(() => {
+    if (!selectedAnchor) {
+      setAnchorTitleDraft("");
+      setAnchorColorDraft("#0F766E");
+      setAnchorSearchDraft("");
+      setAnchorLinkedOrderDraft([]);
+      return;
+    }
+    setAnchorTitleDraft(selectedAnchor.heading ?? "Anchor");
+    setAnchorColorDraft(selectedAnchorGroupColor);
+    setAnchorSearchDraft("");
+    const groupIds = anchorGroupIdsById.get(selectedAnchor.id) ?? [selectedAnchor.id];
+    const orderedGroupIds = groupIds
+      .filter((id) => anchorById.has(id))
+      .sort(
+        (a, b) =>
+          (anchorSequenceNumberById.get(a) ?? 1) - (anchorSequenceNumberById.get(b) ?? 1) ||
+          (anchorById.get(a)?.heading ?? "").localeCompare(anchorById.get(b)?.heading ?? "")
+      );
+    setAnchorLinkedOrderDraft(orderedGroupIds.includes(selectedAnchor.id) ? orderedGroupIds : [selectedAnchor.id, ...orderedGroupIds]);
+  }, [anchorById, anchorGroupIdsById, anchorSequenceNumberById, selectedAnchor, selectedAnchorGroupColor]);
   useEffect(() => {
     if (!selectedSticky) return;
     setStickyTextDraft(selectedSticky.heading ?? "");
@@ -3063,6 +3515,7 @@ function SystemMapCanvasInner({
       !!selectedSystemId ||
       !!selectedProcessComponentId ||
       !!selectedPersonId ||
+      !!selectedAnchorId ||
       !!selectedStickyId ||
       !!selectedImageId ||
       !!selectedTextBoxId ||
@@ -3090,6 +3543,7 @@ function SystemMapCanvasInner({
     selectedSystemId,
     selectedProcessComponentId,
     selectedPersonId,
+    selectedAnchorId,
     selectedStickyId,
     selectedImageId,
     selectedTextBoxId,
@@ -3354,7 +3808,7 @@ function SystemMapCanvasInner({
     snapToMinorGrid,
     findNearestFreePosition,
     selectedFlowIds,
-    flowNodes,
+    flowNodesRef,
     setError,
     setElements,
     setNodes,
@@ -3367,6 +3821,9 @@ function SystemMapCanvasInner({
     handleAddSystemCircle,
     handleAddProcessComponent,
     handleAddPerson,
+    handleAddEquipment,
+    handleAddEnvironment,
+    handleAddAnchor,
     handleAddGroupingContainer,
     handleAddStickyNote,
     handleAddTextBox,
@@ -3441,6 +3898,8 @@ function SystemMapCanvasInner({
     personElementHeight,
     orgChartPersonWidth,
     orgChartPersonHeight,
+    anchorNodeWidth,
+    anchorNodeHeight,
     groupingDefaultWidth,
     groupingDefaultHeight,
     stickyDefaultSize,
@@ -3514,10 +3973,16 @@ function SystemMapCanvasInner({
     personActingStartDateDraft,
     personRecruitingDraft,
     personProposedRoleDraft,
+    equipmentTypeDraft,
+    equipmentIdentifierDraft,
+    environmentDetailDraft,
+    environmentFactorTypeDraft,
     setSelectedPersonId,
     selectedGroupingId,
     groupingLabelDraft,
     groupingHeaderColorDraft,
+    groupingHeaderFontSizeDraft,
+    groupingOutlineWidthDraft,
     groupingWidthDraft,
     groupingHeightDraft,
     groupingMinWidthSquares,
@@ -4369,7 +4834,7 @@ function SystemMapCanvasInner({
         nextConfig.body_display_mode
       );
       delete nextConfig.label;
-      nextHeading = nextLabel || defaultLabel;
+      nextHeading = nextLabel;
     }
     if (elementType === "incident_evidence" && evidenceUploadFile) {
       const ext = evidenceUploadFile.name.includes(".") ? evidenceUploadFile.name.split(".").pop() : "bin";
@@ -4428,6 +4893,174 @@ function SystemMapCanvasInner({
     evidenceUploadFile,
     evidenceUploadPreviewUrl,
   ]);
+  const handleAddAnchorLink = useCallback(async (targetAnchorId: string) => {
+    if (!canWriteMap) {
+      setError("You have view access only for this map.");
+      return;
+    }
+    if (!selectedAnchor) return;
+    const targetAnchor = anchorById.get(targetAnchorId);
+    if (!targetAnchor || targetAnchor.id === selectedAnchor.id) return;
+    const alreadyLinked = anchorLinks.some(
+      (link) => link.anchor_id === selectedAnchor.id && link.linked_anchor_id === targetAnchor.id
+    );
+    if (alreadyLinked) return;
+    const selectedMaxSort = anchorLinks
+      .filter((link) => link.anchor_id === selectedAnchor.id)
+      .reduce((max, link) => Math.max(max, Number(link.sort_order) || 0), -1);
+    const targetMaxSort = anchorLinks
+      .filter((link) => link.anchor_id === targetAnchor.id)
+      .reduce((max, link) => Math.max(max, Number(link.sort_order) || 0), -1);
+    const rows = [
+      {
+        map_id: mapId,
+        anchor_id: selectedAnchor.id,
+        linked_anchor_id: targetAnchor.id,
+        sort_order: selectedMaxSort + 1,
+        created_by_user_id: userId,
+      },
+      {
+        map_id: mapId,
+        anchor_id: targetAnchor.id,
+        linked_anchor_id: selectedAnchor.id,
+        sort_order: targetMaxSort + 1,
+        created_by_user_id: userId,
+      },
+    ];
+    const { data, error: e } = await supabaseBrowser
+      .schema("ms")
+      .from("canvas_anchor_links")
+      .upsert(rows, { onConflict: "map_id,anchor_id,linked_anchor_id" })
+      .select("*");
+    if (e || !data) {
+      setError(e?.message || "Unable to link anchors.");
+      return;
+    }
+    const insertedRows = data as AnchorLinkRow[];
+    setAnchorLinks((prev) => {
+      const insertedKeys = new Set(insertedRows.map((link) => `${link.anchor_id}:${link.linked_anchor_id}`));
+      return [
+        ...prev.filter((link) => !insertedKeys.has(`${link.anchor_id}:${link.linked_anchor_id}`)),
+        ...insertedRows,
+      ];
+    });
+    setAnchorLinkedOrderDraft((prev) => (prev.includes(targetAnchor.id) ? prev : [...prev, targetAnchor.id]));
+    setAnchorSearchDraft("");
+  }, [anchorById, anchorLinks, canWriteMap, mapId, selectedAnchor, setError, userId]);
+
+  const handleRemoveAnchorLink = useCallback(async (targetAnchorId: string) => {
+    if (!canWriteMap) {
+      setError("You have view access only for this map.");
+      return;
+    }
+    if (!selectedAnchor) return;
+    const [forwardDelete, reverseDelete] = await Promise.all([
+      supabaseBrowser
+        .schema("ms")
+        .from("canvas_anchor_links")
+        .delete()
+        .eq("map_id", mapId)
+        .eq("anchor_id", selectedAnchor.id)
+        .eq("linked_anchor_id", targetAnchorId),
+      supabaseBrowser
+        .schema("ms")
+        .from("canvas_anchor_links")
+        .delete()
+        .eq("map_id", mapId)
+        .eq("anchor_id", targetAnchorId)
+        .eq("linked_anchor_id", selectedAnchor.id),
+    ]);
+    const deleteError = forwardDelete.error || reverseDelete.error;
+    if (deleteError) {
+      setError(deleteError.message || "Unable to remove anchor link.");
+      return;
+    }
+    setAnchorLinks((prev) =>
+      prev.filter(
+        (link) =>
+          !(
+            (link.anchor_id === selectedAnchor.id && link.linked_anchor_id === targetAnchorId) ||
+            (link.anchor_id === targetAnchorId && link.linked_anchor_id === selectedAnchor.id)
+          )
+      )
+    );
+    setAnchorLinkedOrderDraft((prev) => prev.filter((id) => id !== targetAnchorId));
+  }, [canWriteMap, mapId, selectedAnchor, setError]);
+
+  const handleReorderAnchorLinks = useCallback((orderedIds: string[]) => {
+    setAnchorLinkedOrderDraft(orderedIds);
+  }, []);
+
+  const handleSaveAnchor = useCallback(async (closeAfterSave = true) => {
+    if (!canWriteMap) return setError("You have view access only for this map.");
+    if (!selectedAnchor) return;
+    const heading = anchorTitleDraft.trim() || "Anchor";
+    const groupColor = normalizePreviewHex(anchorColorDraft) ?? "#0F766E";
+    const anchorGroupIds = selectedAnchorOrderIds.length ? selectedAnchorOrderIds : selectedAnchorGroupIds.length ? selectedAnchorGroupIds : [selectedAnchor.id];
+    const { data, error: e } = await supabaseBrowser
+      .schema("ms")
+      .from("canvas_elements")
+      .update({ heading, color_hex: groupColor })
+      .eq("id", selectedAnchor.id)
+      .eq("map_id", mapId)
+      .select(canvasElementSelectColumns)
+      .single();
+    if (e || !data) {
+      setError(e?.message || "Unable to save anchor.");
+      return;
+    }
+    const otherAnchorGroupIds = anchorGroupIds.filter((id) => id !== selectedAnchor.id);
+    if (otherAnchorGroupIds.length) {
+      const { error: colorUpdateError } = await supabaseBrowser
+        .schema("ms")
+        .from("canvas_elements")
+        .update({ color_hex: groupColor })
+        .eq("map_id", mapId)
+        .in("id", otherAnchorGroupIds);
+      if (colorUpdateError) {
+        setError(colorUpdateError.message || "Unable to save anchor group colour.");
+        return;
+      }
+    }
+    const anchorOrderIndexById = new Map(anchorGroupIds.map((id, index) => [id, index]));
+    const anchorOrderLinks = anchorLinks.filter(
+      (link) => anchorOrderIndexById.has(link.anchor_id) && anchorOrderIndexById.has(link.linked_anchor_id)
+    );
+    const updateResults = await Promise.all(
+      anchorOrderLinks.map((link) =>
+        supabaseBrowser
+          .schema("ms")
+          .from("canvas_anchor_links")
+          .update({ sort_order: anchorOrderIndexById.get(link.linked_anchor_id) ?? 0 })
+          .eq("map_id", mapId)
+          .eq("anchor_id", link.anchor_id)
+          .eq("linked_anchor_id", link.linked_anchor_id)
+      )
+    );
+    const updateError = updateResults.find((result) => result.error)?.error;
+    if (updateError) {
+      setError(updateError.message || "Unable to save anchor order.");
+      return;
+    }
+    const updated = data as unknown as CanvasElementRow;
+    const anchorGroupIdSet = new Set(anchorGroupIds);
+    setElements((prev) =>
+      prev.map((el) => {
+        if (el.id === updated.id) return updated;
+        if (anchorGroupIdSet.has(el.id) && el.element_type === "anchor") return { ...el, color_hex: groupColor };
+        return el;
+      })
+    );
+    setAnchorColorDraft(groupColor);
+    setAnchorLinks((prev) =>
+      prev.map((link) => {
+        if (!anchorOrderIndexById.has(link.anchor_id)) return link;
+        const orderIndex = anchorOrderIndexById.get(link.linked_anchor_id);
+        return orderIndex != null ? { ...link, sort_order: orderIndex } : link;
+      })
+    );
+    if (closeAfterSave) setSelectedAnchorId(null);
+  }, [anchorColorDraft, anchorLinks, anchorTitleDraft, canWriteMap, mapId, normalizePreviewHex, selectedAnchor, selectedAnchorGroupIds, selectedAnchorOrderIds, setError, setElements]);
   const closeDesktopDrilldownPanels = useCallback(() => {
     setDesktopNodeAction(null);
     closeAddRelationshipModal();
@@ -4470,6 +5103,10 @@ function SystemMapCanvasInner({
     () => closePrimaryAside("person"),
     [closePrimaryAside]
   );
+  const closeAnchorAside = useCallback(
+    () => closePrimaryAside("anchor"),
+    [closePrimaryAside]
+  );
   const closeBowtieElementAside = useCallback(
     () => closePrimaryAside("bowtieElement"),
     [closePrimaryAside]
@@ -4509,6 +5146,7 @@ function SystemMapCanvasInner({
     setSelectedSystemId(null);
     setSelectedProcessComponentId(null);
     setSelectedPersonId(null);
+    setSelectedAnchorId(null);
     setSelectedGroupingId(null);
     setSelectedStickyId(null);
     setSelectedImageId(null);
@@ -4673,6 +5311,10 @@ function SystemMapCanvasInner({
       await handleSavePerson(closeAfterSave);
       return;
     }
+    if (selectedAnchorId) {
+      await handleSaveAnchor(closeAfterSave);
+      return;
+    }
     if (selectedGroupingId) {
       await handleSaveGroupingContainer(closeAfterSave);
       return;
@@ -4706,6 +5348,7 @@ function SystemMapCanvasInner({
     handleSaveGroupingContainer,
     handleSaveImageAsset,
     handleSaveNode,
+    handleSaveAnchor,
     handleSavePerson,
     handleSaveProcessComponent,
     handleSaveProcessHeading,
@@ -4718,6 +5361,7 @@ function SystemMapCanvasInner({
     selectedGroupingId,
     selectedImageId,
     selectedNodeId,
+    selectedAnchorId,
     selectedPersonId,
     selectedProcessComponentId,
     selectedProcessId,
@@ -4726,64 +5370,51 @@ function SystemMapCanvasInner({
     selectedTableId,
     selectedTextBoxId,
   ]);
-  useEffect(() => {
-    const hasSelectedMobileAside =
-      isMobile &&
-      (!!selectedNodeId ||
-        !!selectedProcessId ||
-        !!selectedSystemId ||
-        !!selectedProcessComponentId ||
-        !!selectedPersonId ||
-        !!selectedGroupingId ||
-        !!selectedStickyId ||
-        !!selectedImageId ||
-        !!selectedTextBoxId ||
-        !!selectedTableId ||
-        !!selectedFlowShapeId ||
-        !!selectedBowtieElementId);
-    const hasAnyBlueAsideOpen = hasSelectedMobileAside || Boolean(activePrimaryLeftAsideKey || shouldShowDesktopStructurePanel);
-    if (!hasAnyBlueAsideOpen) return;
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (!target) return;
-      if (target.closest(".canvas-left-aside")) return;
+  const queueOpenLeftAsideAutosave = useCallback(
+    (closeAfterSave = false) => {
       if (autosavePointerLockRef.current) return;
-      const clickedBlankPane = !!target.closest(".react-flow__pane");
-      const clickedFlowNode = target.closest(".react-flow__node");
-      const clickedSelectedTableNode =
-        !!selectedTableId &&
-        !!clickedFlowNode &&
-        parseProcessFlowId(clickedFlowNode.getAttribute("data-id") ?? "") === selectedTableId;
-      const closeAfterSave = clickedBlankPane && !clickedSelectedTableNode;
-      if (clickedBlankPane) armPaneClearSuppression();
       autosavePointerLockRef.current = true;
       void saveOpenLeftAside(closeAfterSave).finally(() => {
         window.setTimeout(() => {
           autosavePointerLockRef.current = false;
         }, 0);
       });
+    },
+    [autosavePointerLockRef, saveOpenLeftAside]
+  );
+  const hasSelectedMobileAsideOpen =
+    isMobile &&
+    (!!selectedNodeId ||
+      !!selectedProcessId ||
+      !!selectedSystemId ||
+      !!selectedProcessComponentId ||
+      !!selectedPersonId ||
+      !!selectedAnchorId ||
+      !!selectedGroupingId ||
+      !!selectedStickyId ||
+      !!selectedImageId ||
+      !!selectedTextBoxId ||
+      !!selectedTableId ||
+      !!selectedFlowShapeId ||
+      !!selectedBowtieElementId);
+  const hasOpenCanvasAside = hasSelectedMobileAsideOpen || Boolean(activePrimaryLeftAsideKey || shouldShowDesktopStructurePanel);
+  useEffect(() => {
+    if (!hasOpenCanvasAside) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+      if (target.closest(".canvas-left-aside")) return;
+      if (target.closest(".react-flow__node")) return;
+      if (target.closest(".react-flow__pane")) return;
+      if (autosavePointerLockRef.current) return;
+      queueOpenLeftAsideAutosave(false);
     };
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [
-    armPaneClearSuppression,
-    activePrimaryLeftAsideKey,
-    saveOpenLeftAside,
-    shouldShowDesktopStructurePanel,
     autosavePointerLockRef,
-    isMobile,
-    selectedBowtieElementId,
-    selectedFlowShapeId,
-    selectedGroupingId,
-    selectedImageId,
-    selectedNodeId,
-    selectedPersonId,
-    selectedProcessComponentId,
-    selectedProcessId,
-    selectedStickyId,
-    selectedSystemId,
-    selectedTableId,
-    selectedTextBoxId,
+    hasOpenCanvasAside,
+    queueOpenLeftAsideAutosave,
   ]);
   const { handleDeleteProcessElement, handleDeleteSelectedComponents } = useCanvasDeleteSelectionActions({
     canWriteMap,
@@ -4793,6 +5424,7 @@ function SystemMapCanvasInner({
     setError,
     setElements,
     setRelations,
+    setAnchorLinks,
     setSelectedFlowIds,
     processFlowId,
     parseProcessFlowId,
@@ -4804,6 +5436,8 @@ function SystemMapCanvasInner({
     setSelectedProcessComponentId,
     selectedPersonId,
     setSelectedPersonId,
+    selectedAnchorId,
+    setSelectedAnchorId,
     selectedGroupingId,
     setSelectedGroupingId,
     selectedStickyId,
@@ -5061,20 +5695,145 @@ function SystemMapCanvasInner({
   const handleCanvasNodeSingleClick = useCallback(
     (event: React.MouseEvent, node: Node<FlowData>) => {
       armPaneClearSuppression();
+      const isChangingOpenAsideSelection =
+        !isMobile &&
+        Boolean(activePrimaryLeftAsideKey || shouldShowDesktopStructurePanel) &&
+        currentSpecificSelectedFlowId !== node.id;
+      if (isChangingOpenAsideSelection) queueOpenLeftAsideAutosave(false);
       if (!isMobile && event.detail > 1) return;
       if (!isMobile && desktopNodeAction === "configure" && currentSpecificSelectedFlowId === node.id) return;
       if (!isMobile && desktopNodeAction !== "configure") closeDesktopDrilldownPanels();
       selectCanvasNode(event, node);
     },
     [
+      activePrimaryLeftAsideKey,
       armPaneClearSuppression,
       closeDesktopDrilldownPanels,
       currentSpecificSelectedFlowId,
       desktopNodeAction,
       isMobile,
+      queueOpenLeftAsideAutosave,
       selectCanvasNode,
+      shouldShowDesktopStructurePanel,
     ]
   );
+  const handleCanvasNodePointerDownCapture = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (isMobile) return;
+      if (event.button !== 0) return;
+      if (event.detail > 1) return;
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+      if (target.closest(".nodrag, .nopan, button, input, textarea, select, [contenteditable='true']")) return;
+      const nodeElement = target.closest(".react-flow__node") as HTMLElement | null;
+      const nodeId = nodeElement?.dataset.id;
+      if (!nodeId) return;
+      armPaneClearSuppression();
+    },
+    [armPaneClearSuppression, isMobile]
+  );
+  const showAnchorNavigationNotice = useCallback((message: string, position?: { left: number; top: number }) => {
+    if (anchorNoticeTimerRef.current) {
+      clearTimeout(anchorNoticeTimerRef.current);
+      anchorNoticeTimerRef.current = null;
+    }
+    setAnchorNavigationNotice({
+      message,
+      left: position?.left ?? (canvasRef.current?.clientWidth ?? 0) / 2,
+      top: position?.top ?? 16,
+    });
+    anchorNoticeTimerRef.current = setTimeout(() => {
+      setAnchorNavigationNotice(null);
+      anchorNoticeTimerRef.current = null;
+    }, 1800);
+  }, []);
+  const getAnchorNavigationNoticePosition = useCallback((anchorId: string) => {
+    if (typeof document === "undefined") return undefined;
+    const canvasRect = canvasRef.current?.getBoundingClientRect();
+    const nodeElement = document.querySelector<HTMLElement>(`.react-flow__node[data-id="${processFlowId(anchorId)}"]`);
+    const nodeRect = nodeElement?.getBoundingClientRect();
+    if (!canvasRect || !nodeRect) return undefined;
+    return {
+      left: nodeRect.left - canvasRect.left + nodeRect.width / 2,
+      top: Math.max(40, nodeRect.top - canvasRect.top - 8),
+    };
+  }, []);
+  const handleNavigateFromAnchor = useCallback(
+    (anchorId: string, direction: "previous" | "next" = "next", noticePosition?: { left: number; top: number }) => {
+      if (!rf) return;
+      const currentAnchor = anchorById.get(anchorId);
+      if (!currentAnchor) return;
+      const fallbackNoticePosition = noticePosition ?? getAnchorNavigationNoticePosition(anchorId);
+      const anchorIds = new Set(anchorElements.map((anchor) => anchor.id));
+      const componentIds = new Set<string>();
+      const stack = [anchorId];
+      while (stack.length) {
+        const id = stack.pop();
+        if (!id || componentIds.has(id) || !anchorIds.has(id)) continue;
+        componentIds.add(id);
+        anchorLinks.forEach((link) => {
+          if (link.anchor_id === id && anchorIds.has(link.linked_anchor_id)) stack.push(link.linked_anchor_id);
+          if (link.linked_anchor_id === id && anchorIds.has(link.anchor_id)) stack.push(link.anchor_id);
+        });
+      }
+      if (componentIds.size <= 1) {
+        showAnchorNavigationNotice("No more anchor nodes to view", fallbackNoticePosition);
+        return;
+      }
+      const sequence = anchorElements
+        .filter((anchor) => componentIds.has(anchor.id))
+        .sort((a, b) => {
+          const sequenceA = anchorSequenceNumberById.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+          const sequenceB = anchorSequenceNumberById.get(b.id) ?? Number.MAX_SAFE_INTEGER;
+          if (sequenceA !== sequenceB) return sequenceA - sequenceB;
+          const createdA = a.created_at ? new Date(a.created_at).getTime() : 0;
+          const createdB = b.created_at ? new Date(b.created_at).getTime() : 0;
+          if (createdA !== createdB) return createdA - createdB;
+          return a.id.localeCompare(b.id);
+        });
+      const currentIndex = sequence.findIndex((anchor) => anchor.id === anchorId);
+      const offset = direction === "previous" ? -1 : 1;
+      const targetAnchor = sequence[(currentIndex + offset + sequence.length) % sequence.length];
+      if (!targetAnchor || targetAnchor.id === anchorId) {
+        showAnchorNavigationNotice("No more anchor nodes to view", fallbackNoticePosition);
+        return;
+      }
+      if (anchorNoticeTimerRef.current) {
+        clearTimeout(anchorNoticeTimerRef.current);
+        anchorNoticeTimerRef.current = null;
+      }
+      setAnchorNavigationNotice(null);
+      const canvasRect = canvasRef.current?.getBoundingClientRect();
+      const viewportWidth = canvasRect?.width ?? window.innerWidth;
+      const viewportHeight = canvasRect?.height ?? window.innerHeight;
+      const zoom = 1;
+      const width = Math.max(anchorNodeMinWidth, targetAnchor.width || anchorNodeWidth);
+      const height = Math.max(anchorNodeMinHeight, Math.round((width / anchorNodeWidth) * anchorNodeHeight));
+      rf.setViewport(
+        {
+          x: viewportWidth / 2 - (targetAnchor.pos_x + width / 2) * zoom,
+          y: viewportHeight / 2 - (targetAnchor.pos_y + height / 2) * zoom,
+          zoom,
+        },
+        { duration: 420 }
+      );
+    },
+    [
+      anchorById,
+      anchorElements,
+      anchorLinks,
+      anchorSequenceNumberById,
+      getAnchorNavigationNoticePosition,
+      rf,
+      showAnchorNavigationNotice,
+    ]
+  );
+  useEffect(() => {
+    anchorNavigateRef.current = handleNavigateFromAnchor;
+    return () => {
+      if (anchorNavigateRef.current === handleNavigateFromAnchor) anchorNavigateRef.current = null;
+    };
+  }, [handleNavigateFromAnchor]);
   const handleCanvasNodeDoubleClick = useCallback(
     (event: React.MouseEvent, node: Node<FlowData>) => {
       if (isMobile) return;
@@ -5210,6 +5969,9 @@ function SystemMapCanvasInner({
         handleAddSystemCircle={handleAddSystemCircle}
         handleAddProcessComponent={handleAddProcessComponent}
         handleAddPerson={handleAddPerson}
+        handleAddEquipment={handleAddEquipment}
+        handleAddEnvironment={handleAddEnvironment}
+        handleAddAnchor={handleAddAnchor}
         handleAddProcessHeading={handleAddProcessHeading}
         handleAddGroupingContainer={handleAddGroupingContainer}
         handleAddStickyNote={handleAddStickyNote}
@@ -5323,10 +6085,19 @@ function SystemMapCanvasInner({
       ) : null}
 
       <main className="relative min-h-0 flex-1 overflow-hidden pb-0">
+        {anchorNavigationNotice ? (
+          <div
+            className="pointer-events-none absolute z-[160] -translate-x-1/2 -translate-y-full rounded border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 shadow-lg"
+            style={{ left: anchorNavigationNotice.left, top: anchorNavigationNotice.top }}
+          >
+            {anchorNavigationNotice.message}
+          </div>
+        ) : null}
         <div
           ref={canvasRef}
           className="h-full w-full bg-stone-50"
           onMouseDown={handlePaneMouseDown}
+          onPointerDownCapture={handleCanvasNodePointerDownCapture}
           onClick={(e) => {
             if (e.target !== e.currentTarget) return;
             setMobileNodeMenuId(null);
@@ -5341,6 +6112,7 @@ function SystemMapCanvasInner({
             onlyRenderVisibleElements
             nodesConnectable={false}
             edgesReconnectable={false}
+            elevateNodesOnSelect={false}
             nodesFocusable={false}
             edgesFocusable={false}
             onInit={(instance) => setRf({ fitView: instance.fitView, screenToFlowPosition: instance.screenToFlowPosition, setViewport: instance.setViewport })}
@@ -5371,6 +6143,7 @@ function SystemMapCanvasInner({
               scheduleHoveredEdgeId(null);
               if (isNodeDragActiveRef.current) return;
               if (consumePaneClearSuppression()) return;
+              if (hasOpenCanvasAside) queueOpenLeftAsideAutosave(true);
               handlePaneClickClearSelection();
             }}
             onPaneContextMenu={(e) => {
@@ -5384,6 +6157,7 @@ function SystemMapCanvasInner({
               setIsNodeDragActive(true);
             }}
             onNodeDragStop={(event, node) => {
+              flushPendingFlowNodePositionChanges();
               beginNodeDragStop();
               void onNodeDragStop(event, node).finally(() => {
                 finishNodeDragStop();
@@ -5695,6 +6469,12 @@ function SystemMapCanvasInner({
             isMobile,
             leftAsideSlideIn,
             mapCategoryId,
+            selectedElementType:
+              selectedPerson?.element_type === "person" ||
+              selectedPerson?.element_type === "equipment" ||
+              selectedPerson?.element_type === "environment"
+                ? selectedPerson.element_type
+                : null,
             personTypeDraft,
             setPersonTypeDraft,
             personRoleDraft,
@@ -5717,6 +6497,14 @@ function SystemMapCanvasInner({
             setPersonRecruitingDraft,
             personProposedRoleDraft,
             setPersonProposedRoleDraft,
+            equipmentTypeDraft,
+            setEquipmentTypeDraft,
+            equipmentIdentifierDraft,
+            setEquipmentIdentifierDraft,
+            environmentDetailDraft,
+            setEnvironmentDetailDraft,
+            environmentFactorTypeDraft,
+            setEnvironmentFactorTypeDraft,
             orgChartDepartmentOptions,
             onDelete: async () => {
               if (!selectedPerson) return;
@@ -5734,6 +6522,34 @@ function SystemMapCanvasInner({
             relatedRows: relatedPersonRows,
             resolveLabels: resolvePersonRelationLabels,
             relationshipSectionProps: sharedRelationshipSectionProps,
+            actionDisabledReason: readOnlyActionReason,
+          }}
+          anchorProps={{
+            open: getPrimaryAsideOpen("anchor", selectedAnchor, selectedAnchorId),
+            isMobile,
+            leftAsideSlideIn,
+            anchorTitleDraft,
+            setAnchorTitleDraft,
+            anchorColorDraft,
+            setAnchorColorDraft,
+            anchorSearchDraft,
+            setAnchorSearchDraft,
+            selectedAnchorSequenceNumber,
+            anchorGroupSize: Math.max(1, selectedAnchorOrderIds.length || selectedAnchorGroupIds.length),
+            linkedAnchors: selectedAnchorOrderItems,
+            searchResults: anchorSearchResults,
+            onAddLink: handleAddAnchorLink,
+            onRemoveLink: handleRemoveAnchorLink,
+            onReorderLinkedAnchors: handleReorderAnchorLinks,
+            onDelete: async () => {
+              if (!selectedAnchor) return;
+              await handleDeleteProcessElement(selectedAnchor.id);
+            },
+            onSave: async () => {
+              await handleSaveAnchor();
+              closeAnchorAside();
+            },
+            onClose: closeAnchorAside,
             actionDisabledReason: readOnlyActionReason,
           }}
           bowtieProps={{
@@ -5810,6 +6626,10 @@ function SystemMapCanvasInner({
             setGroupingLabelDraft,
             groupingHeaderColorDraft,
             setGroupingHeaderColorDraft,
+            groupingHeaderFontSizeDraft,
+            setGroupingHeaderFontSizeDraft,
+            groupingOutlineWidthDraft,
+            setGroupingOutlineWidthDraft,
             onDelete: async () => {
               if (!selectedGrouping) return;
               await handleDeleteProcessElement(selectedGrouping.id);
