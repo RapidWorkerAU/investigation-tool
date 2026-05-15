@@ -257,10 +257,46 @@ function stripActivityTimestamp(entry: string) {
   return entry.replace(/^\d{1,2}:\d{2}:\d{2}\s+/, "").trim();
 }
 
+const SESSION_STORAGE_KEYS = {
+  accessToken: "investigation_tool_access_token",
+  refreshToken: "investigation_tool_refresh_token",
+  userEmail: "investigation_tool_user_email",
+  userId: "investigation_tool_user_id",
+} as const;
+
+type BrowserAuthSession = {
+  access_token?: string | null;
+  refresh_token?: string | null;
+  user?: {
+    email?: string | null;
+    id?: string | null;
+  } | null;
+};
+
+function persistBrowserAuthSession(session: BrowserAuthSession | null | undefined) {
+  if (typeof window === "undefined" || !session) return;
+
+  const accessToken = session.access_token?.trim() ?? "";
+  const refreshToken = session.refresh_token?.trim() ?? "";
+
+  if (accessToken) {
+    window.localStorage.setItem(SESSION_STORAGE_KEYS.accessToken, accessToken);
+  }
+  if (refreshToken) {
+    window.localStorage.setItem(SESSION_STORAGE_KEYS.refreshToken, refreshToken);
+  }
+  if (session.user?.email) {
+    window.localStorage.setItem(SESSION_STORAGE_KEYS.userEmail, session.user.email);
+  }
+  if (session.user?.id) {
+    window.localStorage.setItem(SESSION_STORAGE_KEYS.userId, session.user.id);
+  }
+}
+
 function readAccessTokenFromLocalStorage() {
   if (typeof window === "undefined") return "";
 
-  const directToken = window.localStorage.getItem("investigation_tool_access_token")?.trim() ?? "";
+  const directToken = window.localStorage.getItem(SESSION_STORAGE_KEYS.accessToken)?.trim() ?? "";
   if (directToken) return directToken;
 
   for (let index = 0; index < window.localStorage.length; index += 1) {
@@ -291,6 +327,11 @@ function readAccessTokenFromLocalStorage() {
   }
 
   return "";
+}
+
+function readRefreshTokenFromLocalStorage() {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem(SESSION_STORAGE_KEYS.refreshToken)?.trim() ?? "";
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number, message: string) {
@@ -891,9 +932,25 @@ export default function GeneratedInvestigationReportPage() {
     });
   }, []);
 
-  const getAccessToken = useCallback(async () => {
-    const storedToken = readAccessTokenFromLocalStorage();
-    if (storedToken) return storedToken;
+  const getAccessToken = useCallback(async (options: { forceRefresh?: boolean; allowStoredFallback?: boolean } = {}) => {
+    const allowStoredFallback = options.allowStoredFallback ?? true;
+
+    if (options.forceRefresh) {
+      try {
+        const { data } = await withTimeout(
+          supabase.auth.refreshSession(),
+          8000,
+          "Session refresh timed out after 8 seconds.",
+        );
+        const refreshedToken = data.session?.access_token?.trim();
+        if (refreshedToken) {
+          persistBrowserAuthSession(data.session);
+          return refreshedToken;
+        }
+      } catch {
+        // Fall through to the current session and stored-token recovery paths.
+      }
+    }
 
     const { data } = await withTimeout(
       supabase.auth.getSession(),
@@ -902,9 +959,35 @@ export default function GeneratedInvestigationReportPage() {
     );
 
     const liveToken = data.session?.access_token?.trim();
-    if (liveToken) return liveToken;
+    if (liveToken) {
+      persistBrowserAuthSession(data.session);
+      return liveToken;
+    }
 
-    return "";
+    const storedToken = readAccessTokenFromLocalStorage();
+    const storedRefreshToken = readRefreshTokenFromLocalStorage();
+
+    if (storedToken && storedRefreshToken) {
+      try {
+        const { data: recoveredData, error } = await withTimeout(
+          supabase.auth.setSession({
+            access_token: storedToken,
+            refresh_token: storedRefreshToken,
+          }),
+          8000,
+          "Stored session recovery timed out after 8 seconds.",
+        );
+        const recoveredToken = recoveredData.session?.access_token?.trim();
+        if (!error && recoveredToken) {
+          persistBrowserAuthSession(recoveredData.session);
+          return recoveredToken;
+        }
+      } catch {
+        // The stored session may be expired or from a previous sign-in.
+      }
+    }
+
+    return allowStoredFallback ? storedToken : "";
   }, [supabase]);
 
   const personElements = useMemo(() => elements.filter((element) => element.element_type === "person"), [elements]);
@@ -1827,17 +1910,31 @@ export default function GeneratedInvestigationReportPage() {
     const accessToken = await getAccessToken();
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), 180000);
+    const requestBody = JSON.stringify(args);
 
-    try {
-      return await fetch("/api/generate-report", {
+    const sendGenerateReportRequest = (token: string) =>
+      fetch("/api/generate-report", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify(args),
+        body: requestBody,
         signal: controller.signal,
       });
+
+    try {
+      let response = await sendGenerateReportRequest(accessToken);
+
+      if (response.status === 401) {
+        const refreshedAccessToken = await getAccessToken({ forceRefresh: true, allowStoredFallback: false });
+        if (refreshedAccessToken && refreshedAccessToken !== accessToken) {
+          appendActivityLog("Session refreshed. Retrying the report request once.");
+          response = await sendGenerateReportRequest(refreshedAccessToken);
+        }
+      }
+
+      return response;
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
         throw new Error("Report generation timed out after 180 seconds while waiting for the AI response.");
@@ -2028,7 +2125,13 @@ export default function GeneratedInvestigationReportPage() {
         }
 
         if (!response.ok || !payload || !("report" in payload)) {
-          setError(payload && "error" in payload ? payload.error ?? "Unable to generate report." : "Unable to generate report.");
+          setError(
+            response.status === 401
+              ? "Your sign-in session has expired. Please sign in again before generating the report."
+              : payload && "error" in payload
+                ? payload.error ?? "Unable to generate report."
+                : "Unable to generate report.",
+          );
           setReadiness(payload && "readiness" in payload ? payload.readiness ?? null : null);
           setErrorDiagnostic(payload && "diagnostic" in payload ? payload.diagnostic ?? null : null);
           const trace = payload && "diagnostic" in payload ? payload.diagnostic?.trace ?? [] : [];
@@ -2094,7 +2197,13 @@ export default function GeneratedInvestigationReportPage() {
     const payload = (await response.json().catch(() => null)) as (ReportPayload & ErrorPayload) | ErrorPayload | null;
 
     if (!response.ok || !payload || !("report" in payload)) {
-      setError(payload && "error" in payload ? payload.error ?? "Unable to generate report." : "Unable to generate report.");
+      setError(
+        response.status === 401
+          ? "Your sign-in session has expired. Please sign in again before generating the report."
+          : payload && "error" in payload
+            ? payload.error ?? "Unable to generate report."
+            : "Unable to generate report.",
+      );
       setErrorDiagnostic(payload && "diagnostic" in payload ? payload.diagnostic ?? null : null);
       const trace = payload && "diagnostic" in payload ? payload.diagnostic?.trace ?? [] : [];
       trace.forEach((entry) => appendActivityLog(`Server trace: ${entry}`));
