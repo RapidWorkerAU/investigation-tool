@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { memo, type MouseEvent, type ReactNode, type WheelEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, type CSSProperties, type MouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode, type WheelEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Handle,
   type Node,
@@ -85,9 +85,35 @@ function clampScrollTop(element: HTMLElement, scrollTop: number) {
 function OneLineScrollableText({ className, children }: { className: string; children: ReactNode }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
+  const thumbDragRef = useRef<{ pointerId: number; startY: number; startScrollTop: number } | null>(null);
   const [canScroll, setCanScroll] = useState(false);
+  const [useCustomScrollbar, setUseCustomScrollbar] = useState(false);
+  const [scrollMetrics, setScrollMetrics] = useState({ thumbTop: 16, thumbHeight: 28 });
   const outerClassName = `${className.replace(/\boverflow-y-auto\b/g, "overflow-hidden").replace(/\bpr-1\b/g, "")} relative`;
-  const innerClassName = `h-full w-full overflow-y-auto ${className.includes("pr-1") ? "pr-1" : ""}`;
+  const innerClassName = `h-full w-full overflow-y-auto ${useCustomScrollbar ? "node-text-scrollbar-hidden pr-5" : className.includes("pr-1") ? "pr-1" : ""}`;
+  const hiddenNativeScrollbarStyle: CSSProperties | undefined = useCustomScrollbar
+    ? { scrollbarWidth: "none", msOverflowStyle: "none" }
+    : undefined;
+
+  const updateScrollMetrics = useCallback(() => {
+    const element = scrollRef.current;
+    if (!element) return;
+    const maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
+    const nextCanScroll = maxScrollTop > 1;
+    setCanScroll(nextCanScroll);
+    if (!nextCanScroll) return;
+
+    const buttonSpace = 16;
+    const trackHeight = Math.max(1, element.clientHeight - buttonSpace * 2);
+    const thumbHeight = Math.max(24, Math.round((element.clientHeight / element.scrollHeight) * trackHeight));
+    const travel = Math.max(1, trackHeight - thumbHeight);
+    const thumbTop = buttonSpace + Math.round((element.scrollTop / maxScrollTop) * travel);
+    setScrollMetrics((current) =>
+      Math.abs(current.thumbTop - thumbTop) < 0.5 && Math.abs(current.thumbHeight - thumbHeight) < 0.5
+        ? current
+        : { thumbTop, thumbHeight }
+    );
+  }, []);
 
   const scrollOneLine = useCallback((direction: -1 | 1) => {
     const element = scrollRef.current;
@@ -95,12 +121,8 @@ function OneLineScrollableText({ className, children }: { className: string; chi
     const lineHeight = getScrollableLineHeight(element);
     const nextScrollTop = clampScrollTop(element, element.scrollTop + direction * lineHeight);
     element.scrollTop = nextScrollTop;
-  }, []);
-
-  const updateCanScroll = useCallback(() => {
-    const element = scrollRef.current;
-    setCanScroll(Boolean(element && element.scrollHeight - element.clientHeight > 1));
-  }, []);
+    updateScrollMetrics();
+  }, [updateScrollMetrics]);
 
   const handleWheel = useCallback(
     (event: WheelEvent<HTMLDivElement>) => {
@@ -113,19 +135,30 @@ function OneLineScrollableText({ className, children }: { className: string; chi
   );
 
   useEffect(() => {
-    updateCanScroll();
+    updateScrollMetrics();
     const element = scrollRef.current;
     const content = contentRef.current;
     if (!element) return;
-    const observer = new ResizeObserver(updateCanScroll);
+    const observer = new ResizeObserver(updateScrollMetrics);
     observer.observe(element);
     if (content) observer.observe(content);
-    window.addEventListener("resize", updateCanScroll);
+    window.addEventListener("resize", updateScrollMetrics);
     return () => {
       observer.disconnect();
-      window.removeEventListener("resize", updateCanScroll);
+      window.removeEventListener("resize", updateScrollMetrics);
     };
-  }, [children, updateCanScroll]);
+  }, [children, updateScrollMetrics]);
+
+  useEffect(() => {
+    setUseCustomScrollbar(/\bEdg\//.test(window.navigator.userAgent));
+  }, []);
+
+  useEffect(() => {
+    const element = scrollRef.current;
+    if (!element) return;
+    element.addEventListener("scroll", updateScrollMetrics, { passive: true });
+    return () => element.removeEventListener("scroll", updateScrollMetrics);
+  }, [updateScrollMetrics]);
 
   const stopScrollButtonPointer = useCallback((event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -141,9 +174,62 @@ function OneLineScrollableText({ className, children }: { className: string; chi
     [scrollOneLine]
   );
 
+  const handleCustomTrackPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const element = scrollRef.current;
+      if (!element || event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const rect = event.currentTarget.getBoundingClientRect();
+      const direction = event.clientY < rect.top + scrollMetrics.thumbTop ? -1 : 1;
+      scrollOneLine(direction);
+    },
+    [scrollMetrics.thumbTop, scrollOneLine]
+  );
+
+  const handleCustomThumbPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const element = scrollRef.current;
+    if (!element || event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    thumbDragRef.current = { pointerId: event.pointerId, startY: event.clientY, startScrollTop: element.scrollTop };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }, []);
+
+  const handleCustomThumbPointerMove = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      const element = scrollRef.current;
+      const drag = thumbDragRef.current;
+      if (!element || !drag || drag.pointerId !== event.pointerId) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const trackHeight = Math.max(1, element.clientHeight - 32);
+      const travel = Math.max(1, trackHeight - scrollMetrics.thumbHeight);
+      const maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
+      const nextScrollTop = clampScrollTop(element, drag.startScrollTop + ((event.clientY - drag.startY) / travel) * maxScrollTop);
+      element.scrollTop = nextScrollTop;
+      updateScrollMetrics();
+    },
+    [scrollMetrics.thumbHeight, updateScrollMetrics]
+  );
+
+  const handleCustomThumbPointerUp = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (thumbDragRef.current?.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    thumbDragRef.current = null;
+    event.currentTarget.releasePointerCapture(event.pointerId);
+  }, []);
+
   return (
     <div className={outerClassName}>
-      <div ref={scrollRef} className={innerClassName} onWheel={handleWheel}>
+      <div
+        ref={scrollRef}
+        className={innerClassName}
+        style={hiddenNativeScrollbarStyle}
+        data-node-text-scroll-region="true"
+        onWheel={handleWheel}
+      >
         <div ref={contentRef}>{children}</div>
       </div>
       {canScroll ? (
@@ -153,6 +239,7 @@ function OneLineScrollableText({ className, children }: { className: string; chi
             className="nodrag nopan absolute right-[1px] top-[1px] z-20 flex h-[14px] w-[14px] items-center justify-center rounded-[2px] border border-[#8f8f8f] bg-[#8f8f8f] p-0 shadow-[0_1px_3px_rgba(15,23,42,0.16)] hover:border-[#7f7f7f] hover:bg-[#7f7f7f]"
             aria-label="Scroll text up one line"
             title="Scroll text up one line"
+            data-node-text-scroll-control="true"
             onPointerDown={stopScrollButtonPointer}
             onMouseDown={stopScrollButtonPointer}
             onClick={handleScrollButtonClick(-1)}
@@ -164,12 +251,29 @@ function OneLineScrollableText({ className, children }: { className: string; chi
             className="nodrag nopan absolute bottom-[1px] right-[1px] z-20 flex h-[14px] w-[14px] items-center justify-center rounded-[2px] border border-[#8f8f8f] bg-[#8f8f8f] p-0 shadow-[0_1px_3px_rgba(15,23,42,0.16)] hover:border-[#7f7f7f] hover:bg-[#7f7f7f]"
             aria-label="Scroll text down one line"
             title="Scroll text down one line"
+            data-node-text-scroll-control="true"
             onPointerDown={stopScrollButtonPointer}
             onMouseDown={stopScrollButtonPointer}
             onClick={handleScrollButtonClick(1)}
           >
             <span aria-hidden="true" className="h-0 w-0 border-x-[4px] border-t-[5px] border-x-transparent border-t-white" />
           </button>
+          {useCustomScrollbar ? (
+            <div
+              className="nodrag nopan absolute bottom-[16px] right-[4px] top-[16px] z-10 w-[8px] rounded-full bg-transparent"
+              data-node-text-scroll-control="true"
+              onPointerDown={handleCustomTrackPointerDown}
+            >
+              <div
+                className="absolute left-0 w-[8px] cursor-pointer rounded-full bg-[#8f8f8f] hover:bg-[#7f7f7f]"
+                style={{ top: `${scrollMetrics.thumbTop - 16}px`, height: `${scrollMetrics.thumbHeight}px` }}
+                onPointerDown={handleCustomThumbPointerDown}
+                onPointerMove={handleCustomThumbPointerMove}
+                onPointerUp={handleCustomThumbPointerUp}
+                onPointerCancel={handleCustomThumbPointerUp}
+              />
+            </div>
+          ) : null}
         </>
       ) : null}
     </div>

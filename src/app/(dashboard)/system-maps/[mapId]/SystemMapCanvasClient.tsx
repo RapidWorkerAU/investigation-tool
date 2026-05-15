@@ -5675,6 +5675,26 @@ function SystemMapCanvasInner({
     }
     setConfirmDeleteElementId(desktopToolbarSelection.id);
   }, [desktopToolbarSelection]);
+  const isNodeTextScrollbarDoubleClick = useCallback((event: React.MouseEvent) => {
+    const target = event.target as HTMLElement | null;
+    if (!target) return false;
+    if (target.closest("[data-node-text-scroll-control='true']")) return true;
+
+    const scrollRegion = target.closest("[data-node-text-scroll-region='true']") as HTMLElement | null;
+    if (!scrollRegion) return false;
+    if (scrollRegion.scrollHeight <= scrollRegion.clientHeight + 1) return false;
+
+    const rect = scrollRegion.getBoundingClientRect();
+    const nativeScrollbarWidth = scrollRegion.offsetWidth - scrollRegion.clientWidth;
+    const scrollbarHitWidth = Math.max(14, nativeScrollbarWidth);
+    const isInsideVerticalScrollbar =
+      event.clientX >= rect.right - scrollbarHitWidth &&
+      event.clientX <= rect.right &&
+      event.clientY >= rect.top &&
+      event.clientY <= rect.bottom;
+
+    return isInsideVerticalScrollbar;
+  }, []);
   const selectCanvasNode = useCallback(
     (event: React.MouseEvent, node: Node<FlowData>) => {
       handleCanvasNodeClick({
@@ -5837,6 +5857,11 @@ function SystemMapCanvasInner({
   const handleCanvasNodeDoubleClick = useCallback(
     (event: React.MouseEvent, node: Node<FlowData>) => {
       if (isMobile) return;
+      if (isNodeTextScrollbarDoubleClick(event)) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
       event.preventDefault();
       event.stopPropagation();
       armPaneClearSuppression();
@@ -5848,6 +5873,7 @@ function SystemMapCanvasInner({
       armPaneClearSuppression,
       currentSpecificSelectedFlowId,
       desktopNodeAction,
+      isNodeTextScrollbarDoubleClick,
       isMobile,
       selectCanvasNode,
       setDesktopNodeAction,
