@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type DragEvent, type ReactNode, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type DragEvent, type ReactNode, type RefObject } from "react";
 import type { CanvasElementRow, DisciplineKey, NodeRelationRow, RelationshipCategory, RelationshipCategoryOption } from "./canvasShared";
 import type { MapCategoryId } from "./mapCategories";
 import { environmentFactorTypeOptions, getDisplayRelationType } from "./canvasShared";
@@ -73,6 +73,73 @@ type PaletteSwatchGridProps = {
   swatchKeyPrefix: string;
   onSelect: (hex: string) => void;
 };
+
+const descriptionTextareaMinLines = 3;
+const descriptionTextareaMaxLines = 8;
+
+function getTextareaBoxMetrics(textarea: HTMLTextAreaElement) {
+  const computedStyle = window.getComputedStyle(textarea);
+  const fontSize = Number.parseFloat(computedStyle.fontSize);
+  const parsedLineHeight = Number.parseFloat(computedStyle.lineHeight);
+  const lineHeight = Number.isFinite(parsedLineHeight) && parsedLineHeight > 0
+    ? parsedLineHeight
+    : Number.isFinite(fontSize) && fontSize > 0
+    ? fontSize * 1.5
+    : 20;
+  const paddingTop = Number.parseFloat(computedStyle.paddingTop) || 0;
+  const paddingBottom = Number.parseFloat(computedStyle.paddingBottom) || 0;
+  const borderTop = Number.parseFloat(computedStyle.borderTopWidth) || 0;
+  const borderBottom = Number.parseFloat(computedStyle.borderBottomWidth) || 0;
+  const chromeHeight = paddingTop + paddingBottom + borderTop + borderBottom;
+
+  return {
+    minHeight: Math.ceil(lineHeight * descriptionTextareaMinLines + chromeHeight),
+    maxHeight: Math.ceil(lineHeight * descriptionTextareaMaxLines + chromeHeight),
+  };
+}
+
+function resizeDescriptionTextarea(textarea: HTMLTextAreaElement) {
+  const { minHeight, maxHeight } = getTextareaBoxMetrics(textarea);
+  textarea.style.minHeight = `${minHeight}px`;
+  textarea.style.maxHeight = `${maxHeight}px`;
+  textarea.style.height = "auto";
+  const nextHeight = Math.max(minHeight, Math.min(textarea.scrollHeight, maxHeight));
+  textarea.style.height = `${nextHeight}px`;
+  textarea.style.overflowY = textarea.scrollHeight > maxHeight ? "auto" : "hidden";
+}
+
+function AutosizingDescriptionTextarea({
+  value,
+  onChange,
+  placeholder,
+  className = "mt-1 w-full resize-y rounded border border-slate-300 bg-white px-3 py-2 leading-5 text-black",
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useLayoutEffect(() => {
+    if (textareaRef.current) resizeDescriptionTextarea(textareaRef.current);
+  }, [value]);
+
+  return (
+    <textarea
+      ref={textareaRef}
+      className={className}
+      rows={descriptionTextareaMinLines}
+      value={value}
+      onChange={(event) => {
+        const textarea = event.currentTarget;
+        onChange(textarea.value);
+        window.requestAnimationFrame(() => resizeDescriptionTextarea(textarea));
+      }}
+      placeholder={placeholder}
+    />
+  );
+}
 
 function FontSizePicker({ value, onChange, options }: FontSizePickerProps) {
   const [open, setOpen] = useState(false);
@@ -716,11 +783,9 @@ export function ImageAssetAside({
     <AsideShell isMobile={isMobile} leftAsideSlideIn={leftAsideSlideIn} title="Image Properties" onClose={onClose} readOnly={!!actionDisabledReason}>
       <div className="mt-4 space-y-3">
         <label className="text-sm text-white">Image Description
-          <textarea
-            className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 text-black"
-            rows={5}
+          <AutosizingDescriptionTextarea
             value={imageDescriptionDraft}
-            onChange={(e) => setImageDescriptionDraft(e.target.value)}
+            onChange={setImageDescriptionDraft}
             placeholder="Enter image description"
           />
         </label>
@@ -2079,11 +2144,9 @@ export function BowtiePropertiesAside({
               />
             </label>
             <label className="text-sm text-white">Description
-              <textarea
-                className="mt-1 w-full rounded border border-slate-300 bg-white px-3 py-2 text-black"
-                rows={3}
+              <AutosizingDescriptionTextarea
                 value={String(bowtieDraft.description ?? "")}
-                onChange={(e) => setField("description", e.target.value)}
+                onChange={(value) => setField("description", value)}
               />
             </label>
             <fieldset className="text-sm text-white">

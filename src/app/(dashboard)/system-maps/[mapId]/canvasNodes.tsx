@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { memo, type MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, type MouseEvent, type ReactNode, type WheelEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Handle,
   type Node,
@@ -66,6 +66,113 @@ function HiddenEdgeHandles() {
       <Handle id="left-target" type="target" position={Position.Left} style={{ opacity: 0, pointerEvents: "none", width: 6, height: 6 }} />
       <Handle id="right-target" type="target" position={Position.Right} style={{ opacity: 0, pointerEvents: "none", width: 6, height: 6 }} />
     </>
+  );
+}
+
+function getScrollableLineHeight(element: HTMLElement) {
+  const computedStyle = window.getComputedStyle(element);
+  const lineHeight = Number.parseFloat(computedStyle.lineHeight);
+  if (Number.isFinite(lineHeight) && lineHeight > 0) return lineHeight;
+  const fontSize = Number.parseFloat(computedStyle.fontSize);
+  return Number.isFinite(fontSize) && fontSize > 0 ? fontSize * 1.35 : 16;
+}
+
+function clampScrollTop(element: HTMLElement, scrollTop: number) {
+  const maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
+  return Math.max(0, Math.min(maxScrollTop, scrollTop));
+}
+
+function OneLineScrollableText({ className, children }: { className: string; children: ReactNode }) {
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const [canScroll, setCanScroll] = useState(false);
+  const outerClassName = `${className.replace(/\boverflow-y-auto\b/g, "overflow-hidden").replace(/\bpr-1\b/g, "")} relative`;
+  const innerClassName = `h-full w-full overflow-y-auto ${className.includes("pr-1") ? "pr-1" : ""}`;
+
+  const scrollOneLine = useCallback((direction: -1 | 1) => {
+    const element = scrollRef.current;
+    if (!element) return;
+    const lineHeight = getScrollableLineHeight(element);
+    const nextScrollTop = clampScrollTop(element, element.scrollTop + direction * lineHeight);
+    element.scrollTop = nextScrollTop;
+  }, []);
+
+  const updateCanScroll = useCallback(() => {
+    const element = scrollRef.current;
+    setCanScroll(Boolean(element && element.scrollHeight - element.clientHeight > 1));
+  }, []);
+
+  const handleWheel = useCallback(
+    (event: WheelEvent<HTMLDivElement>) => {
+      if (event.deltaY === 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      scrollOneLine(event.deltaY > 0 ? 1 : -1);
+    },
+    [scrollOneLine]
+  );
+
+  useEffect(() => {
+    updateCanScroll();
+    const element = scrollRef.current;
+    const content = contentRef.current;
+    if (!element) return;
+    const observer = new ResizeObserver(updateCanScroll);
+    observer.observe(element);
+    if (content) observer.observe(content);
+    window.addEventListener("resize", updateCanScroll);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateCanScroll);
+    };
+  }, [children, updateCanScroll]);
+
+  const stopScrollButtonPointer = useCallback((event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+  }, []);
+
+  const handleScrollButtonClick = useCallback(
+    (direction: -1 | 1) => (event: MouseEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      scrollOneLine(direction);
+    },
+    [scrollOneLine]
+  );
+
+  return (
+    <div className={outerClassName}>
+      <div ref={scrollRef} className={innerClassName} onWheel={handleWheel}>
+        <div ref={contentRef}>{children}</div>
+      </div>
+      {canScroll ? (
+        <>
+          <button
+            type="button"
+            className="nodrag nopan absolute right-[1px] top-[1px] z-20 flex h-[14px] w-[14px] items-center justify-center rounded-[2px] border border-[#8f8f8f] bg-[#8f8f8f] p-0 shadow-[0_1px_3px_rgba(15,23,42,0.16)] hover:border-[#7f7f7f] hover:bg-[#7f7f7f]"
+            aria-label="Scroll text up one line"
+            title="Scroll text up one line"
+            onPointerDown={stopScrollButtonPointer}
+            onMouseDown={stopScrollButtonPointer}
+            onClick={handleScrollButtonClick(-1)}
+          >
+            <span aria-hidden="true" className="h-0 w-0 border-x-[4px] border-b-[5px] border-x-transparent border-b-white" />
+          </button>
+          <button
+            type="button"
+            className="nodrag nopan absolute bottom-[1px] right-[1px] z-20 flex h-[14px] w-[14px] items-center justify-center rounded-[2px] border border-[#8f8f8f] bg-[#8f8f8f] p-0 shadow-[0_1px_3px_rgba(15,23,42,0.16)] hover:border-[#7f7f7f] hover:bg-[#7f7f7f]"
+            aria-label="Scroll text down one line"
+            title="Scroll text down one line"
+            onPointerDown={stopScrollButtonPointer}
+            onMouseDown={stopScrollButtonPointer}
+            onClick={handleScrollButtonClick(1)}
+          >
+            <span aria-hidden="true" className="h-0 w-0 border-x-[4px] border-t-[5px] border-x-transparent border-t-white" />
+          </button>
+        </>
+      ) : null}
+    </div>
   );
 }
 
@@ -2532,7 +2639,7 @@ function ModernIncidentNode({
             {data.entityKind === "incident_outcome" ? (
               <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_auto] px-4 pb-3 pt-3">
                 <div className="min-h-0 overflow-hidden">
-                  <div className="h-full w-full overflow-y-auto pr-1 text-left text-[11px] font-medium leading-[1.35] text-slate-800">
+                  <OneLineScrollableText className="h-full w-full overflow-y-auto pr-1 text-left text-[11px] font-medium leading-[1.35] text-slate-800">
                     {data.metaLabel ? (
                       <div className="mb-2 flex">
                         <span
@@ -2550,7 +2657,7 @@ function ModernIncidentNode({
                     <div>
                       {data.description ?? data.title ?? fallbackTitle}
                     </div>
-                  </div>
+                  </OneLineScrollableText>
                 </div>
                 <div className="mt-2 flex h-[28px] min-h-[28px] items-center gap-2 overflow-hidden">
                   {tags.map((tag) => (
@@ -2572,7 +2679,7 @@ function ModernIncidentNode({
               </div>
             ) : data.entityKind === "incident_response_recovery" ? (
               <div className="flex min-h-0 flex-1 flex-col px-4 pb-3 pt-3">
-                <div className="min-h-0 flex-1 overflow-y-auto pr-1 text-left text-[11px] font-medium leading-[1.35] text-slate-800">
+                <OneLineScrollableText className="min-h-0 flex-1 overflow-y-auto pr-1 text-left text-[11px] font-medium leading-[1.35] text-slate-800">
                   {data.metaLabel ? (
                     <div className="mb-2 flex">
                       <span
@@ -2590,20 +2697,20 @@ function ModernIncidentNode({
                   <div>
                     {data.description ?? data.title ?? fallbackTitle}
                   </div>
-                </div>
+                </OneLineScrollableText>
               </div>
             ) : data.entityKind === "incident_finding" ? (
               <div className="flex min-h-0 flex-1 flex-col px-4 pb-3 pt-3">
-                <div className="min-h-0 flex-1 overflow-y-auto pr-1 text-left text-[11px] font-medium leading-[1.35] text-slate-800">
+                <OneLineScrollableText className="min-h-0 flex-1 overflow-y-auto pr-1 text-left text-[11px] font-medium leading-[1.35] text-slate-800">
                   {data.description ?? data.title ?? fallbackTitle}
-                </div>
+                </OneLineScrollableText>
               </div>
             ) : (
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-3 pt-3">
                 <div className="flex min-h-0 flex-1 overflow-hidden">
-                  <div className="h-full min-h-0 flex-1 overflow-y-auto pr-1 text-left text-[11px] font-medium leading-[1.35] text-slate-800">
+                  <OneLineScrollableText className="h-full min-h-0 flex-1 overflow-y-auto pr-1 text-left text-[11px] font-medium leading-[1.35] text-slate-800">
                     {data.description ?? data.title ?? fallbackTitle}
-                  </div>
+                  </OneLineScrollableText>
                 </div>
                 <div className="mt-2 flex min-h-[26px] shrink-0 items-center gap-2">
                   {tags.map((tag) => (
@@ -2670,9 +2777,9 @@ function ModernIncidentNode({
               </button>
             </div>
             <div className="flex min-h-0 flex-1 px-4 pb-3 pt-2">
-              <div className="min-h-0 flex-1 overflow-y-auto pr-1 text-left text-[11px] font-medium leading-[1.35] text-slate-800">
+              <OneLineScrollableText className="min-h-0 flex-1 overflow-y-auto pr-1 text-left text-[11px] font-medium leading-[1.35] text-slate-800">
                 {getNodeInfoText(data)}
-              </div>
+              </OneLineScrollableText>
             </div>
           </div>
         </div>
