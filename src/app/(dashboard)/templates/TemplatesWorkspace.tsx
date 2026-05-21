@@ -24,7 +24,14 @@ type TemplateRow = {
   snapshot: Record<string, unknown>;
 };
 
+type TemplateViewMode = "mine" | "global";
+
 const platformAdminUserId = "420266a0-2087-4f36-8c28-340443dd1a82";
+
+const templateViewOptions: Array<{ id: TemplateViewMode; label: string }> = [
+  { id: "mine", label: "My templates" },
+  { id: "global", label: "Global templates" },
+];
 
 const formatDateTime = (value: string) =>
   new Date(value).toLocaleString("en-AU", {
@@ -73,12 +80,19 @@ export default function TemplatesWorkspace() {
   const [expandedMobileTemplateId, setExpandedMobileTemplateId] = useState<string | null>(null);
   const [portalReady, setPortalReady] = useState(false);
   const [page, setPage] = useState(1);
+  const [templateViewMode, setTemplateViewMode] = useState<TemplateViewMode>("mine");
 
   const isPlatformAdmin = currentUserId === platformAdminUserId || accessState?.userId === platformAdminUserId;
 
   useEffect(() => {
     setPortalReady(true);
   }, []);
+
+  useEffect(() => {
+    setSelectedTemplateIds([]);
+    setExpandedMobileTemplateId(null);
+    setPage(1);
+  }, [templateViewMode]);
 
   const loadTemplates = useCallback(async () => {
     const {
@@ -158,14 +172,29 @@ export default function TemplatesWorkspace() {
     </div>
   );
 
-  const editableRows = useMemo(
+  const canEditTemplate = useCallback(
+    (row: TemplateRow) => {
+      if (row.user_id === currentUserId) return true;
+      if (isPlatformAdmin) return true;
+      return false;
+    },
+    [currentUserId, isPlatformAdmin]
+  );
+
+  const visibleRows = useMemo(
     () =>
       rows.filter((row) => {
-        if (row.user_id === currentUserId) return true;
-        if (isPlatformAdmin) return true;
-        return false;
+        if (templateViewMode === "global") {
+          return getTemplateVisibility(row) === "global" || row.is_global;
+        }
+        return row.user_id === currentUserId;
       }),
-    [currentUserId, isPlatformAdmin, rows]
+    [currentUserId, rows, templateViewMode]
+  );
+
+  const editableRows = useMemo(
+    () => visibleRows.filter((row) => canEditTemplate(row)),
+    [canEditTemplate, visibleRows]
   );
 
   const selectedEditableRows = useMemo(
@@ -174,14 +203,26 @@ export default function TemplatesWorkspace() {
   );
 
   useEffect(() => {
-    const totalPages = Math.max(1, Math.ceil(editableRows.length / pageSize));
+    const totalPages = Math.max(1, Math.ceil(visibleRows.length / pageSize));
     setPage((current) => Math.min(current, totalPages));
-  }, [editableRows.length, pageSize]);
+  }, [pageSize, visibleRows.length]);
+
+  useEffect(() => {
+    const editableIds = new Set(editableRows.map((row) => row.id));
+    setSelectedTemplateIds((current) => {
+      const next = current.filter((id) => editableIds.has(id));
+      return next.length === current.length ? current : next;
+    });
+  }, [editableRows]);
 
   const allSelected = editableRows.length > 0 && selectedEditableRows.length === editableRows.length;
-  const totalPages = Math.max(1, Math.ceil(editableRows.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(visibleRows.length / pageSize));
   const safePage = Math.min(page, totalPages);
-  const paginatedRows = editableRows.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const paginatedRows = visibleRows.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const emptyTemplateMessage =
+    templateViewMode === "global"
+      ? "No global templates are available yet."
+      : "Save a template from a canvas map to start building your library.";
 
   const toggleSelected = (templateId: string) => {
     setSelectedTemplateIds((current) =>
@@ -257,15 +298,17 @@ export default function TemplatesWorkspace() {
   };
 
   const handleDuplicateTemplate = async (row: TemplateRow) => {
+    const targetVisibility = canEditTemplate(row) ? getTemplateVisibility(row) : "private";
+
     try {
       setDuplicatingTemplateId(row.id);
       setError(null);
       const { error: duplicateError } = await supabase.rpc("save_investigation_template", {
-        p_name: buildDuplicateTemplateName(row.name, getTemplateVisibility(row)),
+        p_name: buildDuplicateTemplateName(row.name, targetVisibility),
         p_snapshot: row.snapshot,
         p_template_id: null,
-        p_is_global: row.visibility === "global",
-        p_visibility: row.visibility ?? (row.is_global ? "global" : "private"),
+        p_is_global: targetVisibility === "global",
+        p_visibility: targetVisibility,
       });
 
       if (duplicateError) throw duplicateError;
@@ -330,8 +373,27 @@ export default function TemplatesWorkspace() {
       }
     >
       <section className={shellStyles.accountCard}>
-        <div className={shellStyles.tableToolbar}>
-          <span title={!selectedEditableRows.length ? "Select one or more templates to bulk delete." : undefined}>
+        <div className={`${shellStyles.tableToolbar} ${shellStyles.tableToolbarSplit}`}>
+          <div className={shellStyles.tableModeToggle} role="radiogroup" aria-label="Template library view">
+            {templateViewOptions.map((option) => {
+              const isActive = templateViewMode === option.id;
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={isActive}
+                  className={`${shellStyles.tableModeToggleButton} ${
+                    isActive ? shellStyles.tableModeToggleButtonActive : ""
+                  }`}
+                  onClick={() => setTemplateViewMode(option.id)}
+                >
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+          <span className={shellStyles.tableToolbarAction} title={!selectedEditableRows.length ? "Select one or more editable templates to bulk delete." : undefined}>
             <button
               type="button"
               className={`${shellStyles.button} ${shellStyles.buttonDanger} ${shellStyles.bulkDeleteButton}`}
@@ -363,10 +425,11 @@ export default function TemplatesWorkspace() {
                     className={shellStyles.tableCheckbox}
                     type="checkbox"
                     checked={allSelected}
+                    disabled={!editableRows.length}
                     onChange={() =>
                       setSelectedTemplateIds(allSelected ? [] : editableRows.map((row) => row.id))
                     }
-                    aria-label="Select all templates"
+                    aria-label="Select all editable templates"
                   />
                 </th>
                 <th>Template name</th>
@@ -377,89 +440,99 @@ export default function TemplatesWorkspace() {
               </tr>
             </thead>
             <tbody>
-              {editableRows.length === 0 ? (
+              {visibleRows.length === 0 ? (
                 <tr>
                   <td colSpan={6} className={shellStyles.tableStateCell}>
-                    <div className={shellStyles.tableEmptyState}>Save a template from a canvas map to start building your library.</div>
+                    <div className={shellStyles.tableEmptyState}>{emptyTemplateMessage}</div>
                   </td>
                 </tr>
               ) : (
-                paginatedRows.map((row) => (
-                  <tr
-                    key={row.id}
-                    className={shellStyles.clickableRow}
-                    onClick={() => setPendingOpenRow(row)}
-                    tabIndex={0}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        setPendingOpenRow(row);
-                      }
-                    }}
-                  >
-                    <td onClick={(event) => event.stopPropagation()}>
-                      <input
-                        className={shellStyles.tableCheckbox}
-                        type="checkbox"
-                        checked={selectedTemplateIds.includes(row.id)}
-                        onChange={() => toggleSelected(row.id)}
-                        aria-label={`Select ${row.name}`}
-                      />
-                    </td>
-                    <td>
-                      <div className={shellStyles.mapCell}>
-                        <div className={shellStyles.mapCellText}>
-                          <strong className={shellStyles.tableClamp}>{row.name}</strong>
-                          <span className={shellStyles.tableClamp}>
-                            {getTemplateVisibilityDescription(getTemplateVisibility(row))}
-                          </span>
+                paginatedRows.map((row) => {
+                  const rowCanEdit = canEditTemplate(row);
+                  return (
+                    <tr
+                      key={row.id}
+                      className={rowCanEdit ? shellStyles.clickableRow : undefined}
+                      onClick={() => {
+                        if (rowCanEdit) setPendingOpenRow(row);
+                      }}
+                      tabIndex={rowCanEdit ? 0 : undefined}
+                      onKeyDown={(event) => {
+                        if (!rowCanEdit) return;
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          setPendingOpenRow(row);
+                        }
+                      }}
+                    >
+                      <td onClick={(event) => event.stopPropagation()}>
+                        <input
+                          className={shellStyles.tableCheckbox}
+                          type="checkbox"
+                          checked={selectedTemplateIds.includes(row.id)}
+                          disabled={!rowCanEdit}
+                          onChange={() => toggleSelected(row.id)}
+                          aria-label={`Select ${row.name}`}
+                        />
+                      </td>
+                      <td>
+                        <div className={shellStyles.mapCell}>
+                          <div className={shellStyles.mapCellText}>
+                            <strong className={shellStyles.tableClamp}>{row.name}</strong>
+                            <span className={shellStyles.tableClamp}>
+                              {getTemplateVisibilityDescription(getTemplateVisibility(row))}
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    <td>
-                      <span className={shellStyles.tableClamp}>{getTemplateVisibilityLabel(getTemplateVisibility(row))}</span>
-                    </td>
-                    <td>
-                      <span className={shellStyles.tableDate}>{formatDateTime(row.updated_at)}</span>
-                    </td>
-                    <td>
-                      <span className={shellStyles.tableDate}>{formatDateTime(row.created_at)}</span>
-                    </td>
-                    <td onClick={(event) => event.stopPropagation()}>
-                      <div className={shellStyles.actionButtons}>
-                        <button
-                          type="button"
-                          className={shellStyles.actionButton}
-                          onClick={() => setPendingDuplicateRow(row)}
-                          aria-label="Duplicate template"
-                          title="Duplicate template"
-                        >
-                          <Image src="/icons/addcomponent.svg" alt="" width={16} height={16} className={shellStyles.actionIcon} />
-                        </button>
-                        <button
-                          type="button"
-                          className={`${shellStyles.actionButton} ${shellStyles.actionButtonDanger}`}
-                          onClick={() => setPendingDeleteRow(row)}
-                          aria-label="Delete template"
-                          title="Delete template"
-                        >
-                          <Image src="/icons/delete.svg" alt="" width={16} height={16} className={shellStyles.actionIcon} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                      <td>
+                        <span className={shellStyles.tableClamp}>{getTemplateVisibilityLabel(getTemplateVisibility(row))}</span>
+                      </td>
+                      <td>
+                        <span className={shellStyles.tableDate}>{formatDateTime(row.updated_at)}</span>
+                      </td>
+                      <td>
+                        <span className={shellStyles.tableDate}>{formatDateTime(row.created_at)}</span>
+                      </td>
+                      <td onClick={(event) => event.stopPropagation()}>
+                        <div className={shellStyles.actionButtons}>
+                          <button
+                            type="button"
+                            className={shellStyles.actionButton}
+                            onClick={() => setPendingDuplicateRow(row)}
+                            aria-label="Duplicate template"
+                            title="Duplicate template"
+                          >
+                            <Image src="/icons/addcomponent.svg" alt="" width={16} height={16} className={shellStyles.actionIcon} />
+                          </button>
+                          {rowCanEdit ? (
+                            <button
+                              type="button"
+                              className={`${shellStyles.actionButton} ${shellStyles.actionButtonDanger}`}
+                              onClick={() => setPendingDeleteRow(row)}
+                              aria-label="Delete template"
+                              title="Delete template"
+                            >
+                              <Image src="/icons/delete.svg" alt="" width={16} height={16} className={shellStyles.actionIcon} />
+                            </button>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
         </div>
 
         <div className={shellStyles.dashboardMobileList}>
-          {editableRows.length === 0 ? (
-            <div className={shellStyles.dashboardMobileState}>Save a template from a canvas map to start building your library.</div>
+          {visibleRows.length === 0 ? (
+            <div className={shellStyles.dashboardMobileState}>{emptyTemplateMessage}</div>
           ) : (
             paginatedRows.map((row) => {
               const isSelected = selectedTemplateIds.includes(row.id);
+              const rowCanEdit = canEditTemplate(row);
               return (
                 <article key={`mobile-${row.id}`} className={shellStyles.dashboardMobileCard}>
                   <button
@@ -475,6 +548,7 @@ export default function TemplatesWorkspace() {
                           className={shellStyles.tableCheckbox}
                           aria-label={`Select ${row.name}`}
                           checked={isSelected}
+                          disabled={!rowCanEdit}
                           onChange={(event) => {
                             setSelectedTemplateIds((current) =>
                               event.target.checked ? [...current, row.id] : current.filter((id) => id !== row.id)
@@ -509,18 +583,20 @@ export default function TemplatesWorkspace() {
                         </div>
                       </dl>
 
-                      <div className={shellStyles.dashboardMobilePrimaryAction}>
-                        <button
-                          type="button"
-                          className={`${shellStyles.button} ${shellStyles.buttonAccent}`}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setPendingOpenRow(row);
-                          }}
-                        >
-                          Edit Template
-                        </button>
-                      </div>
+                      {rowCanEdit ? (
+                        <div className={shellStyles.dashboardMobilePrimaryAction}>
+                          <button
+                            type="button"
+                            className={`${shellStyles.button} ${shellStyles.buttonAccent}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setPendingOpenRow(row);
+                            }}
+                          >
+                            Edit Template
+                          </button>
+                        </div>
+                      ) : null}
 
                       <div className={shellStyles.dashboardMobileActions}>
                         <button
@@ -534,17 +610,19 @@ export default function TemplatesWorkspace() {
                           <Image src="/icons/addcomponent.svg" alt="" width={16} height={16} className={shellStyles.actionIcon} />
                           Duplicate
                         </button>
-                        <button
-                          type="button"
-                          className={`${shellStyles.button} ${shellStyles.buttonDanger} ${shellStyles.dashboardMobileActionButton}`}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setPendingDeleteRow(row);
-                          }}
-                        >
-                          <Image src="/icons/delete.svg" alt="" width={16} height={16} className={shellStyles.actionIcon} />
-                          Delete
-                        </button>
+                        {rowCanEdit ? (
+                          <button
+                            type="button"
+                            className={`${shellStyles.button} ${shellStyles.buttonDanger} ${shellStyles.dashboardMobileActionButton}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setPendingDeleteRow(row);
+                            }}
+                          >
+                            <Image src="/icons/delete.svg" alt="" width={16} height={16} className={shellStyles.actionIcon} />
+                            Delete
+                          </button>
+                        ) : null}
                       </div>
                     </>
                   ) : null}
@@ -555,7 +633,7 @@ export default function TemplatesWorkspace() {
         </div>
 
         <DashboardTableFooter
-          total={editableRows.length}
+          total={visibleRows.length}
           page={safePage}
           pageSize={pageSize}
           onPageChange={setPage}
@@ -609,7 +687,7 @@ export default function TemplatesWorkspace() {
               You are about to duplicate <strong>{pendingDuplicateRow.name}</strong>.
             </p>
             <p className={shellStyles.modalText}>
-              The copy will keep the same template layout and save into the same library.
+              The copy will keep the same template layout and save as a template you can manage.
             </p>
             <div className={shellStyles.modalActions}>
               <button

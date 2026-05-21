@@ -13,6 +13,7 @@ type DashboardPageSkeletonProps = {
     | "dashboard"
     | "templates"
     | "lead-access"
+    | "lead-access-notes"
     | "account"
     | "admin"
     | "admin-users"

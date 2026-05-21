@@ -25,6 +25,7 @@ type MapCanvasHeaderProps = {
   setIsEditingMapInfo: (value: boolean) => void;
   setError: (value: string | null) => void;
   onOpenHelp: () => void;
+  onOpenGuestWelcome?: () => void;
 };
 
 export function MapCanvasHeader({
@@ -48,6 +49,7 @@ export function MapCanvasHeader({
   setIsEditingMapInfo,
   setError,
   onOpenHelp,
+  onOpenGuestWelcome,
 }: MapCanvasHeaderProps) {
   const mapCategoryHeaderLabel = (() => {
     if (isTemplateEditor) return "Create / Edit Template Canvas";
@@ -85,6 +87,19 @@ export function MapCanvasHeader({
       title: undefined,
     };
   })();
+  const showInfoButton = showMapInfoButton || !!onOpenGuestWelcome;
+  const handleInfoButtonClick = () => {
+    if (onOpenGuestWelcome) {
+      onOpenGuestWelcome();
+      return;
+    }
+    closeAllLeftAsides();
+    setShowMapInfoAside((prev) => {
+      const next = !prev;
+      if (next) setIsEditingMapInfo(false);
+      return next;
+    });
+  };
 
   return (
     <header className="dashboardCanvasHeader fixed inset-x-0 top-0 z-[90] bg-black md:sticky md:h-[64px]">
@@ -113,21 +128,14 @@ export function MapCanvasHeader({
             </span>
           </div>
           <div className="flex shrink-0 justify-self-end items-center gap-2 md:hidden">
-            {showMapInfoButton ? (
+            {showInfoButton ? (
               <button
                 ref={mapInfoButtonRef}
                 type="button"
-                aria-label="Open map information"
-                title="Map information"
+                aria-label={onOpenGuestWelcome ? "Open map guide" : "Open map information"}
+                title={onOpenGuestWelcome ? "Map guide" : "Map information"}
                 className="flex h-8 w-8 items-center justify-center rounded-md border border-slate-600/60 bg-transparent text-white hover:bg-slate-900/50"
-                onClick={() => {
-                  closeAllLeftAsides();
-                  setShowMapInfoAside((prev) => {
-                    const next = !prev;
-                    if (next) setIsEditingMapInfo(false);
-                    return next;
-                  });
-                }}
+                onClick={handleInfoButtonClick}
               >
                 <span
                   aria-hidden="true"
@@ -206,21 +214,14 @@ export function MapCanvasHeader({
             )}
             {savingMapTitle ? <span className="text-xs font-medium text-[#05c3dd]">Saving...</span> : null}
             {!savingMapTitle && mapTitleSavedFlash ? <span className="text-xs font-medium text-emerald-400">Saved</span> : null}
-            {showMapInfoButton ? (
+            {showInfoButton ? (
               <button
                 ref={mapInfoButtonRef}
                 type="button"
-                aria-label="Open map information"
-                title="Map information"
+                aria-label={onOpenGuestWelcome ? "Open map guide" : "Open map information"}
+                title={onOpenGuestWelcome ? "Map guide" : "Map information"}
                 className="ml-1 hidden h-8 w-8 items-center justify-center rounded-md border border-slate-600/60 bg-transparent text-white hover:bg-slate-900/50 md:inline-flex"
-                onClick={() => {
-                  closeAllLeftAsides();
-                  setShowMapInfoAside((prev) => {
-                    const next = !prev;
-                    if (next) setIsEditingMapInfo(false);
-                    return next;
-                  });
-                }}
+                onClick={handleInfoButtonClick}
               >
                 <span
                   aria-hidden="true"

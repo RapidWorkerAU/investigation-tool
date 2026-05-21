@@ -1,10 +1,11 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { useParams, useRouter } from "next/navigation";
 import DashboardShell from "@/components/dashboard/DashboardShell";
 import { DashboardPageSkeleton } from "@/components/dashboard/DashboardTableLoadingState";
+import DashboardTableFooter from "@/components/dashboard/DashboardTableFooter";
 import shellStyles from "@/components/dashboard/DashboardShell.module.css";
 import { isPlatformAdminEmail } from "@/lib/platformAdmin";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
@@ -65,6 +66,40 @@ type BulkInviteResponse = {
 };
 
 type StructureItem = { id: string; name: string };
+type AdminOrganisationSectionId = "overview" | "departments" | "sites" | "members" | "invites";
+
+const adminOrganisationSections: Array<{ id: AdminOrganisationSectionId; label: string; description: string; icon: string }> = [
+  {
+    id: "overview",
+    label: "Overview",
+    description: "Core identity, status, billing reference, and tenant metadata.",
+    icon: "/icons/organisation.svg",
+  },
+  {
+    id: "departments",
+    label: "Departments",
+    description: "Department options available for organisation member assignments.",
+    icon: "/icons/structure.svg",
+  },
+  {
+    id: "sites",
+    label: "Sites",
+    description: "Site options available for organisation member assignments.",
+    icon: "/icons/location.svg",
+  },
+  {
+    id: "members",
+    label: "Members",
+    description: "Users, roles, reporting lines, departments, sites, and invite status.",
+    icon: "/icons/users.svg",
+  },
+  {
+    id: "invites",
+    label: "Invites",
+    description: "Pending and historical invite records linked to this organisation.",
+    icon: "/icons/email.svg",
+  },
+];
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -118,12 +153,51 @@ const parseStructureNames = (value: string) =>
     )
   );
 
+const formatAdminLabel = (value: string | null | undefined) =>
+  value
+    ? value
+        .split("_")
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" ")
+    : "-";
+
+const getStatusToneClass = (status: string | null | undefined) => {
+  const normalized = status?.toLowerCase() ?? "";
+  if (normalized === "active" || normalized === "success" || normalized === "accepted") {
+    return shellStyles.accessStatusPillGood;
+  }
+  if (normalized === "inactive" || normalized === "suspended" || normalized === "failed" || normalized === "revoked") {
+    return shellStyles.accessStatusPillBad;
+  }
+  return shellStyles.accessStatusPillWarn;
+};
+
+const getOrganisationInitials = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("") || "IT";
+
+const detailPageSize = 7;
+
+function paginateRows<T>(rows: T[], page: number) {
+  const totalPages = Math.max(1, Math.ceil(rows.length / detailPageSize));
+  const safePage = Math.min(Math.max(1, page), totalPages);
+  return {
+    safePage,
+    rows: rows.slice((safePage - 1) * detailPageSize, safePage * detailPageSize),
+  };
+}
+
 export default function AdminOrganisationDetailPage() {
   const params = useParams<{ organisationId: string }>();
   const router = useRouter();
   const supabase = useMemo(() => createSupabaseBrowser(), []);
   const [loading, setLoading] = useState(true);
   const [authorized, setAuthorized] = useState(false);
+  const [activeSection, setActiveSection] = useState<AdminOrganisationSectionId>("overview");
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [detail, setDetail] = useState<OrganisationDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -154,6 +228,15 @@ export default function AdminOrganisationDetailPage() {
   const [structureNamesInput, setStructureNamesInput] = useState("");
   const [structureSubmitting, setStructureSubmitting] = useState(false);
   const [structureError, setStructureError] = useState<string | null>(null);
+  const [departmentPage, setDepartmentPage] = useState(1);
+  const [sitePage, setSitePage] = useState(1);
+  const [memberPage, setMemberPage] = useState(1);
+  const [invitePage, setInvitePage] = useState(1);
+  const [selectedDepartmentIds, setSelectedDepartmentIds] = useState<string[]>([]);
+  const [selectedSiteIds, setSelectedSiteIds] = useState<string[]>([]);
+  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
+  const [selectedInviteIds, setSelectedInviteIds] = useState<string[]>([]);
+  const [bulkDeletingSection, setBulkDeletingSection] = useState<AdminOrganisationSectionId | null>(null);
 
   const loadDetail = useCallback(async (accessToken: string) => {
     const response = await fetch(`/api/admin/organisations/${params.organisationId}`, {
@@ -168,6 +251,10 @@ export default function AdminOrganisationDetailPage() {
     }
 
     setDetail(payload);
+    setSelectedDepartmentIds((current) => current.filter((id) => payload.departments.some((department) => department.id === id)));
+    setSelectedSiteIds((current) => current.filter((id) => payload.sites.some((site) => site.id === id)));
+    setSelectedMemberIds((current) => current.filter((id) => payload.members.some((member) => member.userId === id)));
+    setSelectedInviteIds((current) => current.filter((id) => payload.invites.some((invite) => invite.id === id)));
   }, [params.organisationId]);
 
   useEffect(() => {
@@ -210,6 +297,14 @@ export default function AdminOrganisationDetailPage() {
 
     void run();
   }, [loadDetail, params.organisationId, router, supabase]);
+
+  useEffect(() => {
+    if (!detail) return;
+    setDepartmentPage((current) => Math.min(current, Math.max(1, Math.ceil(detail.departments.length / detailPageSize))));
+    setSitePage((current) => Math.min(current, Math.max(1, Math.ceil(detail.sites.length / detailPageSize))));
+    setMemberPage((current) => Math.min(current, Math.max(1, Math.ceil(detail.members.length / detailPageSize))));
+    setInvitePage((current) => Math.min(current, Math.max(1, Math.ceil(detail.invites.length / detailPageSize))));
+  }, [detail]);
 
   const openLinkModal = async () => {
     setLinkModalOpen(true);
@@ -559,10 +654,797 @@ export default function AdminOrganisationDetailPage() {
     }
   };
 
+  const toggleOrganisationSelection = (
+    checked: boolean,
+    ids: string[],
+    setter: Dispatch<SetStateAction<string[]>>
+  ) => {
+    setter((current) =>
+      checked
+        ? Array.from(new Set([...current, ...ids]))
+        : current.filter((id) => !ids.includes(id))
+    );
+  };
+
+  const deleteOrganisationRows = async (
+    section: Exclude<AdminOrganisationSectionId, "overview">,
+    ids: string[],
+  ) => {
+    if (!ids.length) return;
+    const label = section === "members" ? "memberships" : section;
+    if (!window.confirm(`Delete ${ids.length} selected ${label}?`)) return;
+
+    setBulkDeletingSection(section);
+    setError(null);
+    setStatusMessage(null);
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        throw new Error("You are no longer signed in.");
+      }
+
+      const endpointForId = (id: string) => {
+        if (section === "departments") return `/api/admin/organisations/${params.organisationId}/departments/${id}`;
+        if (section === "sites") return `/api/admin/organisations/${params.organisationId}/sites/${id}`;
+        if (section === "members") return `/api/admin/organisations/${params.organisationId}/members/${id}`;
+        return `/api/admin/organisations/${params.organisationId}/invites/${id}`;
+      };
+
+      const results = await Promise.all(
+        ids.map(async (id) => {
+          const response = await fetch(endpointForId(id), {
+            method: "DELETE",
+            headers: {
+              Authorization: `Bearer ${session.access_token}`,
+            },
+          });
+          const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+          return {
+            id,
+            ok: response.ok,
+            error: payload?.error || `Unable to delete ${id}.`,
+          };
+        }),
+      );
+
+      const failures = results.filter((result) => !result.ok);
+      if (failures.length === results.length) {
+        throw new Error(failures[0]?.error || `Unable to delete selected ${label}.`);
+      }
+
+      await loadDetail(session.access_token);
+      if (section === "departments") setSelectedDepartmentIds((current) => current.filter((id) => !ids.includes(id)));
+      if (section === "sites") setSelectedSiteIds((current) => current.filter((id) => !ids.includes(id)));
+      if (section === "members") setSelectedMemberIds((current) => current.filter((id) => !ids.includes(id)));
+      if (section === "invites") setSelectedInviteIds((current) => current.filter((id) => !ids.includes(id)));
+
+      setStatusMessage(
+        failures.length
+          ? `Deleted ${results.length - failures.length} selected ${label}. ${failures.length} failed.`
+          : `Deleted ${ids.length} selected ${label}.`
+      );
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : `Unable to delete selected ${label}.`);
+    } finally {
+      setBulkDeletingSection(null);
+    }
+  };
+
   const editableLeaderOptions = useMemo(() => {
     if (!editMember || !detail) return [];
     return detail.members.filter((member) => member.userId !== editMember.userId);
   }, [detail, editMember]);
+
+  const activeOrganisationSection =
+    adminOrganisationSections.find((section) => section.id === activeSection) ?? adminOrganisationSections[0];
+
+  const renderOverviewSection = () => {
+    if (!detail) return null;
+
+    return (
+      <div className={shellStyles.accountSettingsPanel}>
+        <div className={`${shellStyles.accountProfileHero} ${shellStyles.adminUserProfileHero}`}>
+          <div className={shellStyles.accountProfileAvatar} aria-hidden="true">
+            {getOrganisationInitials(detail.organisation.name)}
+          </div>
+          <div className={shellStyles.accountProfileIdentity}>
+            <strong>{detail.organisation.name}</strong>
+            <span>{detail.organisation.slug || "No slug set"}</span>
+          </div>
+          <div className={shellStyles.adminUserHeroStats}>
+            <div>
+              <span>Members</span>
+              <strong>{detail.members.length}</strong>
+            </div>
+            <div>
+              <span>Departments</span>
+              <strong>{detail.departments.length}</strong>
+            </div>
+            <div>
+              <span>Sites</span>
+              <strong>{detail.sites.length}</strong>
+            </div>
+          </div>
+        </div>
+
+        <div className={shellStyles.accountSettingsDetailCard}>
+          <div className={shellStyles.accountSettingsCardHeader}>
+            <div>
+              <h3>Organisation Information</h3>
+              <p>Core organisation identity, status, and billing reference.</p>
+            </div>
+          </div>
+          <div className={shellStyles.accountInfoGrid}>
+            <div className={shellStyles.accountInfoItem}>
+              <span>Name</span>
+              <strong>{detail.organisation.name}</strong>
+            </div>
+            <div className={shellStyles.accountInfoItem}>
+              <span>Slug</span>
+              <strong>{detail.organisation.slug || "-"}</strong>
+            </div>
+            <div className={shellStyles.accountInfoItem}>
+              <span>Status</span>
+              <strong
+                className={`${shellStyles.accessStatusPill} ${shellStyles.accountStatusPillValue} ${getStatusToneClass(detail.organisation.status)}`}
+              >
+                {formatAdminLabel(detail.organisation.status)}
+              </strong>
+            </div>
+            <div className={shellStyles.accountInfoItem}>
+              <span>Created</span>
+              <strong>{formatDateTime(detail.organisation.created_at)}</strong>
+            </div>
+            <div className={shellStyles.accountInfoItem}>
+              <span>Billing Plan</span>
+              <strong>{detail.organisation.billingPlanName || "-"}</strong>
+            </div>
+            <div className={shellStyles.accountInfoItem}>
+              <span>Billing Notes</span>
+              <strong>{detail.organisation.billingNotes || "-"}</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderDepartmentsSection = () => {
+    if (!detail) return null;
+    const { safePage, rows } = paginateRows(detail.departments, departmentPage);
+    const visibleIds = rows.map((department) => department.id);
+    const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedDepartmentIds.includes(id));
+
+    return (
+      <div className={shellStyles.accountSettingsPanel}>
+        <button
+          type="button"
+          className={`${shellStyles.button} ${shellStyles.buttonDanger} ${shellStyles.adminUserMobileSectionAction}`}
+          onClick={() => void deleteOrganisationRows("departments", selectedDepartmentIds)}
+          disabled={!selectedDepartmentIds.length || bulkDeletingSection === "departments"}
+        >
+          Bulk Delete
+        </button>
+        <button
+          type="button"
+          className={`${shellStyles.button} ${shellStyles.buttonSecondary} ${shellStyles.adminUserMobileSectionAction}`}
+          onClick={() => openStructureModal("department", "create")}
+        >
+          Add department
+        </button>
+            <div className={`${shellStyles.tableWrap} ${shellStyles.reportDataTableWrap}`}>
+              <table className={`${shellStyles.table} ${shellStyles.reportDataTable}`}>
+                <thead>
+                  <tr>
+                    <th>
+                      <input
+                        className={shellStyles.tableCheckbox}
+                        type="checkbox"
+                        checked={allVisibleSelected}
+                        onChange={(event) => toggleOrganisationSelection(event.target.checked, visibleIds, setSelectedDepartmentIds)}
+                        aria-label="Select visible departments"
+                      />
+                    </th>
+                    <th>#</th>
+                    <th>Name</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {detail.departments.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className={shellStyles.tableStateCell}>
+                        <div className={shellStyles.tableEmptyState}>No departments added yet.</div>
+                      </td>
+                    </tr>
+                  ) : (
+                    rows.map((department, index) => (
+                      <tr key={department.id}>
+                        <td>
+                          <input
+                            className={shellStyles.tableCheckbox}
+                            type="checkbox"
+                            checked={selectedDepartmentIds.includes(department.id)}
+                            onChange={(event) => toggleOrganisationSelection(event.target.checked, [department.id], setSelectedDepartmentIds)}
+                            aria-label={`Select ${department.name}`}
+                          />
+                        </td>
+                        <td><span className={shellStyles.tableValue}>{(safePage - 1) * detailPageSize + index + 1}</span></td>
+                        <td><span className={shellStyles.tableWrapText}>{department.name}</span></td>
+                        <td>
+                          <div className={shellStyles.actionButtons}>
+                            <button
+                              type="button"
+                              className={shellStyles.actionButton}
+                              onClick={() => openStructureModal("department", "edit", department)}
+                              aria-label="Edit department"
+                            >
+                              <Image src="/icons/edit.svg" alt="" width={16} height={16} className={shellStyles.actionIcon} />
+                            </button>
+                            <button
+                              type="button"
+                              className={`${shellStyles.actionButton} ${shellStyles.actionButtonDanger}`}
+                              onClick={() => void handleDeleteStructureItem("department", department)}
+                              aria-label="Delete department"
+                              disabled={structureSubmitting}
+                            >
+                              <Image src="/icons/delete.svg" alt="" width={16} height={16} className={shellStyles.actionIcon} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className={shellStyles.adminUserMobileList}>
+              {detail.departments.length === 0 ? (
+                <div className={shellStyles.adminUserMobileState}>No departments added yet.</div>
+              ) : (
+                rows.map((department, index) => (
+                  <div key={`mobile-department-${department.id}`} className={shellStyles.adminUserMobileCard}>
+                    <div className={shellStyles.adminUserMobileCardHeader}>
+                      <input
+                        className={shellStyles.tableCheckbox}
+                        type="checkbox"
+                        checked={selectedDepartmentIds.includes(department.id)}
+                        onChange={(event) => toggleOrganisationSelection(event.target.checked, [department.id], setSelectedDepartmentIds)}
+                        aria-label={`Select ${department.name}`}
+                      />
+                      <span className={shellStyles.adminUserMobileTitleBlock}>
+                        <strong>{(safePage - 1) * detailPageSize + index + 1}. {department.name}</strong>
+                        <small>Department</small>
+                      </span>
+                    </div>
+                    <div className={shellStyles.adminUserMobileActions}>
+                      <button
+                        type="button"
+                        className={`${shellStyles.button} ${shellStyles.buttonSecondary}`}
+                        onClick={() => openStructureModal("department", "edit", department)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className={`${shellStyles.button} ${shellStyles.buttonDanger}`}
+                        onClick={() => void handleDeleteStructureItem("department", department)}
+                        disabled={structureSubmitting}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            <DashboardTableFooter
+              total={detail.departments.length}
+              page={safePage}
+              pageSize={detailPageSize}
+              onPageChange={setDepartmentPage}
+              label="departments"
+            />
+      </div>
+    );
+  };
+
+  const renderSitesSection = () => {
+    if (!detail) return null;
+    const { safePage, rows } = paginateRows(detail.sites, sitePage);
+    const visibleIds = rows.map((site) => site.id);
+    const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedSiteIds.includes(id));
+
+    return (
+      <div className={shellStyles.accountSettingsPanel}>
+        <button
+          type="button"
+          className={`${shellStyles.button} ${shellStyles.buttonDanger} ${shellStyles.adminUserMobileSectionAction}`}
+          onClick={() => void deleteOrganisationRows("sites", selectedSiteIds)}
+          disabled={!selectedSiteIds.length || bulkDeletingSection === "sites"}
+        >
+          Bulk Delete
+        </button>
+        <button
+          type="button"
+          className={`${shellStyles.button} ${shellStyles.buttonSecondary} ${shellStyles.adminUserMobileSectionAction}`}
+          onClick={() => openStructureModal("site", "create")}
+        >
+          Add site
+        </button>
+            <div className={`${shellStyles.tableWrap} ${shellStyles.reportDataTableWrap}`}>
+              <table className={`${shellStyles.table} ${shellStyles.reportDataTable}`}>
+                <thead>
+                  <tr>
+                    <th>
+                      <input
+                        className={shellStyles.tableCheckbox}
+                        type="checkbox"
+                        checked={allVisibleSelected}
+                        onChange={(event) => toggleOrganisationSelection(event.target.checked, visibleIds, setSelectedSiteIds)}
+                        aria-label="Select visible sites"
+                      />
+                    </th>
+                    <th>#</th>
+                    <th>Name</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {detail.sites.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className={shellStyles.tableStateCell}>
+                        <div className={shellStyles.tableEmptyState}>No sites added yet.</div>
+                      </td>
+                    </tr>
+                  ) : (
+                    rows.map((site, index) => (
+                      <tr key={site.id}>
+                        <td>
+                          <input
+                            className={shellStyles.tableCheckbox}
+                            type="checkbox"
+                            checked={selectedSiteIds.includes(site.id)}
+                            onChange={(event) => toggleOrganisationSelection(event.target.checked, [site.id], setSelectedSiteIds)}
+                            aria-label={`Select ${site.name}`}
+                          />
+                        </td>
+                        <td><span className={shellStyles.tableValue}>{(safePage - 1) * detailPageSize + index + 1}</span></td>
+                        <td><span className={shellStyles.tableWrapText}>{site.name}</span></td>
+                        <td>
+                          <div className={shellStyles.actionButtons}>
+                            <button
+                              type="button"
+                              className={shellStyles.actionButton}
+                              onClick={() => openStructureModal("site", "edit", site)}
+                              aria-label="Edit site"
+                            >
+                              <Image src="/icons/edit.svg" alt="" width={16} height={16} className={shellStyles.actionIcon} />
+                            </button>
+                            <button
+                              type="button"
+                              className={`${shellStyles.actionButton} ${shellStyles.actionButtonDanger}`}
+                              onClick={() => void handleDeleteStructureItem("site", site)}
+                              aria-label="Delete site"
+                              disabled={structureSubmitting}
+                            >
+                              <Image src="/icons/delete.svg" alt="" width={16} height={16} className={shellStyles.actionIcon} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className={shellStyles.adminUserMobileList}>
+              {detail.sites.length === 0 ? (
+                <div className={shellStyles.adminUserMobileState}>No sites added yet.</div>
+              ) : (
+                rows.map((site, index) => (
+                  <div key={`mobile-site-${site.id}`} className={shellStyles.adminUserMobileCard}>
+                    <div className={shellStyles.adminUserMobileCardHeader}>
+                      <input
+                        className={shellStyles.tableCheckbox}
+                        type="checkbox"
+                        checked={selectedSiteIds.includes(site.id)}
+                        onChange={(event) => toggleOrganisationSelection(event.target.checked, [site.id], setSelectedSiteIds)}
+                        aria-label={`Select ${site.name}`}
+                      />
+                      <span className={shellStyles.adminUserMobileTitleBlock}>
+                        <strong>{(safePage - 1) * detailPageSize + index + 1}. {site.name}</strong>
+                        <small>Site</small>
+                      </span>
+                    </div>
+                    <div className={shellStyles.adminUserMobileActions}>
+                      <button
+                        type="button"
+                        className={`${shellStyles.button} ${shellStyles.buttonSecondary}`}
+                        onClick={() => openStructureModal("site", "edit", site)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className={`${shellStyles.button} ${shellStyles.buttonDanger}`}
+                        onClick={() => void handleDeleteStructureItem("site", site)}
+                        disabled={structureSubmitting}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            <DashboardTableFooter
+              total={detail.sites.length}
+              page={safePage}
+              pageSize={detailPageSize}
+              onPageChange={setSitePage}
+              label="sites"
+            />
+        </div>
+    );
+  };
+
+  const renderMembersSection = () => {
+    if (!detail) return null;
+    const { safePage, rows } = paginateRows(detail.members, memberPage);
+    const visibleIds = rows.map((member) => member.userId);
+    const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedMemberIds.includes(id));
+
+    return (
+      <div className={shellStyles.accountSettingsPanel}>
+        <button
+          type="button"
+          className={`${shellStyles.button} ${shellStyles.buttonDanger} ${shellStyles.adminUserMobileSectionAction}`}
+          onClick={() => void deleteOrganisationRows("members", selectedMemberIds)}
+          disabled={!selectedMemberIds.length || bulkDeletingSection === "members"}
+        >
+          Bulk Delete
+        </button>
+        <button
+          type="button"
+          className={`${shellStyles.button} ${shellStyles.buttonSecondary} ${shellStyles.adminUserMobileSectionAction}`}
+          onClick={() => setBulkCreateModalOpen(true)}
+        >
+          Bulk create users
+        </button>
+        <button
+          type="button"
+          className={`${shellStyles.button} ${shellStyles.buttonAccent} ${shellStyles.adminUserMobileSectionAction}`}
+          onClick={() => void openLinkModal()}
+        >
+          Link existing user
+        </button>
+
+        <div className={`${shellStyles.tableWrap} ${shellStyles.reportDataTableWrap}`}>
+          <table className={`${shellStyles.table} ${shellStyles.reportDataTable}`}>
+            <thead>
+              <tr>
+                <th>
+                  <input
+                    className={shellStyles.tableCheckbox}
+                    type="checkbox"
+                    checked={allVisibleSelected}
+                    onChange={(event) => toggleOrganisationSelection(event.target.checked, visibleIds, setSelectedMemberIds)}
+                    aria-label="Select visible members"
+                  />
+                </th>
+                <th>#</th>
+                <th>User</th>
+                <th>Role</th>
+                <th>Department</th>
+                <th>Site</th>
+                <th>Leader</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {detail.members.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className={shellStyles.tableStateCell}>
+                    <div className={shellStyles.tableEmptyState}>No organisation members yet.</div>
+                  </td>
+                </tr>
+              ) : (
+                rows.map((member, index) => (
+                  <tr
+                    key={member.userId}
+                    className={shellStyles.clickableRow}
+                    tabIndex={0}
+                    onClick={() => router.push(`/admin/users/${member.userId}`)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        router.push(`/admin/users/${member.userId}`);
+                      }
+                    }}
+                  >
+                    <td onClick={(event) => event.stopPropagation()}>
+                      <input
+                        className={shellStyles.tableCheckbox}
+                        type="checkbox"
+                        checked={selectedMemberIds.includes(member.userId)}
+                        onChange={(event) => toggleOrganisationSelection(event.target.checked, [member.userId], setSelectedMemberIds)}
+                        aria-label={`Select ${member.fullName || member.email || member.userId}`}
+                      />
+                    </td>
+                    <td><span className={shellStyles.tableValue}>{(safePage - 1) * detailPageSize + index + 1}</span></td>
+                    <td>
+                      <div className={shellStyles.mapCell}>
+                        <div className={shellStyles.mapCellText}>
+                          <strong className={shellStyles.tableClamp}>{member.fullName || "No name set"}</strong>
+                          <span className={shellStyles.tableClamp}>{member.email || "-"}</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td><span className={shellStyles.tableValue}>{formatAdminLabel(member.role)}</span></td>
+                    <td><span className={shellStyles.tableValue}>{member.departmentName || "-"}</span></td>
+                    <td><span className={shellStyles.tableValue}>{member.siteName || "-"}</span></td>
+                    <td><span className={shellStyles.tableWrapText}>{member.leaderName || member.leaderEmail || "-"}</span></td>
+                    <td>
+                      <span className={`${shellStyles.accessStatusPill} ${shellStyles.adminStatusPillValue} ${getStatusToneClass(member.inviteStatus)}`}>
+                        {formatAdminLabel(member.inviteStatus)}
+                      </span>
+                    </td>
+                    <td onClick={(event) => event.stopPropagation()}>
+                      <div className={shellStyles.actionButtons}>
+                        <button
+                          type="button"
+                          className={shellStyles.actionButton}
+                          onClick={() => openEditMemberModal(member)}
+                          aria-label="Edit member"
+                          title="Edit member"
+                        >
+                          <Image src="/icons/edit.svg" alt="" width={16} height={16} className={shellStyles.actionIcon} />
+                        </button>
+                        {member.inviteStatus === "invited" || member.inviteStatus === "draft" ? (
+                          <button
+                            type="button"
+                            className={shellStyles.actionButton}
+                            onClick={() => void handleResendInvite(member)}
+                            disabled={resendingInviteFor === member.userId}
+                            aria-label="Resend invite email"
+                            title="Resend invite email"
+                          >
+                            <Image src="/icons/send.svg" alt="" width={16} height={16} className={shellStyles.actionIcon} />
+                          </button>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className={shellStyles.adminUserMobileList}>
+          {detail.members.length === 0 ? (
+            <div className={shellStyles.adminUserMobileState}>No organisation members yet.</div>
+          ) : (
+            rows.map((member, index) => (
+              <div key={`mobile-member-${member.userId}`} className={shellStyles.adminUserMobileCard}>
+                <div className={shellStyles.adminUserMobileCardHeader}>
+                  <input
+                    className={shellStyles.tableCheckbox}
+                    type="checkbox"
+                    checked={selectedMemberIds.includes(member.userId)}
+                    onClick={(event) => event.stopPropagation()}
+                    onChange={(event) => toggleOrganisationSelection(event.target.checked, [member.userId], setSelectedMemberIds)}
+                    aria-label={`Select ${member.fullName || member.email || member.userId}`}
+                  />
+                  <span className={shellStyles.adminUserMobileTitleBlock}>
+                    <strong>{(safePage - 1) * detailPageSize + index + 1}. {member.fullName || "No name set"}</strong>
+                    <small>{member.email || "-"}</small>
+                  </span>
+                  <span className={`${shellStyles.accessStatusPill} ${shellStyles.adminStatusPillValue} ${getStatusToneClass(member.inviteStatus)}`}>
+                    {formatAdminLabel(member.inviteStatus)}
+                  </span>
+                </div>
+                <span className={shellStyles.adminUserMobileMeta}>
+                  <span>
+                    <strong>Role</strong>
+                    <small>{formatAdminLabel(member.role)}</small>
+                  </span>
+                  <span>
+                    <strong>Department</strong>
+                    <small>{member.departmentName || "-"}</small>
+                  </span>
+                  <span>
+                    <strong>Site</strong>
+                    <small>{member.siteName || "-"}</small>
+                  </span>
+                  <span>
+                    <strong>Leader</strong>
+                    <small>{member.leaderName || member.leaderEmail || "-"}</small>
+                  </span>
+                </span>
+                <span className={shellStyles.adminUserMobileActions}>
+                  <button
+                    type="button"
+                    className={`${shellStyles.button} ${shellStyles.buttonSecondary}`}
+                    onClick={() => router.push(`/admin/users/${member.userId}`)}
+                  >
+                    View user
+                  </button>
+                  <button
+                    type="button"
+                    className={`${shellStyles.button} ${shellStyles.buttonSecondary}`}
+                    onClick={() => openEditMemberModal(member)}
+                  >
+                    Edit member
+                  </button>
+                  {member.inviteStatus === "invited" || member.inviteStatus === "draft" ? (
+                    <button
+                      type="button"
+                      className={`${shellStyles.button} ${shellStyles.buttonSecondary}`}
+                      onClick={() => void handleResendInvite(member)}
+                      disabled={resendingInviteFor === member.userId}
+                    >
+                      Resend invite
+                    </button>
+                  ) : null}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+        <DashboardTableFooter
+          total={detail.members.length}
+          page={safePage}
+          pageSize={detailPageSize}
+          onPageChange={setMemberPage}
+          label="members"
+        />
+      </div>
+    );
+  };
+
+  const renderInvitesSection = () => {
+    if (!detail) return null;
+    const { safePage, rows } = paginateRows(detail.invites, invitePage);
+    const visibleIds = rows.map((invite) => invite.id);
+    const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedInviteIds.includes(id));
+
+    return (
+      <div className={shellStyles.accountSettingsPanel}>
+        <button
+          type="button"
+          className={`${shellStyles.button} ${shellStyles.buttonDanger} ${shellStyles.adminUserMobileSectionAction}`}
+          onClick={() => void deleteOrganisationRows("invites", selectedInviteIds)}
+          disabled={!selectedInviteIds.length || bulkDeletingSection === "invites"}
+        >
+          Bulk Delete
+        </button>
+        <div className={`${shellStyles.tableWrap} ${shellStyles.reportDataTableWrap}`}>
+          <table className={`${shellStyles.table} ${shellStyles.reportDataTable}`}>
+            <thead>
+              <tr>
+                <th>
+                  <input
+                    className={shellStyles.tableCheckbox}
+                    type="checkbox"
+                    checked={allVisibleSelected}
+                    onChange={(event) => toggleOrganisationSelection(event.target.checked, visibleIds, setSelectedInviteIds)}
+                    aria-label="Select visible invites"
+                  />
+                </th>
+                <th>#</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th>Invited</th>
+              </tr>
+            </thead>
+            <tbody>
+              {detail.invites.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className={shellStyles.tableStateCell}>
+                    <div className={shellStyles.tableEmptyState}>No invite records yet.</div>
+                  </td>
+                </tr>
+              ) : (
+                rows.map((invite, index) => (
+                  <tr key={invite.id}>
+                    <td>
+                      <input
+                        className={shellStyles.tableCheckbox}
+                        type="checkbox"
+                        checked={selectedInviteIds.includes(invite.id)}
+                        onChange={(event) => toggleOrganisationSelection(event.target.checked, [invite.id], setSelectedInviteIds)}
+                        aria-label={`Select ${invite.email}`}
+                      />
+                    </td>
+                    <td><span className={shellStyles.tableValue}>{(safePage - 1) * detailPageSize + index + 1}</span></td>
+                    <td><span className={shellStyles.tableWrapText}>{invite.fullName || "-"}</span></td>
+                    <td><span className={shellStyles.tableWrapText}>{invite.email}</span></td>
+                    <td><span className={shellStyles.tableValue}>{formatAdminLabel(invite.role)}</span></td>
+                    <td>
+                      <span className={`${shellStyles.accessStatusPill} ${shellStyles.adminStatusPillValue} ${getStatusToneClass(invite.status)}`}>
+                        {formatAdminLabel(invite.status)}
+                      </span>
+                    </td>
+                    <td><span className={shellStyles.tableDate}>{formatDateTime(invite.invitedAt)}</span></td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div className={shellStyles.adminUserMobileList}>
+          {detail.invites.length === 0 ? (
+            <div className={shellStyles.adminUserMobileState}>No invite records yet.</div>
+          ) : (
+            rows.map((invite, index) => (
+              <div key={`mobile-invite-${invite.id}`} className={shellStyles.adminUserMobileCard}>
+                <div className={shellStyles.adminUserMobileCardHeader}>
+                  <input
+                    className={shellStyles.tableCheckbox}
+                    type="checkbox"
+                    checked={selectedInviteIds.includes(invite.id)}
+                    onChange={(event) => toggleOrganisationSelection(event.target.checked, [invite.id], setSelectedInviteIds)}
+                    aria-label={`Select ${invite.email}`}
+                  />
+                  <span className={shellStyles.adminUserMobileTitleBlock}>
+                    <strong>{(safePage - 1) * detailPageSize + index + 1}. {invite.fullName || "No name set"}</strong>
+                    <small>{invite.email}</small>
+                  </span>
+                  <span className={`${shellStyles.accessStatusPill} ${shellStyles.adminStatusPillValue} ${getStatusToneClass(invite.status)}`}>
+                    {formatAdminLabel(invite.status)}
+                  </span>
+                </div>
+                <span className={shellStyles.adminUserMobileMeta}>
+                  <span>
+                    <strong>Role</strong>
+                    <small>{formatAdminLabel(invite.role)}</small>
+                  </span>
+                  <span>
+                    <strong>Invited</strong>
+                    <small>{formatDateTime(invite.invitedAt)}</small>
+                  </span>
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+        <DashboardTableFooter
+          total={detail.invites.length}
+          page={safePage}
+          pageSize={detailPageSize}
+          onPageChange={setInvitePage}
+          label="invites"
+        />
+      </div>
+    );
+  };
+
+  const renderOrganisationSection = (sectionId: AdminOrganisationSectionId) => {
+    switch (sectionId) {
+      case "overview":
+        return renderOverviewSection();
+      case "departments":
+        return renderDepartmentsSection();
+      case "sites":
+        return renderSitesSection();
+      case "members":
+        return renderMembersSection();
+      case "invites":
+        return renderInvitesSection();
+      default:
+        return null;
+    }
+  };
 
   if (loading) {
     return (
@@ -614,6 +1496,154 @@ export default function AdminOrganisationDetailPage() {
         {!authorized ? (
           <p className={`${shellStyles.message} ${shellStyles.messageError}`}>This page is restricted to the admin account.</p>
         ) : detail ? (
+          <>
+            <div className={shellStyles.accountSettingsSurface}>
+              <aside className={shellStyles.accountSettingsSidebar} aria-label="Admin organisation menu">
+                <div className={shellStyles.accountSettingsSidebarHeader}>
+                  <span>Admin</span>
+                  <strong>Organisation</strong>
+                </div>
+                <div className={shellStyles.accountSettingsNav} role="tablist" aria-label="Admin organisation sections">
+                  {adminOrganisationSections.map((section) => (
+                    <button
+                      key={section.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={activeSection === section.id}
+                      className={`${shellStyles.accountSettingsNavItem} ${activeSection === section.id ? shellStyles.accountSettingsNavItemActive : ""}`}
+                      onClick={() => setActiveSection(section.id)}
+                    >
+                      <span className={shellStyles.accountSettingsNavIcon} aria-hidden="true">
+                        <Image src={section.icon} alt="" width={18} height={18} />
+                      </span>
+                      <span className={shellStyles.accountSettingsNavCopy}>
+                        <strong>{section.label}</strong>
+                        <small>{section.description}</small>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </aside>
+
+              <div className={shellStyles.accountSettingsMobileAccordion} aria-label="Admin organisation sections">
+                {adminOrganisationSections.map((section) => {
+                  const isOpen = activeSection === section.id;
+                  const panelId = `admin-organisation-mobile-panel-${section.id}`;
+
+                  return (
+                    <div
+                      key={section.id}
+                      className={`${shellStyles.accountSettingsAccordionItem} ${isOpen ? shellStyles.accountSettingsAccordionItemOpen : ""}`}
+                    >
+                      <button
+                        type="button"
+                        className={shellStyles.accountSettingsAccordionButton}
+                        aria-expanded={isOpen}
+                        aria-controls={panelId}
+                        onClick={() => setActiveSection(section.id)}
+                      >
+                        <span className={shellStyles.accountSettingsNavIcon} aria-hidden="true">
+                          <Image src={section.icon} alt="" width={18} height={18} />
+                        </span>
+                        <span className={shellStyles.accountSettingsNavCopy}>
+                          <strong>{section.label}</strong>
+                          <small>{section.description}</small>
+                        </span>
+                        <span className={shellStyles.accountSettingsAccordionChevron} aria-hidden="true" />
+                      </button>
+                      {isOpen ? (
+                        <div id={panelId} className={shellStyles.accountSettingsMobilePanel}>
+                          {renderOrganisationSection(section.id)}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className={shellStyles.accountSettingsContent}>
+                <div className={shellStyles.accountSettingsContentHeader}>
+                  <div>
+                    <h2>{activeOrganisationSection.label}</h2>
+                    <p>{activeOrganisationSection.description}</p>
+                  </div>
+                  {activeSection === "departments" ? (
+                    <div className={shellStyles.headerButtons}>
+                      <button
+                        type="button"
+                        className={`${shellStyles.button} ${shellStyles.buttonDanger} ${shellStyles.adminUserActionButton}`}
+                        onClick={() => void deleteOrganisationRows("departments", selectedDepartmentIds)}
+                        disabled={!selectedDepartmentIds.length || bulkDeletingSection === "departments"}
+                      >
+                        Bulk Delete
+                      </button>
+                      <button
+                        type="button"
+                        className={`${shellStyles.button} ${shellStyles.buttonSecondary} ${shellStyles.adminUserActionButton}`}
+                        onClick={() => openStructureModal("department", "create")}
+                      >
+                        Add department
+                      </button>
+                    </div>
+                  ) : activeSection === "sites" ? (
+                    <div className={shellStyles.headerButtons}>
+                      <button
+                        type="button"
+                        className={`${shellStyles.button} ${shellStyles.buttonDanger} ${shellStyles.adminUserActionButton}`}
+                        onClick={() => void deleteOrganisationRows("sites", selectedSiteIds)}
+                        disabled={!selectedSiteIds.length || bulkDeletingSection === "sites"}
+                      >
+                        Bulk Delete
+                      </button>
+                      <button
+                        type="button"
+                        className={`${shellStyles.button} ${shellStyles.buttonSecondary} ${shellStyles.adminUserActionButton}`}
+                        onClick={() => openStructureModal("site", "create")}
+                      >
+                        Add site
+                      </button>
+                    </div>
+                  ) : activeSection === "members" ? (
+                    <div className={shellStyles.headerButtons}>
+                      <button
+                        type="button"
+                        className={`${shellStyles.button} ${shellStyles.buttonDanger} ${shellStyles.adminUserActionButton}`}
+                        onClick={() => void deleteOrganisationRows("members", selectedMemberIds)}
+                        disabled={!selectedMemberIds.length || bulkDeletingSection === "members"}
+                      >
+                        Bulk Delete
+                      </button>
+                      <button
+                        type="button"
+                        className={`${shellStyles.button} ${shellStyles.buttonSecondary} ${shellStyles.adminUserActionButton}`}
+                        onClick={() => setBulkCreateModalOpen(true)}
+                      >
+                        Bulk create users
+                      </button>
+                      <button
+                        type="button"
+                        className={`${shellStyles.button} ${shellStyles.buttonAccent} ${shellStyles.adminUserActionButton}`}
+                        onClick={() => void openLinkModal()}
+                      >
+                        Link existing user
+                      </button>
+                    </div>
+                  ) : activeSection === "invites" ? (
+                    <button
+                      type="button"
+                      className={`${shellStyles.button} ${shellStyles.buttonDanger} ${shellStyles.adminUserActionButton}`}
+                      onClick={() => void deleteOrganisationRows("invites", selectedInviteIds)}
+                      disabled={!selectedInviteIds.length || bulkDeletingSection === "invites"}
+                    >
+                      Bulk Delete
+                    </button>
+                  ) : null}
+                </div>
+                {renderOrganisationSection(activeSection)}
+              </div>
+            </div>
+
+            {false ? ((detail: OrganisationDetail) => (
           <div className={shellStyles.adminDetailPage}>
             <section className={shellStyles.adminDetailSection}>
               <div className={shellStyles.adminDetailHeader}>
@@ -942,6 +1972,8 @@ export default function AdminOrganisationDetailPage() {
               </div>
             </section>
           </div>
+            ))(detail as OrganisationDetail) : null}
+          </>
         ) : null}
       </section>
 

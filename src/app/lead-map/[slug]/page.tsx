@@ -61,6 +61,10 @@ export default async function LeadMapPage({ params }: LeadMapPageProps) {
       viewerMode="guest"
       initialSnapshot={snapshot}
       guestSessionEmail={session.redeemedEmail}
+      guestCampaignSlug={campaign.slug}
+      guestAccessCodeId={session.codeId}
+      guestSessionDurationHours={campaign.session_duration_hours}
+      guestSessionExpiresAt={session.expiresAt}
     />
   );
 }

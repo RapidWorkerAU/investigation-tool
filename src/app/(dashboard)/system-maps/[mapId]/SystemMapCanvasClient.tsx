@@ -149,7 +149,8 @@ import { CanvasDrilldownOverlays } from "./canvasDrilldownAsides";
 import { CanvasConfirmDialogs } from "./canvasDialogs";
 import { CanvasElementPropertyOverlays } from "./canvasPropertyOverlays";
 import { CanvasNodeSelectionToolbar } from "./canvasNodeSelectionToolbar";
-import { SystemMapWelcomeModal } from "./SystemMapWelcomeModal";
+import { GuestMapNotesLayer } from "./GuestMapNotesLayer";
+import { GuestMapWelcomeModal, SystemMapWelcomeModal } from "./SystemMapWelcomeModal";
 import { CanvasHelpModal } from "./CanvasHelpModal";
 import { defaultMapCategoryId, getAllowedNodeKindsForCategory, type MapCategoryId } from "./mapCategories";
 import { useCanvasRelationNodeActions } from "./useCanvasRelationNodeActions";
@@ -311,6 +312,10 @@ function SystemMapCanvasInner({
   viewerMode,
   initialSnapshot,
   guestSessionEmail,
+  guestCampaignSlug,
+  guestAccessCodeId,
+  guestSessionDurationHours,
+  guestSessionExpiresAt,
 }: {
   mapId: string;
   showWelcomeOnLoad: boolean;
@@ -322,6 +327,10 @@ function SystemMapCanvasInner({
   viewerMode: "member" | "guest";
   initialSnapshot: SystemMapCanvasSnapshot | null;
   guestSessionEmail: string | null;
+  guestCampaignSlug: string | null;
+  guestAccessCodeId: string | null;
+  guestSessionDurationHours: number | null;
+  guestSessionExpiresAt: string | null;
 }) {
   const isGuestViewer = viewerMode === "guest";
   const canvasRef = useRef<HTMLDivElement | null>(null);
@@ -404,9 +413,11 @@ function SystemMapCanvasInner({
   }, []);
 
   const [showAddMenu, setShowAddMenu] = useState(false);
+  const [showGuestNotesPanel, setShowGuestNotesPanel] = useState(false);
   const [showSuggestionsMenu, setShowSuggestionsMenu] = useState(false);
   const [showWizardModal, setShowWizardModal] = useState(false);
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+  const [showGuestWelcomeModal, setShowGuestWelcomeModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [wizardSaving, setWizardSaving] = useState(false);
   const [isNodeDragActive, setIsNodeDragActive] = useState(false);
@@ -508,6 +519,9 @@ function SystemMapCanvasInner({
       ? "This map belongs to an older 30 Day Access period. Start monthly access to restore full editing across older pass maps."
       : accessState?.readOnlyReason || "This map is read only for your current access."
     : undefined;
+  const deleteDisabledReason = !canWriteMap
+    ? readOnlyActionReason || "You have view access only for this map."
+    : undefined;
   const backHref = entrySource === "templates" ? "/templates" : "/dashboard";
   const backTitle = entrySource === "templates" ? "Back to templates" : "Back to dashboard";
   const canPrintMap = accessAllowsEditing;
@@ -529,6 +543,21 @@ function SystemMapCanvasInner({
       }
     }
   }, [showWelcomeOnLoad]);
+  const guestWelcomeStorageKey =
+    isGuestViewer && guestCampaignSlug && guestAccessCodeId && guestSessionEmail
+      ? `lead-map-welcome:${guestCampaignSlug}:${guestAccessCodeId}:${guestSessionEmail.toLowerCase()}`
+      : null;
+  useEffect(() => {
+    if (!guestWelcomeStorageKey || typeof window === "undefined") return;
+    if (window.localStorage.getItem(guestWelcomeStorageKey) === "seen") return;
+    setShowGuestWelcomeModal(true);
+  }, [guestWelcomeStorageKey]);
+  const handleCloseGuestWelcomeModal = useCallback(() => {
+    if (guestWelcomeStorageKey && typeof window !== "undefined") {
+      window.localStorage.setItem(guestWelcomeStorageKey, "seen");
+    }
+    setShowGuestWelcomeModal(false);
+  }, [guestWelcomeStorageKey]);
   const relationshipCategoryOptions = useMemo(() => getRelationshipCategoryOptions(mapCategoryId), [mapCategoryId]);
   const canEditElement = useCallback(
     (element: CanvasElementRow) =>
@@ -3673,9 +3702,10 @@ function SystemMapCanvasInner({
         return;
       }
 
-      if (event.key !== "Delete") return;
+      if (event.key !== "Delete" && event.key !== "Backspace") return;
       if (!selectedFlowIds.size) return;
       event.preventDefault();
+      if (!canWriteMap) return;
       setShowDeleteSelectionConfirm(true);
     };
     window.addEventListener("keydown", onKeyDown);
@@ -5668,13 +5698,14 @@ function SystemMapCanvasInner({
     }
   }, [desktopToolbarSelection, openRelationshipListFromSource]);
   const handleOpenToolbarDelete = useCallback(() => {
+    if (!canWriteMap) return;
     if (!desktopToolbarSelection) return;
     if (desktopToolbarSelection.kind === "document") {
       setConfirmDeleteNodeId(desktopToolbarSelection.id);
       return;
     }
     setConfirmDeleteElementId(desktopToolbarSelection.id);
-  }, [desktopToolbarSelection]);
+  }, [canWriteMap, desktopToolbarSelection]);
   const isNodeTextScrollbarDoubleClick = useCallback((event: React.MouseEvent) => {
     const target = event.target as HTMLElement | null;
     if (!target) return false;
@@ -5917,12 +5948,15 @@ function SystemMapCanvasInner({
         setIsEditingMapInfo={setIsEditingMapInfo}
         setError={setError}
         onOpenHelp={() => setShowHelpModal(true)}
+        onOpenGuestWelcome={isGuestViewer ? () => setShowGuestWelcomeModal(true) : undefined}
       />
 
       <CanvasNodeSelectionToolbar
         open={!isMobile && !!desktopToolbarSelection}
         showRelationships={!!desktopToolbarSelection}
         relationshipsDisabled={!desktopToolbarSelection?.supportsRelationships}
+        deleteDisabled={!canWriteMap}
+        deleteDisabledReason={deleteDisabledReason}
         onConfigure={handleOpenToolbarConfigure}
         onRelationships={handleOpenToolbarRelationships}
         onDelete={handleOpenToolbarDelete}
@@ -5980,6 +6014,9 @@ function SystemMapCanvasInner({
         setSearchQuery={setSearchQuery}
         searchResults={searchResults}
         onSelectSearchResult={handleSelectSearchResult}
+        showGuestNotesPanel={showGuestNotesPanel}
+        onToggleGuestNotesPanel={() => setShowGuestNotesPanel((prev) => !prev)}
+        onCloseGuestNotesPanel={() => setShowGuestNotesPanel(false)}
         canWriteMap={canWriteMap}
         canUseWizard={canUseWizard}
         addDisabledReason={addDisabledReason}
@@ -6045,6 +6082,14 @@ function SystemMapCanvasInner({
           setShowWelcomeModal(false);
           if (canUseWizard) setShowWizardModal(true);
         }}
+      />
+      <GuestMapWelcomeModal
+        open={showGuestWelcomeModal}
+        isMobile={isMobile}
+        viewerEmail={guestSessionEmail}
+        sessionDurationHours={guestSessionDurationHours}
+        sessionExpiresAt={guestSessionExpiresAt}
+        onClose={handleCloseGuestWelcomeModal}
       />
       <SystemMapWizardModal
         open={showWizardModal}
@@ -6138,6 +6183,7 @@ function SystemMapCanvasInner({
             onlyRenderVisibleElements
             nodesConnectable={false}
             edgesReconnectable={false}
+            deleteKeyCode={null}
             elevateNodesOnSelect={false}
             nodesFocusable={false}
             edgesFocusable={false}
@@ -6249,6 +6295,17 @@ function SystemMapCanvasInner({
           >
             <Background id="minor" variant={BackgroundVariant.Lines} gap={minorGridSize} size={1} color="#e7e5e4" />
             <Background id="major" variant={BackgroundVariant.Lines} gap={majorGridSize} size={1.2} color="#d6d3d1" />
+            <GuestMapNotesLayer
+              enabled={isGuestViewer}
+              campaignSlug={guestCampaignSlug}
+              guestSessionEmail={guestSessionEmail}
+              canvasRef={canvasRef}
+              screenToFlowPosition={rf?.screenToFlowPosition ?? null}
+              setViewport={rf?.setViewport ?? null}
+              flowNodes={flowNodes}
+              showNotesPanel={showGuestNotesPanel}
+              setShowNotesPanel={setShowGuestNotesPanel}
+            />
           </ReactFlow>
         </div>
 
@@ -6325,6 +6382,7 @@ function SystemMapCanvasInner({
             setMobileNodeMenuId(null);
           }}
           onAddRelationship={() => {
+            if (readOnlyActionReason) return;
             if (!mobileNodeMenuId) return;
             openRelationshipStateFromSource({ nodeId: mobileNodeMenuId });
             setMobileNodeMenuId(null);
@@ -6340,11 +6398,13 @@ function SystemMapCanvasInner({
             void loadOutline(mobileNodeMenuId);
           }}
           onDeleteDocument={() => {
+            if (readOnlyActionReason) return;
             if (!mobileNodeMenuId) return;
             setConfirmDeleteNodeId(mobileNodeMenuId);
             setMobileNodeMenuId(null);
           }}
           onClose={() => setMobileNodeMenuId(null)}
+          actionDisabledReason={readOnlyActionReason}
         />
 
         <MobileAddRelationshipModal
@@ -6398,7 +6458,11 @@ function SystemMapCanvasInner({
           relationshipTargetSystemId={relationshipTargetSystemId}
           relationshipTargetGroupingId={relationshipTargetGroupingId}
           onCancel={closeAddRelationshipModal}
-          onAdd={handleAddRelation}
+          onAdd={() => {
+            if (readOnlyActionReason) return;
+            void handleAddRelation();
+          }}
+          actionDisabledReason={readOnlyActionReason}
         />
 
         <CanvasConfirmDialogs
@@ -6932,12 +6996,14 @@ function SystemMapCanvasInner({
             notes: relationshipDescription,
             setNotes: setRelationshipDescription,
             onAdd: async () => {
+              if (readOnlyActionReason) return;
               await handleAddOrgDirectReport();
               setShowAddRelationship(false);
             },
             onCancel: () => {
               setShowAddRelationship(false);
             },
+            actionDisabledReason: readOnlyActionReason,
           }}
           relationshipManagerAsideProps={{
             open: Boolean(!isMobile && desktopNodeAction === "relationship" && !showAddRelationship && relationshipModalContext),
@@ -6945,7 +7011,10 @@ function SystemMapCanvasInner({
             leftAsideSlideIn,
             title: relationshipModalContext?.title,
             addButtonLabel: relationshipModalContext?.addButtonLabel,
-            onAddRelationship: () => relationshipModalContext?.openAdd(),
+            onAddRelationship: () => {
+              if (readOnlyActionReason) return;
+              relationshipModalContext?.openAdd();
+            },
             onClose: () => {
               closeAddRelationshipModal();
               setDesktopNodeAction(null);
@@ -7014,12 +7083,14 @@ function SystemMapCanvasInner({
             relationshipTargetSystemId,
             relationshipTargetGroupingId,
             onAdd: async () => {
+              if (readOnlyActionReason) return;
               await handleAddRelation();
               setShowAddRelationship(false);
             },
             onCancel: () => {
               setShowAddRelationship(false);
             },
+            actionDisabledReason: readOnlyActionReason,
           }}
           deleteDocumentAsideProps={{
             open: false,
@@ -7131,6 +7202,10 @@ export default function SystemMapCanvasClient({
   viewerMode = "member",
   initialSnapshot = null,
   guestSessionEmail = null,
+  guestCampaignSlug = null,
+  guestAccessCodeId = null,
+  guestSessionDurationHours = null,
+  guestSessionExpiresAt = null,
 }: {
   mapId: string;
   showWelcomeOnLoad?: boolean;
@@ -7142,6 +7217,10 @@ export default function SystemMapCanvasClient({
   viewerMode?: "member" | "guest";
   initialSnapshot?: SystemMapCanvasSnapshot | null;
   guestSessionEmail?: string | null;
+  guestCampaignSlug?: string | null;
+  guestAccessCodeId?: string | null;
+  guestSessionDurationHours?: number | null;
+  guestSessionExpiresAt?: string | null;
 }) {
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -7194,6 +7273,10 @@ export default function SystemMapCanvasClient({
         viewerMode={viewerMode}
         initialSnapshot={initialSnapshot}
         guestSessionEmail={guestSessionEmail}
+        guestCampaignSlug={guestCampaignSlug}
+        guestAccessCodeId={guestAccessCodeId}
+        guestSessionDurationHours={guestSessionDurationHours}
+        guestSessionExpiresAt={guestSessionExpiresAt}
       />
     </ReactFlowProvider>
   );

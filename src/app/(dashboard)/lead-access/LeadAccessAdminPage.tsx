@@ -45,6 +45,8 @@ const formatDateTime = (value: string | null) => {
   });
 };
 
+const formatIssuedCode = (row: LeadAccessHistoryRow) => row.issued_code || `****${row.code_last4 || "----"}`;
+
 export default function LeadAccessAdminPage() {
   const router = useRouter();
   const supabase = useMemo(() => createSupabaseBrowser(), []);
@@ -87,9 +89,7 @@ export default function LeadAccessAdminPage() {
     });
 
     const data = (await response.json()) as AdminListResponse;
-    if (!response.ok) {
-      throw new Error(data.error || "Unable to load lead access data.");
-    }
+    if (!response.ok) throw new Error(data.error || "Unable to load lead access data.");
 
     setCampaigns(data.campaigns);
     setHistory(data.history);
@@ -396,7 +396,7 @@ export default function LeadAccessAdminPage() {
         title="Lead Access Codes"
         subtitle="Create, reset, and remove guest access codes tied to a specific email."
         rows={5}
-        columns="4% 18% 22% 10% 10% 13% 13% 11%"
+        columns="4% 16% 21% 14% 9% 13% 13% 10%"
         showToolbar
       />
     );
@@ -457,13 +457,13 @@ export default function LeadAccessAdminPage() {
               <table className={`${shellStyles.table} ${shellStyles.reportDataTable}`}>
                 <colgroup>
                   <col style={{ width: "4%" }} />
-                  <col style={{ width: "18%" }} />
-                  <col style={{ width: "22%" }} />
-                  <col style={{ width: "10%" }} />
-                  <col style={{ width: "10%" }} />
+                  <col style={{ width: "16%" }} />
+                  <col style={{ width: "21%" }} />
+                  <col style={{ width: "14%" }} />
+                  <col style={{ width: "9%" }} />
                   <col style={{ width: "13%" }} />
                   <col style={{ width: "13%" }} />
-                  <col style={{ width: "11%" }} />
+                  <col style={{ width: "10%" }} />
                 </colgroup>
                 <thead>
                   <tr>
@@ -525,7 +525,7 @@ export default function LeadAccessAdminPage() {
                           </div>
                         </td>
                         <td>
-                          <span className={shellStyles.tableValue}>****{row.code_last4 || "----"}</span>
+                          <span className={shellStyles.tableValue} title={formatIssuedCode(row)}>{formatIssuedCode(row)}</span>
                         </td>
                         <td>
                           <span className={shellStyles.tableValue}>{getStatusLabel(row)}</span>
@@ -594,10 +594,14 @@ export default function LeadAccessAdminPage() {
                         <span>{row.campaign_title}</span>
                       </div>
                       <span className={shellStyles.dashboardMobileChevron} aria-hidden="true">
-                        ****{row.code_last4 || "----"}
+                        {formatIssuedCode(row)}
                       </span>
                     </div>
                     <dl className={shellStyles.dashboardMobileMeta}>
+                      <div>
+                        <dt>Code</dt>
+                        <dd>{formatIssuedCode(row)}</dd>
+                      </div>
                       <div>
                         <dt>Status</dt>
                         <dd>{getStatusLabel(row)}</dd>
@@ -730,7 +734,7 @@ export default function LeadAccessAdminPage() {
             ) : (
               <>
                 <p className={shellStyles.modalText}>
-                  Share the access link and this code with <strong>{createResult.email}</strong>. The plaintext code is shown only here.
+                  Share the access link and this code with <strong>{createResult.email}</strong>. The code is also visible in this admin table.
                 </p>
                 <div className="px-6 pb-2 pt-1 text-sm text-slate-700">
                   <div className="space-y-4">

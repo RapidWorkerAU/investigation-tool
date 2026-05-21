@@ -351,7 +351,9 @@ function AsideShell({ isMobile, leftAsideSlideIn, title, onClose, readOnly = fal
           <h2 className="canvas-left-aside__title text-lg font-semibold text-white">{title}</h2>
           <button className="canvas-left-aside__close w-full max-w-[110px] rounded-none border border-black bg-white px-2 py-1 text-xs text-black hover:bg-slate-100" onClick={onClose}>Close</button>
         </div>
-        {children}
+        <fieldset disabled={readOnly} className="m-0 min-w-0 border-0 p-0 disabled:opacity-100">
+          {children}
+        </fieldset>
       </div>
     </aside>
   );
@@ -3271,6 +3273,7 @@ export function DocumentPropertiesAside({
           <h2 className="canvas-left-aside__title text-lg font-semibold text-white">Document Properties</h2>
           <button className="canvas-left-aside__close w-full max-w-[110px] rounded-none border border-black bg-white px-2 py-1 text-xs text-black hover:bg-slate-100" onClick={onClose}>Close</button>
         </div>
+        <fieldset disabled={!!actionDisabledReason} className="m-0 min-w-0 border-0 p-0 disabled:opacity-100">
         <div className="mt-3 grid grid-cols-3 gap-2">
           {wrapWithReason(
             actionDisabledReason,
@@ -3402,6 +3405,7 @@ export function DocumentPropertiesAside({
             <button className={`w-full rounded-none border border-black bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-slate-100 ${disabledAsideActionClass}`} onClick={() => void onSaveNode()} disabled={!!actionDisabledReason}>Save properties</button>
           )}
         </div>
+        </fieldset>
       </div>
     </aside>
   );
@@ -3485,6 +3489,7 @@ export function MobileDocumentPropertiesModal({
           </button>
         </div>
 
+        <fieldset disabled={!!actionDisabledReason} className="m-0 min-w-0 border-0 p-0 disabled:opacity-100">
         <div className="mt-4 grid gap-3 md:grid-cols-2">
           <label className="text-sm">Document Type
             <select className="mt-1 w-full rounded border border-slate-300 px-3 py-2" value={selectedTypeId} onChange={(e) => setSelectedTypeId(e.target.value)}>
@@ -3558,6 +3563,7 @@ export function MobileDocumentPropertiesModal({
             ))}
           </div>
         </div>
+        </fieldset>
       </div>
     </div>
   );

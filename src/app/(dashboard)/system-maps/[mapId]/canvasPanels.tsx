@@ -69,6 +69,9 @@ type CanvasActionButtonsProps = {
     kindBorderColor?: string | null;
   }>;
   onSelectSearchResult: (id: string) => void;
+  showGuestNotesPanel?: boolean;
+  onToggleGuestNotesPanel?: () => void;
+  onCloseGuestNotesPanel?: () => void;
   canWriteMap: boolean;
   canUseWizard: boolean;
   addDisabledReason?: string;
@@ -176,6 +179,9 @@ export function CanvasActionButtons({
   setSearchQuery,
   searchResults,
   onSelectSearchResult,
+  showGuestNotesPanel = false,
+  onToggleGuestNotesPanel,
+  onCloseGuestNotesPanel,
   canWriteMap,
   canUseWizard,
   addDisabledReason,
@@ -251,6 +257,9 @@ export function CanvasActionButtons({
 }: CanvasActionButtonsProps) {
   const allowed = new Set<NodePaletteKind>(allowedNodeKinds);
   const isGuestViewer = viewerMode === "guest";
+  const leaveHref = isGuestViewer ? "/subscribe" : backHref;
+  const leaveTitle = isGuestViewer ? "Leave case study" : backTitle;
+  const leaveLabel = isGuestViewer ? "Leave" : "Exit";
   type AddItemGroup = "core" | "investigation" | "bowtie" | "content" | "shapes";
   type AddItem = { key: string; label: string; group: AddItemGroup; onClick: () => void };
   const [activeAddFilter, setActiveAddFilter] = useState<"all" | AddItemGroup>("all");
@@ -1174,20 +1183,21 @@ export function CanvasActionButtons({
 
         <div className="fixed inset-x-0 bottom-0 z-[95] px-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] md:hidden">
           <div className="mx-auto flex max-w-max items-center gap-2 rounded-[24px] border border-slate-300/80 bg-white/94 px-2.5 py-2.5 shadow-[0_18px_40px_rgba(15,23,42,0.22)] backdrop-blur">
-            {!isGuestViewer ? (
-              <Link href={backHref} aria-label={backTitle} title={backTitle} className={floatingButtonClass}>
-                <span
-                  aria-hidden="true"
-                  className="h-6 w-6 bg-current"
-                  style={{ WebkitMaskImage: "url('/icons/back.svg')", maskImage: "url('/icons/back.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
-                />
-              </Link>
-            ) : null}
+            <Link href={leaveHref} aria-label={leaveTitle} title={leaveTitle} className={floatingButtonClass}>
+              <span
+                aria-hidden="true"
+                className="h-6 w-6 bg-current"
+                style={{ WebkitMaskImage: "url('/icons/back.svg')", maskImage: "url('/icons/back.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
+              />
+            </Link>
             <button
               type="button"
               aria-label="Search components"
               title="Search components"
-              onClick={() => setShowSearchMenu((prev) => !prev)}
+              onClick={() => {
+                onCloseGuestNotesPanel?.();
+                setShowSearchMenu((prev) => !prev);
+              }}
               className={floatingButtonClass}
             >
               <span
@@ -1196,6 +1206,24 @@ export function CanvasActionButtons({
                 style={{ WebkitMaskImage: "url('/icons/finddocument.svg')", maskImage: "url('/icons/finddocument.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
               />
             </button>
+            {isGuestViewer ? (
+              <button
+                type="button"
+                aria-label="Open notes"
+                title="Notes"
+                onClick={() => {
+                  setShowSearchMenu(() => false);
+                  onToggleGuestNotesPanel?.();
+                }}
+                className={`${floatingButtonClass} ${showGuestNotesPanel ? "bg-[#102a43] text-white" : ""}`}
+              >
+                <span
+                  aria-hidden="true"
+                  className="h-6 w-6 bg-current"
+                  style={{ WebkitMaskImage: "url('/icons/comments.svg')", maskImage: "url('/icons/comments.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
+                />
+              </button>
+            ) : null}
             <button
               type="button"
               aria-label="Zoom to fit"
@@ -1320,9 +1348,9 @@ export function CanvasActionButtons({
       <div className="fixed left-0 top-[64px] z-[60] h-[calc(100vh-64px)] w-[72px] border-r border-slate-200 bg-[#f7f7fb]/96 shadow-[10px_0_30px_rgba(15,23,42,0.06)] backdrop-blur">
         <div className="flex h-full flex-col items-center px-2 py-4">
           <Link
-            href={backHref}
-            aria-label={backTitle}
-            title={backTitle}
+            href={leaveHref}
+            aria-label={leaveTitle}
+            title={leaveTitle}
             className="group flex h-[56px] w-[56px] flex-col items-center justify-center gap-1 rounded-2xl bg-[linear-gradient(180deg,#1e3a5f_0%,#16324f_52%,#0f2035_100%)] px-1 py-1 text-white shadow-[0_14px_28px_rgba(15,23,42,0.22)] transition-all duration-150 hover:brightness-[1.03]"
           >
             <span
@@ -1330,7 +1358,7 @@ export function CanvasActionButtons({
               className="h-5 w-5 bg-current"
               style={{ WebkitMaskImage: "url('/icons/back.svg')", maskImage: "url('/icons/back.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
             />
-            <span className={desktopRailLabelClass}>Exit</span>
+            <span className={desktopRailLabelClass}>{leaveLabel}</span>
           </Link>
           {!isGuestViewer ? (
             <span title={!canWriteMap && !canCreateSticky ? addDisabledReason : "Add component"} className="mt-1 w-full">
@@ -1357,7 +1385,10 @@ export function CanvasActionButtons({
                 type="button"
                 aria-label="Search components"
                 title="Search components"
-                onClick={() => setShowSearchMenu((prev) => !prev)}
+                onClick={() => {
+                  onCloseGuestNotesPanel?.();
+                  setShowSearchMenu((prev) => !prev);
+                }}
                 className={desktopRailButtonClass}
               >
                 <span
@@ -1406,6 +1437,27 @@ export function CanvasActionButtons({
               ) : null}
             </div>
             {renderSearchMenu()}
+            {isGuestViewer ? (
+              <button
+                type="button"
+                aria-label="Open notes"
+                title="Notes"
+                onClick={() => {
+                  setShowSearchMenu(() => false);
+                  onToggleGuestNotesPanel?.();
+                }}
+                className={`${desktopRailButtonClass} ${
+                  showGuestNotesPanel ? "bg-white text-black shadow-[0_14px_28px_rgba(15,23,42,0.12)]" : ""
+                }`}
+              >
+                <span
+                  aria-hidden="true"
+                  className="h-5 w-5 bg-current"
+                  style={{ WebkitMaskImage: "url('/icons/comments.svg')", maskImage: "url('/icons/comments.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
+                />
+                <span className={desktopRailLabelClass}>Notes</span>
+              </button>
+            ) : null}
             {!isGuestViewer ? (
               <span title={canvasInteractionLocked ? "Unlock canvas movement" : "Lock canvas movement"} className="w-full">
                 <button

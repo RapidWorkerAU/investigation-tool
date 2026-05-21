@@ -34,8 +34,10 @@ type MemberRow = {
   joined_at: string | null;
   user_id: string;
   leader_user_id: string | null;
-  department: Array<{ id: string; name: string }> | null;
-  site: Array<{ id: string; name: string }> | null;
+  department_id: string | null;
+  site_id: string | null;
+  department: { id: string; name: string } | Array<{ id: string; name: string }> | null;
+  site: { id: string; name: string } | Array<{ id: string; name: string }> | null;
 };
 
 type ProfileRow = {
@@ -52,6 +54,11 @@ type InviteRow = {
   status: string;
   invited_at: string;
 };
+
+function firstRelation<T>(relation: T | T[] | null | undefined) {
+  if (Array.isArray(relation)) return relation[0] ?? null;
+  return relation ?? null;
+}
 
 export async function GET(request: Request, context: { params: Promise<{ organisationId: string }> }) {
   try {
@@ -86,7 +93,7 @@ export async function GET(request: Request, context: { params: Promise<{ organis
       supabase
         .from("organisation_memberships")
         .select(
-          "role,invite_status,joined_at,user_id,leader_user_id,department:organisation_departments(id,name),site:organisation_sites(id,name)"
+          "role,invite_status,joined_at,user_id,leader_user_id,department_id,site_id,department:organisation_departments(id,name),site:organisation_sites(id,name)"
         )
         .eq("organisation_id", organisationId)
         .order("created_at", { ascending: true }),
@@ -148,21 +155,26 @@ export async function GET(request: Request, context: { params: Promise<{ organis
         name: site.name,
         description: site.description ?? "",
       })),
-      members: memberRows.map((member) => ({
-        userId: member.user_id,
-        role: member.role,
-        inviteStatus: member.invite_status,
-        joinedAt: member.joined_at,
-        departmentId: member.department?.[0]?.id ?? "",
-        siteId: member.site?.[0]?.id ?? "",
-        leaderUserId: member.leader_user_id ?? "",
-        fullName: profileLookup.get(member.user_id)?.full_name ?? "",
-        email: profileLookup.get(member.user_id)?.email ?? "",
-        departmentName: member.department?.[0]?.name ?? "",
-        siteName: member.site?.[0]?.name ?? "",
-        leaderName: member.leader_user_id ? profileLookup.get(member.leader_user_id)?.full_name ?? "" : "",
-        leaderEmail: member.leader_user_id ? profileLookup.get(member.leader_user_id)?.email ?? "" : "",
-      })),
+      members: memberRows.map((member) => {
+        const department = firstRelation(member.department);
+        const site = firstRelation(member.site);
+
+        return {
+          userId: member.user_id,
+          role: member.role,
+          inviteStatus: member.invite_status,
+          joinedAt: member.joined_at,
+          departmentId: member.department_id ?? department?.id ?? "",
+          siteId: member.site_id ?? site?.id ?? "",
+          leaderUserId: member.leader_user_id ?? "",
+          fullName: profileLookup.get(member.user_id)?.full_name ?? "",
+          email: profileLookup.get(member.user_id)?.email ?? "",
+          departmentName: department?.name ?? "",
+          siteName: site?.name ?? "",
+          leaderName: member.leader_user_id ? profileLookup.get(member.leader_user_id)?.full_name ?? "" : "",
+          leaderEmail: member.leader_user_id ? profileLookup.get(member.leader_user_id)?.email ?? "" : "",
+        };
+      }),
       invites: ((invites ?? []) as InviteRow[]).map((invite) => ({
         id: invite.id,
         email: invite.email,

@@ -82,13 +82,25 @@ function clampScrollTop(element: HTMLElement, scrollTop: number) {
   return Math.max(0, Math.min(maxScrollTop, scrollTop));
 }
 
+const nodeTextScrollButtonSize = 14;
+const nodeTextScrollButtonOffset = 1;
+const nodeTextScrollTrackGap = 5;
+const nodeTextScrollTrackInset = nodeTextScrollButtonOffset + nodeTextScrollButtonSize + nodeTextScrollTrackGap;
+const nodeTextScrollThumbMinHeight = 14;
+const nodeTextScrollThumbMaxHeight = 22;
+
 function OneLineScrollableText({ className, children }: { className: string; children: ReactNode }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const thumbDragRef = useRef<{ pointerId: number; startY: number; startScrollTop: number } | null>(null);
   const [canScroll, setCanScroll] = useState(false);
   const [useCustomScrollbar, setUseCustomScrollbar] = useState(false);
-  const [scrollMetrics, setScrollMetrics] = useState({ thumbTop: 16, thumbHeight: 28 });
+  const [scrollMetrics, setScrollMetrics] = useState({
+    trackTop: nodeTextScrollTrackInset,
+    trackHeight: 0,
+    thumbTop: 0,
+    thumbHeight: nodeTextScrollThumbMinHeight,
+  });
   const outerClassName = `${className.replace(/\boverflow-y-auto\b/g, "overflow-hidden").replace(/\bpr-1\b/g, "")} relative`;
   const innerClassName = `h-full w-full overflow-y-auto ${useCustomScrollbar ? "node-text-scrollbar-hidden pr-5" : className.includes("pr-1") ? "pr-1" : ""}`;
   const hiddenNativeScrollbarStyle: CSSProperties | undefined = useCustomScrollbar
@@ -103,15 +115,20 @@ function OneLineScrollableText({ className, children }: { className: string; chi
     setCanScroll(nextCanScroll);
     if (!nextCanScroll) return;
 
-    const buttonSpace = 16;
-    const trackHeight = Math.max(1, element.clientHeight - buttonSpace * 2);
-    const thumbHeight = Math.max(24, Math.round((element.clientHeight / element.scrollHeight) * trackHeight));
+    const trackHeight = Math.max(0, element.clientHeight - nodeTextScrollTrackInset * 2);
+    const minimumThumbHeight = Math.min(nodeTextScrollThumbMinHeight, trackHeight);
+    const maximumThumbHeight = Math.min(trackHeight, nodeTextScrollThumbMaxHeight);
+    const proportionalThumbHeight = Math.round((element.clientHeight / element.scrollHeight) * trackHeight);
+    const thumbHeight = Math.max(minimumThumbHeight, Math.min(maximumThumbHeight, proportionalThumbHeight));
     const travel = Math.max(1, trackHeight - thumbHeight);
-    const thumbTop = buttonSpace + Math.round((element.scrollTop / maxScrollTop) * travel);
+    const thumbTop = Math.round((element.scrollTop / maxScrollTop) * travel);
     setScrollMetrics((current) =>
-      Math.abs(current.thumbTop - thumbTop) < 0.5 && Math.abs(current.thumbHeight - thumbHeight) < 0.5
+      Math.abs(current.trackTop - nodeTextScrollTrackInset) < 0.5 &&
+      Math.abs(current.trackHeight - trackHeight) < 0.5 &&
+      Math.abs(current.thumbTop - thumbTop) < 0.5 &&
+      Math.abs(current.thumbHeight - thumbHeight) < 0.5
         ? current
-        : { thumbTop, thumbHeight }
+        : { trackTop: nodeTextScrollTrackInset, trackHeight, thumbTop, thumbHeight }
     );
   }, []);
 
@@ -152,6 +169,10 @@ function OneLineScrollableText({ className, children }: { className: string; chi
   useEffect(() => {
     setUseCustomScrollbar(/\bEdg\//.test(window.navigator.userAgent));
   }, []);
+
+  useEffect(() => {
+    updateScrollMetrics();
+  }, [updateScrollMetrics, useCustomScrollbar]);
 
   useEffect(() => {
     const element = scrollRef.current;
@@ -203,14 +224,13 @@ function OneLineScrollableText({ className, children }: { className: string; chi
       if (!element || !drag || drag.pointerId !== event.pointerId) return;
       event.preventDefault();
       event.stopPropagation();
-      const trackHeight = Math.max(1, element.clientHeight - 32);
-      const travel = Math.max(1, trackHeight - scrollMetrics.thumbHeight);
+      const travel = Math.max(1, scrollMetrics.trackHeight - scrollMetrics.thumbHeight);
       const maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
       const nextScrollTop = clampScrollTop(element, drag.startScrollTop + ((event.clientY - drag.startY) / travel) * maxScrollTop);
       element.scrollTop = nextScrollTop;
       updateScrollMetrics();
     },
-    [scrollMetrics.thumbHeight, updateScrollMetrics]
+    [scrollMetrics.trackHeight, scrollMetrics.thumbHeight, updateScrollMetrics]
   );
 
   const handleCustomThumbPointerUp = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
@@ -258,15 +278,16 @@ function OneLineScrollableText({ className, children }: { className: string; chi
           >
             <span aria-hidden="true" className="h-0 w-0 border-x-[4px] border-t-[5px] border-x-transparent border-t-white" />
           </button>
-          {useCustomScrollbar ? (
+          {useCustomScrollbar && scrollMetrics.trackHeight >= nodeTextScrollThumbMinHeight ? (
             <div
-              className="nodrag nopan absolute bottom-[16px] right-[4px] top-[16px] z-10 w-[8px] rounded-full bg-transparent"
+              className="nodrag nopan absolute right-[4px] z-10 w-[8px] rounded-full bg-transparent"
+              style={{ top: `${scrollMetrics.trackTop}px`, height: `${scrollMetrics.trackHeight}px` }}
               data-node-text-scroll-control="true"
               onPointerDown={handleCustomTrackPointerDown}
             >
               <div
                 className="absolute left-0 w-[8px] cursor-pointer rounded-full bg-[#8f8f8f] hover:bg-[#7f7f7f]"
-                style={{ top: `${scrollMetrics.thumbTop - 16}px`, height: `${scrollMetrics.thumbHeight}px` }}
+                style={{ top: `${scrollMetrics.thumbTop}px`, height: `${scrollMetrics.thumbHeight}px` }}
                 onPointerDown={handleCustomThumbPointerDown}
                 onPointerMove={handleCustomThumbPointerMove}
                 onPointerUp={handleCustomThumbPointerUp}

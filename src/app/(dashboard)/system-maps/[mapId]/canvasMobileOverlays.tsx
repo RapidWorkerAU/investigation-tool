@@ -11,6 +11,7 @@ type MobileNodeActionSheetProps = {
   onOpenStructure: () => void;
   onDeleteDocument: () => void;
   onClose: () => void;
+  actionDisabledReason?: string;
 };
 
 export function MobileNodeActionSheet({
@@ -21,17 +22,19 @@ export function MobileNodeActionSheet({
   onOpenStructure,
   onDeleteDocument,
   onClose,
+  actionDisabledReason,
 }: MobileNodeActionSheetProps) {
   if (!open) return null;
+  const mutationDisabled = !!actionDisabledReason;
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/45 p-0 sm:p-4">
       <div className="w-full rounded-t-2xl bg-white p-4 shadow-2xl ring-1 ring-slate-200/70 sm:max-w-md sm:rounded-xl">
         <div className="mb-2 text-sm font-semibold text-slate-900">{title || "Document"}</div>
         <div className="grid gap-2">
           <button className="dashboardButton dashboardButtonOutline justify-start" onClick={onEditProperties}>Edit Properties</button>
-          <button className="dashboardButton dashboardButtonOutline justify-start" onClick={onAddRelationship}>Add Relationship</button>
+          <button className="dashboardButton dashboardButtonOutline justify-start" onClick={onAddRelationship} disabled={mutationDisabled}>Add Relationship</button>
           <button className="dashboardButton dashboardButtonOutline justify-start" onClick={onOpenStructure}>Open Document Structure</button>
-          <button className="dashboardButton dashboardButtonOutline justify-start text-rose-700" onClick={onDeleteDocument}>Delete Document</button>
+          <button className="dashboardButton dashboardButtonOutline justify-start text-rose-700" onClick={onDeleteDocument} disabled={mutationDisabled}>Delete Document</button>
           <button className="dashboardButton dashboardButtonOutline" onClick={onClose}>Close</button>
         </div>
       </div>
@@ -101,6 +104,7 @@ type MobileAddRelationshipModalProps = {
   relationshipTargetGroupingId: string;
   onCancel: () => void;
   onAdd: () => void;
+  actionDisabledReason?: string;
 };
 
 export function MobileAddRelationshipModal({
@@ -155,10 +159,13 @@ export function MobileAddRelationshipModal({
   relationshipTargetGroupingId,
   onCancel,
   onAdd,
+  actionDisabledReason,
 }: MobileAddRelationshipModalProps) {
   if (!open) return null;
+  const mutationDisabled = !!actionDisabledReason;
 
   const disableAddButton =
+    mutationDisabled ||
     (!relationshipModeGrouping && (!allowDocumentTargets && !allowSystemTargets)) ||
     (!relationshipModeGrouping && !relationshipTargetDocumentId && !relationshipTargetSystemId) ||
     (relationshipModeGrouping && !relationshipTargetGroupingId) ||
@@ -181,7 +188,7 @@ export function MobileAddRelationshipModal({
             <span className="text-xl leading-none">x</span>
           </button>
         </div>
-        <div className="mt-4 grid gap-3">
+        <fieldset disabled={mutationDisabled} className="m-0 mt-4 grid min-w-0 gap-3 border-0 p-0 disabled:opacity-100">
           {relationshipModeGrouping ? (
             <div className="relative">
               <div className="mb-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Grouping Containers</div>
@@ -438,7 +445,7 @@ export function MobileAddRelationshipModal({
             value={relationshipDescription}
             onChange={(e) => setRelationshipDescription(e.target.value)}
           />
-        </div>
+        </fieldset>
         <div className="mt-4 flex justify-end gap-2">
           <button className="dashboardButton dashboardButtonOutline" onClick={onCancel}>Cancel</button>
           <button className="dashboardButton dashboardButtonPrimary" disabled={disableAddButton} onClick={onAdd}>

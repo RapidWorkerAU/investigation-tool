@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
 import { isPlatformAdminEmail } from "@/lib/platformAdmin";
@@ -12,6 +12,7 @@ type NavKey =
   | "dashboard"
   | "templates"
   | "lead-access"
+  | "lead-access-notes"
   | "account"
   | "admin"
   | "admin-users"
@@ -46,14 +47,30 @@ const adminSidebarLinks = [
     label: "Organisations",
     icon: "/icons/organisation.svg",
   },
-  { key: "lead-access" as const, href: "/lead-access", label: "Lead Access", icon: "/icons/lock.svg" },
+  {
+    key: "lead-access" as const,
+    href: "/lead-access",
+    label: "Lead Access",
+    icon: "/icons/lock.svg",
+    children: [
+      { key: "lead-access-notes" as const, href: "/lead-access/notes", label: "Guest Notes", icon: "/icons/comments.svg" },
+    ],
+  },
 ];
 
 const DESKTOP_SIDEBAR_STATE_KEY = "investigation_tool_dashboard_sidebar_collapsed";
+const LEAD_ACCESS_CHILDREN_STATE_KEY = "investigation_tool_admin_lead_access_children_open";
+const USER_EMAIL_STORAGE_KEY = "investigation_tool_user_email";
 
 const getInitialDesktopSidebarCollapsed = () => {
   if (typeof window === "undefined") return false;
   return window.localStorage.getItem(DESKTOP_SIDEBAR_STATE_KEY) === "true";
+};
+
+const getInitialLeadAccessChildrenOpen = () => {
+  if (typeof window === "undefined") return true;
+  const storedValue = window.localStorage.getItem(LEAD_ACCESS_CHILDREN_STATE_KEY);
+  return storedValue === null ? true : storedValue === "true";
 };
 
 export default function DashboardShell({
@@ -67,12 +84,14 @@ export default function DashboardShell({
   children,
 }: DashboardShellProps) {
   const router = useRouter();
-  const supabase = createSupabaseBrowser();
+  const supabase = useMemo(() => createSupabaseBrowser(), []);
   const [logoutConfirmArmed, setLogoutConfirmArmed] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [desktopSidebarCollapsed, setDesktopSidebarCollapsed] = useState(getInitialDesktopSidebarCollapsed);
+  const [leadAccessChildrenOpen, setLeadAccessChildrenOpen] = useState(getInitialLeadAccessChildrenOpen);
   const [showAdminMenuItem, setShowAdminMenuItem] = useState(false);
+  const [pendingGuestNotesCount, setPendingGuestNotesCount] = useState(0);
 
   useEffect(() => {
     const body = document.body;
@@ -104,15 +123,35 @@ export default function DashboardShell({
   }, [desktopSidebarCollapsed]);
 
   useEffect(() => {
+    window.localStorage.setItem(LEAD_ACCESS_CHILDREN_STATE_KEY, String(leadAccessChildrenOpen));
+  }, [leadAccessChildrenOpen]);
+
+  useEffect(() => {
     let cancelled = false;
 
     const loadAdminState = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const storedEmail = window.localStorage.getItem(USER_EMAIL_STORAGE_KEY);
+      if (storedEmail) {
+        setShowAdminMenuItem(isPlatformAdminEmail(storedEmail));
+        return;
+      }
 
-      if (!cancelled) {
-        setShowAdminMenuItem(isPlatformAdminEmail(user?.email));
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        if (!cancelled) {
+          setShowAdminMenuItem(isPlatformAdminEmail(user?.email));
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "";
+        const isSupabaseLockAbort =
+          (error instanceof DOMException && error.name === "AbortError") || message.includes("Lock broken by another request");
+
+        if (!cancelled && !isSupabaseLockAbort) {
+          setShowAdminMenuItem(false);
+        }
       }
     };
 
@@ -125,6 +164,51 @@ export default function DashboardShell({
 
   const visibleSidebarLinks = mode === "admin" ? adminSidebarLinks : sidebarLinks;
   const isAdminShell = mode === "admin";
+
+  const loadPendingGuestNotesCount = useCallback(async () => {
+    if (!isAdminShell) return;
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+
+      const response = await fetch("/api/lead-access/admin/notes?summary=1", {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+      const payload = (await response.json()) as { pendingCount?: number };
+      if (!response.ok) return;
+      setPendingGuestNotesCount(Math.max(0, Number(payload.pendingCount ?? 0)));
+    } catch {
+      setPendingGuestNotesCount(0);
+    }
+  }, [isAdminShell, supabase]);
+
+  useEffect(() => {
+    void loadPendingGuestNotesCount();
+
+    const handleNotesUpdated = () => {
+      void loadPendingGuestNotesCount();
+    };
+
+    window.addEventListener("lead-access-notes-updated", handleNotesUpdated);
+    return () => {
+      window.removeEventListener("lead-access-notes-updated", handleNotesUpdated);
+    };
+  }, [loadPendingGuestNotesCount]);
+
+  const renderPendingBadge = (count: number, className: string) => {
+    if (count <= 0) return null;
+    return (
+      <span className={className} aria-label={`${count} guest note${count === 1 ? "" : "s"} pending approval`}>
+        {count > 99 ? "99+" : count}
+      </span>
+    );
+  };
 
   const handleLogout = async () => {
     if (!logoutConfirmArmed) {
@@ -214,24 +298,67 @@ export default function DashboardShell({
             </div>
 
             <nav className={styles.sidebarNav} aria-label="Dashboard shortcuts">
-              {visibleSidebarLinks.map((link) => (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={`${styles.sidebarLink} ${activeNav === link.key ? styles.sidebarLinkActive : ""}`}
-                  title={link.label}
-                  aria-label={link.label}
-                >
-                  <Image
-                    src={link.icon}
-                    alt=""
-                    width={22}
-                    height={22}
-                    className={styles.sidebarIcon}
-                  />
-                  <span className={styles.sidebarLinkLabel}>{link.label}</span>
-                </Link>
-              ))}
+              {visibleSidebarLinks.map((link) => {
+                const childLinks = "children" in link ? link.children : undefined;
+                const hasActiveChild = childLinks?.some((child) => child.key === activeNav) ?? false;
+                const childrenOpen = link.key === "lead-access" ? leadAccessChildrenOpen || hasActiveChild : true;
+                return (
+                  <div key={link.href} className={styles.sidebarNavGroup}>
+                    <div className={childLinks?.length ? styles.sidebarParentRow : undefined}>
+                      <Link
+                        href={link.href}
+                        className={`${styles.sidebarLink} ${activeNav === link.key || hasActiveChild ? styles.sidebarLinkActive : ""}`}
+                        title={link.label}
+                        aria-label={link.label}
+                      >
+                        <Image
+                          src={link.icon}
+                          alt=""
+                          width={22}
+                          height={22}
+                          className={styles.sidebarIcon}
+                        />
+                        <span className={styles.sidebarLinkLabel}>{link.label}</span>
+                        {link.key === "lead-access" && !childrenOpen ? renderPendingBadge(pendingGuestNotesCount, styles.sidebarParentBadge) : null}
+                      </Link>
+                      {childLinks?.length ? (
+                        <button
+                          type="button"
+                          className={styles.sidebarSubmenuToggle}
+                          aria-label={`${childrenOpen ? "Collapse" : "Expand"} ${link.label} menu`}
+                          aria-expanded={childrenOpen}
+                          onClick={() => setLeadAccessChildrenOpen((current) => !current)}
+                        >
+                          <span className={`${styles.sidebarSubmenuChevron} ${childrenOpen ? styles.sidebarSubmenuChevronOpen : ""}`} aria-hidden="true" />
+                        </button>
+                      ) : null}
+                    </div>
+                    {childLinks?.length && childrenOpen ? (
+                      <div className={styles.sidebarChildLinks} id={`${link.key}-children`}>
+                        {childLinks.map((child) => (
+                          <Link
+                            key={child.href}
+                            href={child.href}
+                            className={`${styles.sidebarChildLink} ${activeNav === child.key ? styles.sidebarChildLinkActive : ""}`}
+                            title={child.label}
+                            aria-label={child.label}
+                          >
+                            <Image
+                              src={child.icon}
+                              alt=""
+                              width={18}
+                              height={18}
+                              className={styles.sidebarChildIcon}
+                            />
+                            <span className={styles.sidebarChildLabel}>{child.label}</span>
+                            {child.key === "lead-access-notes" ? renderPendingBadge(pendingGuestNotesCount, styles.sidebarBadge) : null}
+                          </Link>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
             </nav>
 
             <div className={styles.sidebarFooter}>
@@ -349,6 +476,10 @@ export default function DashboardShell({
                 </Link>
                 <Link href="/lead-access" onClick={() => setMobileMenuOpen(false)}>
                   Lead Access
+                </Link>
+                <Link href="/lead-access/notes" onClick={() => setMobileMenuOpen(false)} className={styles.mobileMenuChildLink}>
+                  <span>Guest Notes</span>
+                  {renderPendingBadge(pendingGuestNotesCount, styles.mobileMenuBadge)}
                 </Link>
               </>
             ) : (

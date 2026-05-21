@@ -26,8 +26,10 @@ import {
 import { normalizeInvestigationReportPayload } from "@/lib/investigation-report/helpers";
 import { isReportSectionVisible, type ReportSectionVisibilityId } from "@/lib/investigation-report/sections";
 import { normalizeHeaderKey, splitBracketedValue, toTitleCaseLabel } from "@/lib/investigation-report/text";
-import type { InvestigationSavedReportPayload, ReadinessCheck } from "@/lib/investigation-report/types";
+import type { InvestigationSavedReportPayload } from "@/lib/investigation-report/types";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
+import { reportSiteIssue } from "@/lib/siteIssues/client";
+import { reportUserActivity } from "@/lib/userActivityClient";
 import { parsePersonLabels } from "@/app/(dashboard)/system-maps/[mapId]/canvasShared";
 
 function EditGlyph() {
@@ -136,7 +138,6 @@ type SequenceTimelineItem = {
 
 type ErrorPayload = {
   error?: string;
-  readiness?: ReadinessCheck;
   diagnostic?: {
     status?: string | null;
     refusal?: string | null;
@@ -254,7 +255,7 @@ function parseReportPersonLabels(heading: string | null | undefined) {
 }
 
 function stripActivityTimestamp(entry: string) {
-  return entry.replace(/^\d{1,2}:\d{2}:\d{2}\s+/, "").trim();
+  return entry.replace(/^\d{1,2}:\d{2}(?::\d{2})?\s*(?:[ap]\.?m\.?)?\s+/i, "").trim();
 }
 
 const SESSION_STORAGE_KEYS = {
@@ -894,8 +895,6 @@ export default function GeneratedInvestigationReportPage() {
   const [map, setMap] = useState<MapRow | null>(null);
   const [elements, setElements] = useState<CanvasElementRow[]>([]);
   const [report, setReport] = useState<ReportPayload | null>(null);
-  const [readiness, setReadiness] = useState<ReadinessCheck | null>(null);
-  const [pendingCaseData, setPendingCaseData] = useState<unknown>(null);
   const [statusSaving, setStatusSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorDiagnostic, setErrorDiagnostic] = useState<ErrorPayload["diagnostic"] | null>(null);
@@ -919,6 +918,7 @@ export default function GeneratedInvestigationReportPage() {
   const emailPanelRef = useRef<HTMLDivElement | null>(null);
   const emailInputRef = useRef<HTMLInputElement | null>(null);
   const emailSentTimeoutRef = useRef<number | null>(null);
+  const pdfActivityKeyRef = useRef<string | null>(null);
 
   const appendActivityLog = useCallback((message: string) => {
     const timestamp = new Date().toLocaleTimeString([], {
@@ -1906,7 +1906,7 @@ export default function GeneratedInvestigationReportPage() {
     pdfEvidenceEntries,
   ]);
 
-  const callGenerateReport = async (args: { caseData: unknown; acknowledgeMissingInformation: boolean }) => {
+  const callGenerateReport = async (args: { caseData: unknown }) => {
     const accessToken = await getAccessToken();
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), 180000);
@@ -1951,7 +1951,7 @@ export default function GeneratedInvestigationReportPage() {
     initialLoadRunKeyRef.current = runKey;
     let cancelled = false;
 
-    const loadAndGenerate = async (acknowledgeMissingInformation = false, existingCaseData?: unknown) => {
+    const loadAndGenerate = async (existingCaseData?: unknown) => {
       if (cancelled) return;
       setGenerating(true);
       setError(null);
@@ -2031,7 +2031,6 @@ export default function GeneratedInvestigationReportPage() {
               version_number: savedReportRow.version_number,
             },
           } as ReportPayload, organisationBranding));
-          setReadiness(null);
           appendActivityLog("Saved report loaded. Preparing PDF viewer.");
           setGenerating(false);
           setLoading(false);
@@ -2085,7 +2084,6 @@ export default function GeneratedInvestigationReportPage() {
           setElements(nextElements);
           appendActivityLog("Building report request from investigation data.");
           caseData = buildCaseData(nextMap, nextElements);
-          setPendingCaseData(caseData);
         }
 
         appendActivityLog("Sending your report to the report builder.");
@@ -2104,7 +2102,7 @@ export default function GeneratedInvestigationReportPage() {
 
         let response: Response;
         try {
-          response = await callGenerateReport({ caseData, acknowledgeMissingInformation });
+          response = await callGenerateReport({ caseData });
         } finally {
           window.clearInterval(waitNoticeInterval);
         }
@@ -2112,17 +2110,6 @@ export default function GeneratedInvestigationReportPage() {
         appendActivityLog("Report builder response received.");
         const payload = (await response.json().catch(() => null)) as (ReportPayload & ErrorPayload) | ErrorPayload | null;
         if (cancelled) return;
-
-        if (response.status === 409) {
-          setReadiness(payload && "readiness" in payload ? payload.readiness ?? null : null);
-          setReport(null);
-          setError(payload && "error" in payload ? payload.error ?? null : null);
-          setErrorDiagnostic(payload && "diagnostic" in payload ? payload.diagnostic ?? null : null);
-          appendActivityLog("Missing-information confirmation is required before continuing.");
-          setLoading(false);
-          setGenerating(false);
-          return;
-        }
 
         if (!response.ok || !payload || !("report" in payload)) {
           setError(
@@ -2132,8 +2119,22 @@ export default function GeneratedInvestigationReportPage() {
                 ? payload.error ?? "Unable to generate report."
                 : "Unable to generate report.",
           );
-          setReadiness(payload && "readiness" in payload ? payload.readiness ?? null : null);
           setErrorDiagnostic(payload && "diagnostic" in payload ? payload.diagnostic ?? null : null);
+          if (response.status !== 401) {
+            reportSiteIssue({
+              action: "generating report",
+              endpoint: "/api/generate-report",
+              metadata: {
+                diagnostic: payload && "diagnostic" in payload ? payload.diagnostic ?? null : null,
+              },
+              source: "openai",
+              status: response.status,
+              technicalMessage:
+                payload && "error" in payload
+                  ? payload.error ?? "Generate report failed without an error message."
+                  : "Generate report returned an invalid payload.",
+            });
+          }
           const trace = payload && "diagnostic" in payload ? payload.diagnostic?.trace ?? [] : [];
           trace.forEach((entry) => appendActivityLog(`Server trace: ${entry}`));
           appendActivityLog("The report could not be completed before the editor opened.");
@@ -2149,6 +2150,21 @@ export default function GeneratedInvestigationReportPage() {
         if (cancelled) return;
         const message = loadError instanceof Error ? loadError.message : "Unable to generate report.";
         setError(message);
+        reportSiteIssue({
+          action: "generating report",
+          error: loadError,
+          source: "openai",
+        });
+        void reportUserActivity({
+          action: "report_generation",
+          status: "failed",
+          summary: "Report generation failed.",
+          metadata: {
+            mapId: params.id,
+            source: "client",
+            error: message,
+          },
+        });
         appendActivityLog(`Generation request failed: ${message}`);
         setLoading(false);
         setGenerating(false);
@@ -2160,61 +2176,6 @@ export default function GeneratedInvestigationReportPage() {
       cancelled = true;
     };
   }, [appendActivityLog, params.id, reportId, router, supabase, viewMode]);
-
-  const handleContinueAnyway = async () => {
-    if (!pendingCaseData) return;
-    setError(null);
-    setErrorDiagnostic(null);
-    setReadiness(null);
-    setLoading(false);
-    setGenerating(true);
-    setLoadingPhase(0);
-    setDisplayLoadingPhase(0);
-    setActivityLog([]);
-    appendActivityLog("Missing-information confirmation accepted.");
-    appendActivityLog("Sending your report to the report builder.");
-    appendActivityLog("Report builder request sent successfully.");
-
-    const requestStartedAt = Date.now();
-    let waitNoticeCount = 0;
-    const waitNoticeInterval = window.setInterval(() => {
-      waitNoticeCount += 1;
-      const elapsedSeconds = Math.round((Date.now() - requestStartedAt) / 1000);
-      appendActivityLog(
-        waitNoticeCount === 1
-          ? `Waiting for the structured report response (${elapsedSeconds}s elapsed).`
-          : `Still building your structured report (${elapsedSeconds}s elapsed).`,
-      );
-    }, 12000);
-
-    let response: Response;
-    try {
-      response = await callGenerateReport({ caseData: pendingCaseData, acknowledgeMissingInformation: true });
-    } finally {
-      window.clearInterval(waitNoticeInterval);
-    }
-    appendActivityLog("Report builder response received.");
-    const payload = (await response.json().catch(() => null)) as (ReportPayload & ErrorPayload) | ErrorPayload | null;
-
-    if (!response.ok || !payload || !("report" in payload)) {
-      setError(
-        response.status === 401
-          ? "Your sign-in session has expired. Please sign in again before generating the report."
-          : payload && "error" in payload
-            ? payload.error ?? "Unable to generate report."
-            : "Unable to generate report.",
-      );
-      setErrorDiagnostic(payload && "diagnostic" in payload ? payload.diagnostic ?? null : null);
-      const trace = payload && "diagnostic" in payload ? payload.diagnostic?.trace ?? [] : [];
-      trace.forEach((entry) => appendActivityLog(`Server trace: ${entry}`));
-      appendActivityLog("The report could not be completed before the editor opened.");
-      setGenerating(false);
-      return;
-    }
-
-    appendActivityLog("Report generated and saved. Redirecting to the editor.");
-    router.replace(`/investigations/${params.id}/reports/${payload.saved_report.id}/edit`);
-  };
 
   const handleStatusUpdate = async (nextStatus: "draft" | "reviewed" | "approved") => {
     if (!report?.saved_report.id) return;
@@ -2277,6 +2238,24 @@ export default function GeneratedInvestigationReportPage() {
         const nextBlob = await pdf(stablePdfDocument as Parameters<typeof pdf>[0]).toBlob();
         if (cancelled) return;
 
+        const currentReportId = report?.saved_report?.id || reportId || null;
+        const nextActivityKey = `${params.id}:${currentReportId || "current"}:${nextBlob.size}`;
+        if (pdfActivityKeyRef.current !== nextActivityKey) {
+          pdfActivityKeyRef.current = nextActivityKey;
+          void reportUserActivity({
+            action: "pdf_generation",
+            status: "success",
+            summary: "PDF generated.",
+            metadata: {
+              mapId: params.id,
+              reportId: currentReportId,
+              reportTitle: report?.report.cover_page.incident_name || map?.title || "Investigation Report",
+              pdfSizeBytes: nextBlob.size,
+              source: "client_pdf_renderer",
+            },
+          });
+        }
+
         const nextUrl = URL.createObjectURL(nextBlob);
         setPdfBlob(nextBlob);
         setPdfBlobUrl((current) => {
@@ -2286,6 +2265,23 @@ export default function GeneratedInvestigationReportPage() {
       } catch (buildError) {
         if (!cancelled) {
           setPdfError(buildError instanceof Error ? buildError.message : "Unable to prepare PDF preview.");
+          reportSiteIssue({
+            action: "preparing pdf",
+            error: buildError,
+            source: "application",
+          });
+          void reportUserActivity({
+            action: "pdf_generation",
+            status: "failed",
+            summary: "PDF generation failed.",
+            metadata: {
+              mapId: params.id,
+              reportId: report?.saved_report?.id || reportId || null,
+              reportTitle: report?.report.cover_page.incident_name || map?.title || "Investigation Report",
+              source: "client_pdf_renderer",
+              error: buildError instanceof Error ? buildError.message : String(buildError),
+            },
+          });
           setPdfBlob(null);
           setPdfBlobUrl((current) => {
             if (current) URL.revokeObjectURL(current);
@@ -2302,7 +2298,7 @@ export default function GeneratedInvestigationReportPage() {
     return () => {
       cancelled = true;
     };
-  }, [stablePdfDocument]);
+  }, [map?.title, params.id, report, reportId, stablePdfDocument]);
 
   const handleSavePdf = () => {
     if (!pdfBlobUrl) return;
@@ -2385,6 +2381,24 @@ export default function GeneratedInvestigationReportPage() {
       }, 2000);
     } catch (emailError) {
       setStatusMessage(emailError instanceof Error ? emailError.message : "Unable to email PDF.");
+      reportSiteIssue({
+        action: "emailing report",
+        error: emailError,
+        source: "resend",
+      });
+      void reportUserActivity({
+        action: "pdf_report_email",
+        status: "failed",
+        summary: "PDF report email failed.",
+        metadata: {
+          mapId: params.id,
+          reportId: report.saved_report?.id || reportId || null,
+          reportTitle: report.report.cover_page.incident_name || map?.title || "Investigation Report",
+          to: emailTo.trim(),
+          source: "client",
+          error: emailError instanceof Error ? emailError.message : String(emailError),
+        },
+      });
     } finally {
       setEmailSending(false);
     }
@@ -2489,7 +2503,7 @@ export default function GeneratedInvestigationReportPage() {
               <span>Generating report...</span>
             </div>
           ) : null}
-          {error && !(readiness && readiness.missing_information_detected.length > 0 && !report) ? (
+          {error ? (
             <p className={`${shellStyles.message} ${shellStyles.messageError}`}>{error}</p>
           ) : null}
           {errorDiagnostic ? (
@@ -2501,44 +2515,6 @@ export default function GeneratedInvestigationReportPage() {
                 <div><dt>Refusal</dt><dd>{errorDiagnostic.refusal || "-"}</dd></div>
                 <div><dt>Output Preview</dt><dd>{errorDiagnostic.outputTextPreview || "-"}</dd></div>
               </dl>
-            </div>
-          ) : null}
-          {!report && readiness && readiness.missing_information_detected.length > 0 ? (
-            <div className={shellStyles.accountSection}>
-              <h2 className={pageStyles.readinessHeading}>Missing Information</h2>
-              {readiness.disclaimer ? <p className={pageStyles.readinessDisclaimerText}>{readiness.disclaimer}</p> : null}
-              <ul className={`${pageStyles.warningList} ${pageStyles.readinessPrimaryList}`}>
-                {readiness.missing_information_detected.map((item) => <li key={item}>{item}</li>)}
-              </ul>
-              {readiness.suggested_next_steps.length > 0 ? (
-                <div className={`${shellStyles.reportScopeActions} ${pageStyles.readinessFollowup}`}>
-                  <div className={pageStyles.readinessFollowupContent}>
-                    <h2 className={pageStyles.readinessSubheading}>Suggested next steps</h2>
-                    <ul className={`${pageStyles.warningList} ${pageStyles.readinessSecondaryList}`}>
-                      {readiness.suggested_next_steps.map((item) => <li key={item}>{item}</li>)}
-                    </ul>
-                    {!report ? (
-                      <div className={`${shellStyles.reportScopeActionButtons} ${pageStyles.readinessActionButtons}`}>
-                        <button
-                          type="button"
-                          className={`${shellStyles.button} ${pageStyles.readinessBackButton}`}
-                          onClick={() => router.push(`/investigations/${params.id}`)}
-                        >
-                          Go Back
-                        </button>
-                        <button
-                          type="button"
-                          className={`${shellStyles.button} ${pageStyles.readinessContinueButton}`}
-                          onClick={() => void handleContinueAnyway()}
-                          disabled={generating}
-                        >
-                          {generating ? "Generating..." : "Continue Anyway"}
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              ) : null}
             </div>
           ) : null}
         </div>

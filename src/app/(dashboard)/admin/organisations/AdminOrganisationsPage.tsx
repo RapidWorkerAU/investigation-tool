@@ -5,6 +5,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import DashboardShell from "@/components/dashboard/DashboardShell";
 import { DashboardPageSkeleton } from "@/components/dashboard/DashboardTableLoadingState";
+import DashboardTableFooter from "@/components/dashboard/DashboardTableFooter";
 import shellStyles from "@/components/dashboard/DashboardShell.module.css";
 import {
   DEFAULT_REPORT_SECTION_HEADING_COLOR,
@@ -62,9 +63,17 @@ export default function AdminOrganisationsPage() {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreviewUrl, setLogoPreviewUrl] = useState("");
   const [createStep, setCreateStep] = useState<CreateOrganisationStep>("details");
+  const [page, setPage] = useState(1);
+  const pageSize = 7;
 
   const generatedSlug = useMemo(() => slugifyOrganisationName(name), [name]);
-  const allSelected = organisations.length > 0 && selectedOrganisationIds.length === organisations.length;
+  const totalPages = Math.max(1, Math.ceil(organisations.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const paginatedOrganisations = organisations.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const paginatedOrganisationIds = paginatedOrganisations.map((organisation) => organisation.id);
+  const allSelected =
+    paginatedOrganisationIds.length > 0 &&
+    paginatedOrganisationIds.every((organisationId) => selectedOrganisationIds.includes(organisationId));
   const createSteps: Array<{
     id: CreateOrganisationStep;
     label: string;
@@ -136,6 +145,10 @@ export default function AdminOrganisationsPage() {
 
     void run();
   }, [router, supabase]);
+
+  useEffect(() => {
+    setPage((current) => Math.min(current, Math.max(1, Math.ceil(organisations.length / pageSize))));
+  }, [organisations.length]);
 
   const resetCreateForm = () => {
     setCreateModalOpen(false);
@@ -349,7 +362,11 @@ export default function AdminOrganisationsPage() {
                         type="checkbox"
                         checked={allSelected}
                         onChange={() =>
-                          setSelectedOrganisationIds(allSelected ? [] : organisations.map((organisation) => organisation.id))
+                          setSelectedOrganisationIds((current) =>
+                            allSelected
+                              ? current.filter((organisationId) => !paginatedOrganisationIds.includes(organisationId))
+                              : Array.from(new Set([...current, ...paginatedOrganisationIds]))
+                          )
                         }
                         aria-label="Select all organisations"
                       />
@@ -370,7 +387,7 @@ export default function AdminOrganisationsPage() {
                       </td>
                     </tr>
                   ) : (
-                    organisations.map((organisation, index) => (
+                    paginatedOrganisations.map((organisation, index) => (
                       <tr
                         key={organisation.id}
                         className={shellStyles.clickableRow}
@@ -398,7 +415,7 @@ export default function AdminOrganisationsPage() {
                             aria-label={`Select ${organisation.name}`}
                           />
                         </td>
-                        <td><span className={shellStyles.tableValue}>{index + 1}</span></td>
+                        <td><span className={shellStyles.tableValue}>{(safePage - 1) * pageSize + index + 1}</span></td>
                         <td>
                           <div className={shellStyles.mapCell}>
                             <div className={shellStyles.mapCellText}>
@@ -422,7 +439,7 @@ export default function AdminOrganisationsPage() {
               {organisations.length === 0 ? (
                 <div className={shellStyles.dashboardMobileState}>No organisations have been created yet.</div>
               ) : (
-                organisations.map((organisation, index) => (
+                paginatedOrganisations.map((organisation, index) => (
                   <article
                     key={`mobile-${organisation.id}`}
                     className={shellStyles.dashboardMobileCard}
@@ -448,7 +465,7 @@ export default function AdminOrganisationsPage() {
                         />
                       </label>
                       <div className={shellStyles.dashboardMobileCardTitleBlock}>
-                        <strong>{index + 1}. {organisation.name}</strong>
+                        <strong>{(safePage - 1) * pageSize + index + 1}. {organisation.name}</strong>
                         <span>{organisation.slug || "No slug set"}</span>
                       </div>
                     </div>
@@ -470,6 +487,14 @@ export default function AdminOrganisationsPage() {
                 ))
               )}
             </div>
+
+            <DashboardTableFooter
+              total={organisations.length}
+              page={safePage}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              label="organisations"
+            />
           </>
         )}
       </section>

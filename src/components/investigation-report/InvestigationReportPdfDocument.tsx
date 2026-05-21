@@ -304,7 +304,7 @@ const styles = StyleSheet.create({
     objectFit: "contain",
   },
   pageWithHeader: {
-    paddingTop: 90,
+    paddingTop: 112,
   },
   repeatingHeader: {
     position: "absolute",

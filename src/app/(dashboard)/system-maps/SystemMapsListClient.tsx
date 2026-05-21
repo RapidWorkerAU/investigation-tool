@@ -10,6 +10,7 @@ import DashboardTableFooter from "@/components/dashboard/DashboardTableFooter";
 import LinkMapCodeControl from "@/components/dashboard/LinkMapCodeControl";
 import { supabaseBrowser } from "@/lib/supabase/client";
 import { ensurePortalSupabaseUser } from "@/lib/supabase/portalSession";
+import { reportUserActivity } from "@/lib/userActivityClient";
 
 type SystemMapRow = {
   id: string;
@@ -149,6 +150,20 @@ export default function SystemMapsListClient() {
     []
   );
 
+  const recordMapActivity = (
+    action: string,
+    status: "success" | "failed" | "info",
+    summary: string,
+    metadata: Record<string, unknown> = {}
+  ) => {
+    void reportUserActivity({
+      action,
+      status,
+      summary,
+      metadata,
+    });
+  };
+
   const loadMaps = async () => {
     const user = await ensurePortalSupabaseUser();
     if (!user) {
@@ -246,9 +261,13 @@ export default function SystemMapsListClient() {
             owner_id: user.id,
             title: mapCategory === "bow_tie" ? "Untitled Bow Tie Map" : mapCategory === "process_flow" ? "Untitled Process Flow Map" : "Untitled System Map",
             map_category: mapCategory,
-          });
+        });
 
         if (insertWithoutReturning.error) {
+          recordMapActivity("map_creation", "failed", "Map creation failed.", {
+            mapCategory,
+            error: createError?.message || insertWithoutReturning.error.message,
+          });
           setError(createError?.message || insertWithoutReturning.error.message || "Unable to create a new system map.");
           return;
         }
@@ -263,6 +282,10 @@ export default function SystemMapsListClient() {
           .maybeSingle();
 
         if (latestMap.error || !latestMap.data?.id) {
+          recordMapActivity("map_creation", "failed", "Map id could not be resolved.", {
+            mapCategory,
+            error: latestMap.error?.message ?? null,
+          });
           setError(latestMap.error?.message || "Map created, but the new map id could not be resolved.");
           return;
         }
@@ -270,6 +293,9 @@ export default function SystemMapsListClient() {
       }
 
       if (!createdMapId) {
+        recordMapActivity("map_creation", "failed", "Map id could not be resolved.", {
+          mapCategory,
+        });
         setError("Map created, but the new map id could not be resolved.");
         return;
       }
@@ -287,12 +313,25 @@ export default function SystemMapsListClient() {
         );
 
       if (memberInsertError) {
+        recordMapActivity("map_creation", "failed", "Map permissions failed.", {
+          mapId: createdMapId,
+          mapCategory,
+          error: memberInsertError.message,
+        });
         setError(memberInsertError.message || "Map created, but owner permissions could not be assigned.");
         return;
       }
 
+      recordMapActivity("map_creation", "success", "Map created.", {
+        mapId: createdMapId,
+        mapCategory,
+      });
       router.push(`/system-maps/${createdMapId}`);
     } catch (createError) {
+      recordMapActivity("map_creation", "failed", "Map creation failed.", {
+        mapCategory,
+        error: createError instanceof Error ? createError.message : String(createError),
+      });
       setError("Unable to create a new system map.");
     } finally {
       setIsCreating(false);
@@ -372,13 +411,27 @@ export default function SystemMapsListClient() {
         .eq("owner_id", currentUserId as string);
 
       if (deleteError) {
+        recordMapActivity("map_deletion", "failed", "Map deletion failed.", {
+          mapId: row.id,
+          mapTitle: row.title,
+          error: deleteError.message,
+        });
         setError(deleteError.message || "Unable to delete system map.");
         return;
       }
 
+      recordMapActivity("map_deletion", "success", "Map deleted.", {
+        mapId: row.id,
+        mapTitle: row.title,
+      });
       setRows((prev) => prev.filter((item) => item.id !== row.id));
       setPendingDeleteRow(null);
-    } catch {
+    } catch (deleteError) {
+      recordMapActivity("map_deletion", "failed", "Map deletion failed.", {
+        mapId: row.id,
+        mapTitle: row.title,
+        error: deleteError instanceof Error ? deleteError.message : String(deleteError),
+      });
       setError("Unable to delete system map.");
     } finally {
       setDeletingMapId(null);
@@ -392,6 +445,16 @@ export default function SystemMapsListClient() {
     };
     const cancellationError = new Error("DUPLICATION_CANCELLED");
     let createdMapId: string | null = null;
+    let duplicateActivityLogged = false;
+    const recordDuplicateActivity = (status: "success" | "failed" | "info", summary: string, metadata: Record<string, unknown> = {}) => {
+      duplicateActivityLogged = true;
+      recordMapActivity("map_duplication", status, summary, {
+        sourceMapId: row.id,
+        sourceMapTitle: row.title,
+        duplicatedMapId: createdMapId,
+        ...metadata,
+      });
+    };
     const throwIfCancelled = () => {
       if (duplicateAbortRef.current) throw cancellationError;
     };
@@ -437,6 +500,9 @@ export default function SystemMapsListClient() {
 
       const canDuplicate = row.owner_id === user.id || !!row.role;
       if (!canDuplicate) {
+        recordDuplicateActivity("failed", "Map duplication denied.", {
+          reason: "insufficient_access",
+        });
         setError("You do not have access to duplicate this map.");
         return;
       }
@@ -467,8 +533,12 @@ export default function SystemMapsListClient() {
             title: duplicateTitle,
             description: row.description,
             map_category: row.map_category ?? "document_map",
-          });
+        });
         if (fallbackInsert.error) {
+          recordDuplicateActivity("failed", "Map duplication failed.", {
+            stage: "create_map",
+            error: createMapError?.message || fallbackInsert.error.message,
+          });
           setError(createMapError?.message || fallbackInsert.error.message || "Unable to duplicate map.");
           return;
         }
@@ -482,6 +552,10 @@ export default function SystemMapsListClient() {
           .limit(1)
           .maybeSingle();
         if (latestMap.error || !latestMap.data?.id) {
+          recordDuplicateActivity("failed", "Duplicate id could not be resolved.", {
+            stage: "resolve_map_id",
+            error: latestMap.error?.message ?? null,
+          });
           setError(latestMap.error?.message || "Map duplicated, but new map id could not be resolved.");
           return;
         }
@@ -501,6 +575,10 @@ export default function SystemMapsListClient() {
           { onConflict: "map_id,user_id" }
         );
       if (memberInsertError) {
+        recordDuplicateActivity("failed", "Duplicate permissions failed.", {
+          stage: "assign_permissions",
+          error: memberInsertError.message,
+        });
         setError(memberInsertError.message || "Map duplicated, but owner permissions could not be assigned.");
         setProgress(100, "Failed to assign owner access.", "error");
         return;
@@ -538,6 +616,16 @@ export default function SystemMapsListClient() {
       ]);
 
       if (typesRes.error || nodesRes.error || elementsRes.error || relationsRes.error || outlineRes.error) {
+        recordDuplicateActivity("failed", "Duplicate source load failed.", {
+          stage: "load_source_data",
+          error:
+            typesRes.error?.message ||
+            nodesRes.error?.message ||
+            elementsRes.error?.message ||
+            relationsRes.error?.message ||
+            outlineRes.error?.message ||
+            null,
+        });
         setError(
           typesRes.error?.message ||
             nodesRes.error?.message ||
@@ -578,6 +666,10 @@ export default function SystemMapsListClient() {
           .select("id")
           .single();
         if (insertTypeError || !insertedType?.id) {
+          recordDuplicateActivity("failed", "Duplicate document types failed.", {
+            stage: "document_types",
+            error: insertTypeError?.message ?? null,
+          });
           setError(insertTypeError?.message || "Unable to duplicate document hierarchy.");
           setProgress(100, "Failed while duplicating document types.", "error");
           return;
@@ -609,6 +701,10 @@ export default function SystemMapsListClient() {
           .select("id")
           .single();
         if (insertNodeError || !insertedNode?.id) {
+          recordDuplicateActivity("failed", "Duplicate document nodes failed.", {
+            stage: "document_nodes",
+            error: insertNodeError?.message ?? null,
+          });
           setError(insertNodeError?.message || "Unable to duplicate document nodes.");
           setProgress(100, "Failed while duplicating document nodes.", "error");
           return;
@@ -637,6 +733,10 @@ export default function SystemMapsListClient() {
           .select("id")
           .single();
         if (insertElementError || !insertedElement?.id) {
+          recordDuplicateActivity("failed", "Duplicate canvas items failed.", {
+            stage: "canvas_elements",
+            error: insertElementError?.message ?? null,
+          });
           setError(insertElementError?.message || "Unable to duplicate canvas elements.");
           setProgress(100, "Failed while duplicating canvas components.", "error");
           return;
@@ -673,6 +773,10 @@ export default function SystemMapsListClient() {
             relationship_custom_type: sourceRelation.relationship_custom_type,
           });
         if (insertRelationError) {
+          recordDuplicateActivity("failed", "Duplicate relationships failed.", {
+            stage: "node_relations",
+            error: insertRelationError.message,
+          });
           setError(insertRelationError.message || "Unable to duplicate relationships.");
           setProgress(100, "Failed while duplicating relationships.", "error");
           return;
@@ -701,6 +805,10 @@ export default function SystemMapsListClient() {
           .select("id")
           .single();
         if (insertHeadingError || !insertedHeading?.id) {
+          recordDuplicateActivity("failed", "Duplicate headings failed.", {
+            stage: "outline_headings",
+            error: insertHeadingError?.message ?? null,
+          });
           setError(insertHeadingError?.message || "Unable to duplicate map structure headings.");
           setProgress(100, "Failed while duplicating structure headings.", "error");
           return;
@@ -727,6 +835,10 @@ export default function SystemMapsListClient() {
             sort_order: sourceContent.sort_order,
           });
         if (insertContentError) {
+          recordDuplicateActivity("failed", "Duplicate content failed.", {
+            stage: "outline_content",
+            error: insertContentError.message,
+          });
           setError(insertContentError.message || "Unable to duplicate map structure content.");
           setProgress(100, "Failed while duplicating structure content.", "error");
           return;
@@ -734,6 +846,9 @@ export default function SystemMapsListClient() {
       }
 
       setProgress(100, "Duplicate complete. Opening map...", "success");
+      recordDuplicateActivity("success", "Map duplicated.", {
+        duplicatedMapId: createdMapId,
+      });
       await new Promise((resolve) => setTimeout(resolve, 1000));
       setPendingDuplicateRow(null);
       router.push(`/system-maps/${createdMapId}`);
@@ -762,9 +877,19 @@ export default function SystemMapsListClient() {
             status: "aborted",
           });
         }
+        if (!duplicateActivityLogged) {
+          recordDuplicateActivity("info", "Map duplication cancelled.", {
+            reason: "user_cancelled",
+          });
+        }
         await new Promise((resolve) => setTimeout(resolve, 1200));
         setPendingDuplicateRow(null);
       } else {
+        if (!duplicateActivityLogged) {
+          recordDuplicateActivity("failed", "Map duplication failed.", {
+            error: e instanceof Error ? e.message : String(e),
+          });
+        }
         setError("Unable to duplicate system map.");
         setProgress(100, "Duplicate failed.", "error");
       }
@@ -780,11 +905,20 @@ export default function SystemMapsListClient() {
     if (!codeVisible) return;
     try {
       await navigator.clipboard.writeText(row.map_code as string);
+      recordMapActivity("sharing_code", "success", "Map code copied.", {
+        mapId: row.id,
+        mapTitle: row.title,
+      });
       setCopiedMessage(`Map code copied for "${row.title}"`);
       window.setTimeout(() => {
         setCopiedMessage((prev) => (prev ? null : prev));
       }, 1400);
-    } catch {
+    } catch (copyError) {
+      recordMapActivity("sharing_code", "failed", "Map code copy failed.", {
+        mapId: row.id,
+        mapTitle: row.title,
+        error: copyError instanceof Error ? copyError.message : String(copyError),
+      });
       setError("Unable to copy map code.");
     }
   };

@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import SiteIssueProvider from "@/components/site-issues/SiteIssueProvider";
 import HashRedirector from "./HashRedirector";
 import "./globals.css";
 
@@ -37,8 +38,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en-AU" data-scroll-behavior="smooth">
       <body>
-        <HashRedirector />
-        <main className="app-main-shell">{children}</main>
+        <SiteIssueProvider>
+          <HashRedirector />
+          <main className="app-main-shell">{children}</main>
+        </SiteIssueProvider>
       </body>
     </html>
   );

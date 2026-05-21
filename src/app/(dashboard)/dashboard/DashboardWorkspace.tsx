@@ -10,6 +10,7 @@ import { DashboardMobileLoadingState, DashboardPageSkeleton, DashboardTableLoadi
 import DashboardTableFooter from "@/components/dashboard/DashboardTableFooter";
 import LinkMapCodeControl from "@/components/dashboard/LinkMapCodeControl";
 import { accessIsReadOnlyRestricted, accessRequiresSelection, fetchAccessState, isExpiredTrialAccess, type BillingAccessState } from "@/lib/access";
+import { reportSiteIssue } from "@/lib/siteIssues/client";
 import {
   hasTemplateBrowseAccess,
   listInvestigationTemplates,
@@ -234,6 +235,7 @@ export default function DashboardWorkspace() {
   const [newInvestigationTitle, setNewInvestigationTitle] = useState("");
   const [newInvestigationDescription, setNewInvestigationDescription] = useState("");
   const [newInvestigationTemplateQuery, setNewInvestigationTemplateQuery] = useState("");
+  const [templateSearchQuery, setTemplateSearchQuery] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [templateOptions, setTemplateOptions] = useState<InvestigationTemplateOption[]>([]);
   const [showTemplateOptions, setShowTemplateOptions] = useState(false);
@@ -369,6 +371,11 @@ export default function DashboardWorkspace() {
         await loadMaps();
       } catch (loadError) {
         setError(loadError instanceof Error ? loadError.message : "Unable to load investigation maps.");
+        reportSiteIssue({
+          action: "loading dashboard",
+          error: loadError,
+          source: "supabase",
+        });
       } finally {
         setLoading(false);
       }
@@ -382,6 +389,11 @@ export default function DashboardWorkspace() {
       await loadMaps();
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to refresh investigation maps.");
+      reportSiteIssue({
+        action: "refreshing dashboard",
+        error: loadError,
+        source: "supabase",
+      });
     }
   }, [loadMaps]);
 
@@ -663,6 +675,11 @@ export default function DashboardWorkspace() {
         window.location.href = data.url;
       } catch (portalError) {
         setError(portalError instanceof Error ? portalError.message : "Unable to open billing portal.");
+        reportSiteIssue({
+          action: "opening billing",
+          error: portalError,
+          source: "stripe",
+        });
       } finally {
         setOpeningBillingPortal(false);
       }
@@ -714,6 +731,7 @@ export default function DashboardWorkspace() {
     setNewInvestigationTitle("");
     setNewInvestigationDescription("");
     setNewInvestigationTemplateQuery("");
+    setTemplateSearchQuery("");
     setSelectedTemplateId(null);
     setTemplateOptions([]);
     setShowTemplateOptions(false);
@@ -729,6 +747,11 @@ export default function DashboardWorkspace() {
         setTemplateOptions(options);
       } catch (templateError) {
         setError(templateError instanceof Error ? templateError.message : "Unable to load templates.");
+        reportSiteIssue({
+          action: "loading templates",
+          error: templateError,
+          source: "supabase",
+        });
       } finally {
         setLoadingTemplateOptions(false);
       }
@@ -737,9 +760,51 @@ export default function DashboardWorkspace() {
   );
 
   useEffect(() => {
-    if (!showCreateInvestigationModal || !canUseTemplates) return;
+    if (!showCreateInvestigationModal || !canUseTemplates || !showTemplateOptions) return;
     void loadCreateTemplateOptions("");
-  }, [showCreateInvestigationModal, canUseTemplates, loadCreateTemplateOptions]);
+  }, [showCreateInvestigationModal, canUseTemplates, loadCreateTemplateOptions, showTemplateOptions]);
+
+  const handleOpenTemplateSelector = () => {
+    if (!canUseTemplates) return;
+    setTemplateSearchQuery("");
+    setShowTemplateOptions(true);
+    void loadCreateTemplateOptions("");
+  };
+
+  const handleCloseTemplateSelector = () => {
+    setTemplateSearchQuery("");
+    setShowTemplateOptions(false);
+  };
+
+  const handleTemplateSearchChange = (value: string) => {
+    setTemplateSearchQuery(value);
+    if (!canUseTemplates) return;
+
+    const normalizedSearch = value.trim();
+    if (normalizedSearch.length === 0) {
+      void loadCreateTemplateOptions("");
+      return;
+    }
+
+    if (normalizedSearch.length >= 4) {
+      void loadCreateTemplateOptions(normalizedSearch);
+      return;
+    }
+
+    setTemplateOptions([]);
+  };
+
+  const handleTemplateSelect = (option: InvestigationTemplateOption) => {
+    setSelectedTemplateId(option.id);
+    setNewInvestigationTemplateQuery(option.name);
+    setTemplateSearchQuery("");
+    setShowTemplateOptions(false);
+  };
+
+  const handleClearSelectedTemplate = () => {
+    setSelectedTemplateId(null);
+    setNewInvestigationTemplateQuery("");
+  };
 
   const handleAddInvestigation = async () => {
     if (!canCreateMaps) return;
@@ -750,13 +815,6 @@ export default function DashboardWorkspace() {
 
       const normalizedTitle = newInvestigationTitle.trim();
       const normalizedDescription = newInvestigationDescription.trim();
-      const normalizedTemplateQuery = newInvestigationTemplateQuery.trim();
-
-      if (canUseTemplates && normalizedTemplateQuery && !selectedTemplateId) {
-        setError("Select a template from the list or clear the template field before creating the investigation.");
-        return;
-      }
-
       let mapId: string | null = null;
 
       if (canUseTemplates && selectedTemplateId) {
@@ -793,6 +851,11 @@ export default function DashboardWorkspace() {
       router.push(`/investigations/${mapId}/canvas?welcome=1`);
     } catch (createError) {
       setError(summarizeDashboardError(createError, "We could not create your investigation."));
+      reportSiteIssue({
+        action: "creating investigation",
+        error: createError,
+        source: "supabase",
+      });
     } finally {
       setCreating(false);
     }
@@ -865,6 +928,11 @@ export default function DashboardWorkspace() {
       await refreshAccessStateLocal();
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : "Unable to delete map.");
+      reportSiteIssue({
+        action: "deleting map",
+        error: deleteError,
+        source: "supabase",
+      });
     } finally {
       setDeletingMapId(null);
     }
@@ -921,6 +989,11 @@ export default function DashboardWorkspace() {
         status: "error",
       });
       setError(bulkDeleteError instanceof Error ? bulkDeleteError.message : "Unable to bulk delete maps.");
+      reportSiteIssue({
+        action: "deleting maps",
+        error: bulkDeleteError,
+        source: "supabase",
+      });
     } finally {
       setBulkDeleting(false);
     }
@@ -1205,6 +1278,11 @@ export default function DashboardWorkspace() {
           status: "error",
         });
         setError(duplicateError instanceof Error ? duplicateError.message : "Unable to duplicate map.");
+        reportSiteIssue({
+          action: "duplicating map",
+          error: duplicateError,
+          source: "supabase",
+        });
       }
     } finally {
       duplicateAbortRef.current = false;
@@ -1656,16 +1734,92 @@ export default function DashboardWorkspace() {
           <div className={`${shellStyles.modalCard} ${shellStyles.dashboardModalCard} ${shellStyles.createInvestigationCard}`}>
             <div className={shellStyles.createInvestigationHeader}>
               <div>
-                {renderBrandedModalHeader("Create your investigation", "New investigation", undefined, undefined, () => {
-                  if (creating) return;
-                  resetCreateInvestigationState();
-                })}
+                {renderBrandedModalHeader(
+                  showTemplateOptions ? "Choose a template" : "Create your investigation",
+                  showTemplateOptions ? "Start from template" : "New investigation",
+                  undefined,
+                  undefined,
+                  () => {
+                    if (creating) return;
+                    if (showTemplateOptions) {
+                      handleCloseTemplateSelector();
+                      return;
+                    }
+                    resetCreateInvestigationState();
+                  },
+                )}
                 <p className={shellStyles.modalText}>
-                  Give the investigation a clear working title and a short description so your team can identify the purpose straight away.
+                  {showTemplateOptions
+                    ? "Search available templates, then select one to return to your investigation details."
+                    : "Give the investigation a clear working title and a short description so your team can identify the purpose straight away."}
                 </p>
               </div>
             </div>
 
+            {showTemplateOptions ? (
+              <>
+                <div className={shellStyles.templateSelectorPanel}>
+                  <label className={shellStyles.accountField}>
+                    <span>Search Templates</span>
+                    <input
+                      className={shellStyles.input}
+                      type="search"
+                      value={templateSearchQuery}
+                      onChange={(event) => handleTemplateSearchChange(event.target.value)}
+                      placeholder="Type at least 4 characters to search"
+                      autoFocus
+                    />
+                  </label>
+
+                  <div className={shellStyles.templateSelectorList}>
+                    {loadingTemplateOptions ? (
+                      <div className={shellStyles.templatePickerStatus}>Loading templates...</div>
+                    ) : templateOptions.length ? (
+                      templateOptions.map((option) => (
+                        <button
+                          key={option.id}
+                          type="button"
+                          className={`${shellStyles.templatePickerOption} ${
+                            selectedTemplateId === option.id ? shellStyles.templatePickerOptionActive : ""
+                          }`}
+                          onClick={() => handleTemplateSelect(option)}
+                        >
+                          <strong>{option.name}</strong>
+                          <span>
+                            Updated {formatMobileDate(option.updated_at)}
+                            {option.visibility === "organisation"
+                              ? " - Organisation template"
+                              : option.is_global
+                                ? " - Global template"
+                                : ""}
+                          </span>
+                        </button>
+                      ))
+                    ) : (
+                      <div className={shellStyles.templatePickerStatus}>
+                        {templateSearchQuery.trim().length >= 4
+                          ? "No templates match that search."
+                          : templateSearchQuery.trim().length > 0
+                            ? "Type 4 characters to search templates."
+                            : "No templates are available yet."}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className={shellStyles.modalActions}>
+                  <button
+                    type="button"
+                    className={`${shellStyles.button} ${shellStyles.buttonSecondary}`}
+                    onClick={handleCloseTemplateSelector}
+                    disabled={creating}
+                  >
+                    Back
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
             <div className={shellStyles.createInvestigationForm}>
               <label className={shellStyles.accountField}>
                 <span>Investigation Title</span>
@@ -1679,6 +1833,44 @@ export default function DashboardWorkspace() {
                 />
               </label>
 
+              <div
+                className={shellStyles.accountField}
+                title={canUseTemplates ? undefined : templateCreateDisabledReason}
+              >
+                <span>Start From Template</span>
+                <div className={shellStyles.templateSelectionSummary}>
+                  <div>
+                    <strong>{selectedTemplateId ? newInvestigationTemplateQuery : "No template selected"}</strong>
+                    <span>
+                      {selectedTemplateId
+                        ? "This investigation will start from the selected template."
+                        : "Create a blank investigation or choose a saved template."}
+                    </span>
+                  </div>
+                  <div className={shellStyles.templateSelectionActions}>
+                    {selectedTemplateId ? (
+                      <button
+                        type="button"
+                        className={`${shellStyles.button} ${shellStyles.buttonSecondary}`}
+                        onClick={handleClearSelectedTemplate}
+                        disabled={creating}
+                      >
+                        Clear
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className={`${shellStyles.button} ${shellStyles.buttonSecondary}`}
+                      onClick={handleOpenTemplateSelector}
+                      disabled={!canUseTemplates || creating}
+                    >
+                      Start from template
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {false ? (
               <label className={shellStyles.accountField}>
                 <span>Start From Template</span>
                 <div
@@ -1766,6 +1958,7 @@ export default function DashboardWorkspace() {
                   ) : null}
                 </div>
               </label>
+              ) : null}
 
               <label className={shellStyles.accountField}>
                 <span>Description</span>
@@ -1801,6 +1994,8 @@ export default function DashboardWorkspace() {
                 {creating ? "Creating..." : "Create investigation"}
               </button>
             </div>
+              </>
+            )}
           </div>
         </div>
       ) : null)}

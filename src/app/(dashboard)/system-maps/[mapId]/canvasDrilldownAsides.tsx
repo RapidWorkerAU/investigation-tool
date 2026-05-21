@@ -68,6 +68,7 @@ type AddRelationshipAsideProps = {
   relationshipTargetGroupingId: string;
   onAdd: () => Promise<void>;
   onCancel: () => void;
+  actionDisabledReason?: string;
 };
 
 export function AddRelationshipAside({
@@ -126,8 +127,10 @@ export function AddRelationshipAside({
   relationshipTargetGroupingId,
   onAdd,
   onCancel,
+  actionDisabledReason,
 }: AddRelationshipAsideProps) {
   if (!open) return null;
+  const mutationDisabled = !!actionDisabledReason;
   const showGroupingOptions = showRelationshipGroupingOptions;
   const showDocumentOptions = showRelationshipDocumentOptions;
   const showSystemOptions = showRelationshipSystemOptions;
@@ -144,7 +147,7 @@ export function AddRelationshipAside({
           <button className="canvas-left-aside__close rounded-none border border-black bg-white px-2 py-1 text-xs text-black hover:bg-slate-100" onClick={onCancel}>Close</button>
         </div>
         <p className="mt-3 text-sm text-slate-600">From: {relationshipSourceLabel || relationshipSourceNodeTitle || relationshipSourceGroupingHeading || "Unknown source"}</p>
-        <div className="mt-3 grid gap-3">
+        <fieldset disabled={mutationDisabled} className="m-0 mt-3 grid min-w-0 gap-3 border-0 p-0 disabled:opacity-100">
           {relationshipModeGrouping ? (
             <div className="relative">
               <div className="mb-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Grouping Containers</div>
@@ -415,6 +418,7 @@ export function AddRelationshipAside({
             <button
               className="rounded-none border border-black bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
               disabled={
+                mutationDisabled ||
                 (!relationshipModeGrouping && (!allowDocumentTargets && !allowSystemTargets)) ||
                 (!relationshipModeGrouping && !relationshipTargetDocumentId && !relationshipTargetSystemId) ||
                 (relationshipModeGrouping && !relationshipTargetGroupingId) ||
@@ -426,7 +430,7 @@ export function AddRelationshipAside({
             </button>
             <button className="rounded-none border border-black bg-white px-3 py-2 text-sm text-black hover:bg-slate-100" onClick={onCancel}>Cancel</button>
           </div>
-        </div>
+        </fieldset>
       </div>
     </aside>
   );
@@ -455,6 +459,7 @@ type OrgChartDirectReportAsideProps = {
   setNotes: (value: string) => void;
   onAdd: () => Promise<void>;
   onCancel: () => void;
+  actionDisabledReason?: string;
 };
 
 export function OrgChartDirectReportAside({
@@ -473,8 +478,10 @@ export function OrgChartDirectReportAside({
   setNotes,
   onAdd,
   onCancel,
+  actionDisabledReason,
 }: OrgChartDirectReportAsideProps) {
   if (!open) return null;
+  const mutationDisabled = !!actionDisabledReason;
   return (
     <aside
       className={`canvas-left-aside fixed transition-transform duration-300 ${
@@ -488,7 +495,7 @@ export function OrgChartDirectReportAside({
           <button className="canvas-left-aside__close rounded-none border border-black bg-white px-2 py-1 text-xs text-black hover:bg-slate-100" onClick={onCancel}>Close</button>
         </div>
         <p className="mt-3 text-sm text-slate-600">Leader: {sourceLabel || "Unknown person"}</p>
-        <div className="mt-3 grid gap-3">
+        <fieldset disabled={mutationDisabled} className="m-0 mt-3 grid min-w-0 gap-3 border-0 p-0 disabled:opacity-100">
           <div className="relative">
             <div className="mb-1 text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Direct Report</div>
             <div className="relative flex">
@@ -549,14 +556,14 @@ export function OrgChartDirectReportAside({
           <div className="mt-2 flex justify-end gap-2">
             <button
               className="rounded-none border border-black bg-white px-3 py-2 text-sm font-semibold text-black hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={!selectedTargetId}
+              disabled={mutationDisabled || !selectedTargetId}
               onClick={() => void onAdd()}
             >
               Save Link
             </button>
             <button className="rounded-none border border-black bg-white px-3 py-2 text-sm text-black hover:bg-slate-100" onClick={onCancel}>Cancel</button>
           </div>
-        </div>
+        </fieldset>
       </div>
     </aside>
   );

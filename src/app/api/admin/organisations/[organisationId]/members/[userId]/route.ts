@@ -61,3 +61,30 @@ export async function PATCH(
     );
   }
 }
+
+export async function DELETE(
+  request: Request,
+  context: { params: Promise<{ organisationId: string; userId: string }> }
+) {
+  try {
+    const { response } = await requirePlatformAdmin(request);
+    if (response) return response;
+
+    const { organisationId, userId } = await context.params;
+    const supabase = createServiceRoleClient();
+    const { error } = await supabase
+      .from("organisation_memberships")
+      .delete()
+      .eq("organisation_id", organisationId)
+      .eq("user_id", userId);
+
+    if (error) throw new Error(error.message);
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    console.error("Admin delete organisation membership failed", error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Unable to delete membership." },
+      { status: 500 }
+    );
+  }
+}

@@ -2,6 +2,8 @@ type CanvasNodeSelectionToolbarProps = {
   open: boolean;
   showRelationships: boolean;
   relationshipsDisabled?: boolean;
+  deleteDisabled?: boolean;
+  deleteDisabledReason?: string;
   onConfigure: () => void;
   onRelationships: () => void;
   onDelete: () => void;
@@ -11,6 +13,8 @@ export function CanvasNodeSelectionToolbar({
   open,
   showRelationships,
   relationshipsDisabled = false,
+  deleteDisabled = false,
+  deleteDisabledReason,
   onConfigure,
   onRelationships,
   onDelete,
@@ -20,7 +24,7 @@ export function CanvasNodeSelectionToolbar({
     "flex h-9 items-center justify-center gap-2 rounded-lg px-3 text-[15px] font-medium text-white transition hover:bg-white/12 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-transparent";
   const dividerClass = "mx-1 h-[29px] w-px shrink-0 bg-white/20";
   const iconButtonClass =
-    "flex h-10 w-10 items-center justify-center rounded-lg text-white/80 transition hover:bg-white/12 hover:text-white";
+    "flex h-10 w-10 items-center justify-center rounded-lg text-white/80 transition hover:bg-white/12 hover:text-white disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-transparent disabled:hover:text-white/80";
   return (
     <div className="pointer-events-none fixed left-1/2 top-[82px] z-[86] -translate-x-1/2">
       <div className="pointer-events-auto flex items-center rounded-[18px] border border-[#27496b] bg-[#102a43] px-2 py-1.5 text-white shadow-[0_14px_32px_rgba(15,23,42,0.34)]">
@@ -54,7 +58,8 @@ export function CanvasNodeSelectionToolbar({
           className={iconButtonClass}
           onClick={onDelete}
           aria-label="Delete"
-          title="Delete"
+          title={deleteDisabledReason || "Delete"}
+          disabled={deleteDisabled}
         >
           <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
             <path

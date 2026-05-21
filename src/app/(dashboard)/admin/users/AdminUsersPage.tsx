@@ -5,6 +5,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import DashboardShell from "@/components/dashboard/DashboardShell";
 import { DashboardPageSkeleton } from "@/components/dashboard/DashboardTableLoadingState";
+import DashboardTableFooter from "@/components/dashboard/DashboardTableFooter";
 import shellStyles from "@/components/dashboard/DashboardShell.module.css";
 import { isPlatformAdminEmail } from "@/lib/platformAdmin";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
@@ -84,8 +85,14 @@ export default function AdminUsersPage() {
   const [departmentId, setDepartmentId] = useState("");
   const [siteId, setSiteId] = useState("");
   const [leaderUserId, setLeaderUserId] = useState("");
+  const [page, setPage] = useState(1);
+  const pageSize = 7;
 
-  const allSelected = users.length > 0 && selectedUserIds.length === users.length;
+  const totalPages = Math.max(1, Math.ceil(users.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const paginatedUsers = users.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const paginatedUserIds = paginatedUsers.map((user) => user.id);
+  const allSelected = paginatedUserIds.length > 0 && paginatedUserIds.every((userId) => selectedUserIds.includes(userId));
 
   const loadUsers = async (accessToken: string) => {
     const response = await fetch("/api/admin/users/list", {
@@ -200,6 +207,10 @@ export default function AdminUsersPage() {
 
     void run();
   }, [router, supabase]);
+
+  useEffect(() => {
+    setPage((current) => Math.min(current, Math.max(1, Math.ceil(users.length / pageSize))));
+  }, [users.length]);
 
   const resetInviteForm = () => {
     setInviteModalOpen(false);
@@ -410,7 +421,13 @@ export default function AdminUsersPage() {
                         className={shellStyles.tableCheckbox}
                         type="checkbox"
                         checked={allSelected}
-                        onChange={() => setSelectedUserIds(allSelected ? [] : users.map((user) => user.id))}
+                        onChange={() =>
+                          setSelectedUserIds((current) =>
+                            allSelected
+                              ? current.filter((userId) => !paginatedUserIds.includes(userId))
+                              : Array.from(new Set([...current, ...paginatedUserIds]))
+                          )
+                        }
                         aria-label="Select all users"
                       />
                     </th>
@@ -429,7 +446,7 @@ export default function AdminUsersPage() {
                       </td>
                     </tr>
                   ) : (
-                    users.map((user, index) => (
+                    paginatedUsers.map((user, index) => (
                       <tr
                         key={user.id}
                         className={shellStyles.clickableRow}
@@ -455,7 +472,7 @@ export default function AdminUsersPage() {
                             aria-label={`Select ${user.fullName || user.email || user.id}`}
                           />
                         </td>
-                        <td><span className={shellStyles.tableValue}>{index + 1}</span></td>
+                        <td><span className={shellStyles.tableValue}>{(safePage - 1) * pageSize + index + 1}</span></td>
                         <td>
                           <div className={shellStyles.mapCell}>
                             <div className={shellStyles.mapCellText}>
@@ -482,7 +499,7 @@ export default function AdminUsersPage() {
               {users.length === 0 ? (
                 <div className={shellStyles.dashboardMobileState}>No users have been found yet.</div>
               ) : (
-                users.map((user, index) => (
+                paginatedUsers.map((user, index) => (
                   <article
                     key={`mobile-${user.id}`}
                     className={shellStyles.dashboardMobileCard}
@@ -506,7 +523,7 @@ export default function AdminUsersPage() {
                         />
                       </label>
                       <div className={shellStyles.dashboardMobileCardTitleBlock}>
-                        <strong>{index + 1}. {user.fullName || "No name set"}</strong>
+                        <strong>{(safePage - 1) * pageSize + index + 1}. {user.fullName || "No name set"}</strong>
                         <span>{user.email || "-"}</span>
                       </div>
                     </div>
@@ -524,6 +541,14 @@ export default function AdminUsersPage() {
                 ))
               )}
             </div>
+
+            <DashboardTableFooter
+              total={users.length}
+              page={safePage}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              label="users"
+            />
           </>
         )}
       </section>

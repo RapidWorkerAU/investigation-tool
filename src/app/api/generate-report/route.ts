@@ -5,13 +5,13 @@ import { buildDraftReportText } from "@/lib/investigation-report/helpers";
 import { generateReportSchema } from "@/lib/investigation-report/schema";
 import { getUserFromAuthHeader } from "@/lib/supabase/auth";
 import { createAuthedServerClient, createServiceRoleClient } from "@/lib/supabase/server";
+import { insertUserProfileActivity } from "@/lib/userProfileActivity";
 import type { InvestigationReportPayload, ReadinessCheck, ReportRowItem } from "@/lib/investigation-report/types";
 
 export const runtime = "nodejs";
 
 type GenerateReportRequest = {
   caseData?: unknown;
-  acknowledgeMissingInformation?: boolean;
 };
 
 type GenerateReportResponse = InvestigationReportPayload;
@@ -21,49 +21,6 @@ type PreviousReportBranding = {
   section_heading_color?: string;
   table_heading_color?: string;
 };
-
-const nodeRequirementRules = [
-  {
-    key: "incident_sequence_step",
-    message: "No sequence step nodes were found. The report may be missing incident date, time, location, and timeline detail.",
-  },
-  {
-    key: "incident_outcome",
-    message: "No outcome nodes were found. The report may be unable to confirm impacts, outcomes, or whether an injury occurred.",
-  },
-  {
-    key: "incident_task_condition",
-    message: "No task/condition nodes were found. The report may be unable to describe the task context and conditions present.",
-  },
-  {
-    key: "person",
-    message: "No person nodes were found. The People Involved section cannot be populated.",
-  },
-  {
-    key: "incident_factor",
-    message: "No factor nodes were found. The Factors section may be incomplete.",
-  },
-  {
-    key: "incident_system_factor",
-    message: "No system factor nodes were found. Organisational contributors may be missing from the report.",
-  },
-  {
-    key: "incident_control_barrier",
-    message: "No control/barrier nodes were found. The Controls And Barriers section cannot be populated.",
-  },
-  {
-    key: "incident_finding",
-    message: "No finding nodes were found. The Incident Findings section may be incomplete.",
-  },
-  {
-    key: "incident_recommendation",
-    message: "No recommendation nodes were found. The Recommendations section cannot be populated.",
-  },
-  {
-    key: "incident_evidence",
-    message: "No evidence nodes were found. The Evidence section may be incomplete.",
-  },
-] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -99,70 +56,6 @@ function collectElementRecords(value: unknown, found: Array<Record<string, unkno
 
 function countElementType(value: unknown, elementType: string) {
   return collectElementRecords(value).filter((record) => record.element_type === elementType).length;
-}
-
-function extractLocalMissingInformation(caseData: unknown) {
-  const elementRecords = collectElementRecords(caseData);
-  const counts = new Map<string, number>();
-
-  elementRecords.forEach((record) => {
-    const elementType = typeof record.element_type === "string" ? record.element_type : "";
-    if (!elementType) return;
-    counts.set(elementType, (counts.get(elementType) ?? 0) + 1);
-  });
-
-  const missing: string[] = nodeRequirementRules
-    .filter((rule) => !counts.get(rule.key))
-    .map((rule) => rule.message);
-
-  const sequenceRecords = elementRecords.filter((record) => record.element_type === "incident_sequence_step");
-  const hasTimestamp = sequenceRecords.some((record) => {
-    const config = isRecord(record.element_config) ? record.element_config : null;
-    return typeof config?.timestamp === "string" && config.timestamp.trim().length > 0;
-  });
-  const hasLocation = sequenceRecords.some((record) => {
-    const config = isRecord(record.element_config) ? record.element_config : null;
-    return typeof config?.location === "string" && config.location.trim().length > 0;
-  });
-
-  if (!hasTimestamp) {
-    missing.push("No explicit incident timestamp was found in the sequence nodes.");
-  }
-
-  if (!hasLocation) {
-    missing.push("No explicit incident location was found in the sequence nodes.");
-  }
-
-  const outcomeRecords = elementRecords.filter((record) => record.element_type === "incident_outcome");
-  const hasInjuryOutcome = outcomeRecords.some((record) => {
-    const config = isRecord(record.element_config) ? record.element_config : null;
-    return String(config?.impact_type ?? "").trim().toLowerCase() === "injury";
-  });
-
-  if (!hasInjuryOutcome) {
-    missing.push("No explicit injury outcome node was found to confirm whether an injury did or did not occur.");
-  }
-
-  return missing;
-}
-
-function buildReadiness(missingInformationDetected: string[]): ReadinessCheck {
-  const requiresAcknowledgement = missingInformationDetected.length > 0;
-
-  return {
-    requires_acknowledgement: requiresAcknowledgement,
-    missing_information_detected: missingInformationDetected,
-    disclaimer: requiresAcknowledgement
-      ? "This report may be incomplete or inaccurate unless the missing investigation information is confirmed or intentionally excluded by the user."
-      : null,
-    suggested_next_steps: requiresAcknowledgement
-      ? [
-          "Review the missing information flagged before generating the final report.",
-          "Either add the missing investigation nodes or explicitly acknowledge that you want to continue without them.",
-          "Treat any generated report text as provisional where the source map is incomplete.",
-        ]
-      : [],
-  };
 }
 
 function isGenerateReportResponse(value: unknown): value is GenerateReportResponse {
@@ -274,6 +167,45 @@ function extractResponseDiagnostic(response: Record<string, unknown>) {
   };
 }
 
+function reduceRepeatedSentenceOpeners(text: string) {
+  return text
+    .split(/(\n{2,})/)
+    .map((part) => {
+      if (/^\n+$/.test(part)) return part;
+      const openerCounts = new Map<string, number>();
+      let previousOpener = "";
+
+      return part.replace(
+        /(^|[.!?]\s+)(Subsequently|As a result|However|Notably|Then|Next|Afterward|Afterwards|Following this),\s+/gi,
+        (_match, prefix: string, opener: string) => {
+          const key = opener.toLowerCase();
+          const count = (openerCounts.get(key) ?? 0) + 1;
+          openerCounts.set(key, count);
+
+          if ((key === "subsequently" && count > 1) || (key === "as a result" && count > 1) || key === previousOpener) {
+            previousOpener = "";
+            return prefix;
+          }
+
+          previousOpener = key;
+          return `${prefix}${opener}, `;
+        },
+      );
+    })
+    .join("");
+}
+
+function polishGeneratedNarrativeSections(report: InvestigationReportPayload) {
+  const sections = report.report.sections;
+  sections.executive_summary = reduceRepeatedSentenceOpeners(sections.executive_summary);
+  sections.long_description = reduceRepeatedSentenceOpeners(sections.long_description);
+  sections.response_and_recovery.summary = reduceRepeatedSentenceOpeners(sections.response_and_recovery.summary);
+  sections.task_and_conditions = reduceRepeatedSentenceOpeners(sections.task_and_conditions);
+  sections.incident_outcomes = reduceRepeatedSentenceOpeners(sections.incident_outcomes);
+  sections.incident_findings.summary = reduceRepeatedSentenceOpeners(sections.incident_findings.summary);
+  sections.recommendations.summary = reduceRepeatedSentenceOpeners(sections.recommendations.summary);
+}
+
 function getPreviousReportBranding(value: unknown): PreviousReportBranding | null {
   if (!isRecord(value) || !isRecord(value.report) || !isRecord(value.report.branding)) return null;
 
@@ -336,6 +268,23 @@ export async function POST(request: NextRequest) {
 
   const authedSupabase = createAuthedServerClient(token);
   const serviceSupabase = createServiceRoleClient();
+  const recordReportActivity = async (
+    status: "success" | "failed",
+    summary: string,
+    metadata: Record<string, unknown> = {},
+  ) => {
+    await insertUserProfileActivity(serviceSupabase, {
+      userId: user.userId,
+      actorUserId: user.userId,
+      action: "report_generation",
+      status,
+      summary,
+      metadata: {
+        caseId,
+        ...metadata,
+      },
+    });
+  };
   addTrace("Refreshing billing profile state.");
   const { data: refreshedAccessState, error: accessStateError } = await serviceSupabase.rpc("refresh_billing_profile_state", {
     p_user_id: user.userId,
@@ -399,6 +348,12 @@ export async function POST(request: NextRequest) {
   };
 
   if (!accessCanUseReportGeneration(accessState)) {
+    await recordReportActivity("failed", "Report generation unavailable.", {
+      source: "access_control",
+      currentAccessType: accessState.currentAccessType,
+      currentAccessStatus: accessState.currentAccessStatus,
+      readOnlyReason: accessState.readOnlyReason,
+    });
     return NextResponse.json(
       { error: "Report generation is not available on the 7 day free trial." },
       { status: 403 },
@@ -414,22 +369,20 @@ export async function POST(request: NextRequest) {
   addTrace("Verified map access.");
 
   if (!accessibleMap) {
+    await recordReportActivity("failed", "Report generation forbidden.", {
+      source: "supabase",
+      reason: "map_access_denied",
+    });
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
 
-  const localMissingInformation = extractLocalMissingInformation(body.caseData);
-  const readiness = buildReadiness(localMissingInformation);
+  const readiness: ReadinessCheck = {
+    requires_acknowledgement: false,
+    missing_information_detected: [],
+    disclaimer: null,
+    suggested_next_steps: [],
+  };
   const responseRecoveryNodeCount = countElementType(body.caseData, "incident_response_recovery");
-
-  if (readiness.requires_acknowledgement && !body.acknowledgeMissingInformation) {
-    return NextResponse.json(
-      {
-        error: "Missing investigation information requires user acknowledgement before report generation.",
-        readiness,
-      },
-      { status: 409 },
-    );
-  }
 
   try {
     addTrace("Creating OpenAI client.");
@@ -463,7 +416,6 @@ export async function POST(request: NextRequest) {
           "Preliminary Facts",
         ],
       },
-      local_readiness_assessment: readiness,
       case_data: body.caseData,
     });
 
@@ -472,7 +424,7 @@ export async function POST(request: NextRequest) {
       "ENGLISH SENTENCE STRUCTURE RULES FOR AI CONTENT GENERATION.",
       "SYSTEM PROMPT FORMAT. COPY AND DEPLOY AS-IS.",
       "PRIORITY 1. ABSOLUTE RULES. Never violate these rules. These rules must be applied to every sentence generated without exception.",
-      "RULE 1. ONE IDEA PER SENTENCE. Each sentence must contain exactly one main idea. If two ideas are present, they must be written as two separate sentences. Do not join independent ideas with 'and', 'but', or 'so' unless they are directly and inseparably linked.",
+      "RULE 1. CLEAR PURPOSE PER SENTENCE. Each sentence must have one clear purpose. Closely related actions may be combined when they share the same actor, object, time period, and context, and when combining them improves readability without obscuring facts.",
       "RULE 2. EVERY SENTENCE MUST BE SELF-CONTAINED. Every sentence must make complete grammatical and logical sense when read in isolation. A reader must not need to read the next sentence to understand the current one.",
       "RULE 3. NEVER FABRICATE OR IMPLY UNKNOWN INFORMATION. If information is not confirmed, do not state it as fact. Do not use vague qualifiers such as 'mostly', 'largely', 'generally', or 'in most cases' to conceal that information is missing or unverified. If something is unknown, state that it is unknown explicitly.",
       "RULE 4. SEPARATE FACTS FROM INTERPRETATION. Confirmed facts and interpretations or assessments must appear in separate sentences. A sentence must not mix what is known with what it might mean. State the fact first. State the interpretation in the next sentence.",
@@ -491,20 +443,20 @@ export async function POST(request: NextRequest) {
       "RULE 15. CLOSE INFORMATION GAPS WITH A RESOLUTION STATEMENT. When a gap in information is identified, the following sentence must state when or how that gap will be resolved, if this is known. Example: 'This will be confirmed in the follow-up investigation report.' If resolution timing is unknown, state: 'The timeframe for confirmation has not yet been established.'",
       "RULE 16. NO PADDING OR FILLER PHRASES. The following phrases must never appear in generated content: 'It is worth noting that...' 'It should be mentioned that...' 'As previously stated...' 'It is important to note...' 'Needless to say...' State the fact directly. Remove any phrase that precedes the fact without adding meaning.",
       "PRIORITY 4. FLOW AND READABILITY RULES.",
-      "RULE 17. USE TRANSITIONAL WORDS TO SIGNAL RELATIONSHIPS. When a sentence logically follows from the previous one, use a transitional word or phrase to signal the relationship. Use 'However,' for contrast, 'As a result,' for consequence, 'Subsequently,' for chronological follow-on, 'Notably,' for significant information, and 'At the time of writing,' for time-bounded statements.",
+      "RULE 17. USE TRANSITIONS SPARINGLY AND NATURALLY. Do not force a transition word into every sentence. Use explicit transitions only when they add meaning. Never start consecutive sentences with the same word or phrase. Do not use 'Subsequently' more than once in a paragraph. Prefer chronological order, exact times, subjects, and clear verbs over repeated transition openers.",
       "RULE 18. VARY SENTENCE LENGTH DELIBERATELY. Short sentences under 12 words must be used to state key facts or conclusions. Longer sentences of 12 to 30 words must be used to provide context or explain relationships. Do not generate multiple long sentences in a row without a short sentence between them.",
       "RULE 19. KEEP SUBJECT AND VERB CLOSE TOGETHER. The subject and its verb must not be separated by more than one clause. If a modifier or clause separates the subject from its verb by more than 8 words, restructure the sentence.",
       "RULE 20. PLACE ADVERBS NEXT TO THE WORD THEY MODIFY. Adverbs must be placed immediately before or after the word or phrase they are modifying. Misplaced adverbs change meaning and will not be permitted.",
-      "COMPLIANCE CHECKLIST. Before finalising any output, verify every sentence against the following. Does this sentence contain only one main idea? Does this sentence make sense in isolation? Does this sentence state anything unconfirmed as fact? Are facts and interpretations in separate sentences? Is this sentence in active voice where possible? Is this sentence under 30 words? Are events written in the order they occurred? Is uncertainty clearly marked with an approved phrase? Is all information correctly categorised as confirmed, estimated, or unknown? Has any filler language been removed?",
+      "COMPLIANCE CHECKLIST. Before finalising any output, verify every sentence against the following. Does this sentence have one clear purpose? Does this sentence make sense in isolation? Does this sentence state anything unconfirmed as fact? Are facts and interpretations in separate sentences? Is this sentence in active voice where possible? Is this sentence under 30 words? Are events written in the order they occurred? Is uncertainty clearly marked with an approved phrase? Is all information correctly categorised as confirmed, estimated, or unknown? Has any filler language been removed? Does the paragraph avoid repeated sentence openings?",
       "OUTPUT BEHAVIOUR INSTRUCTIONS. You are a factual content generator. You must follow all 20 sentence structure rules provided. You must apply the compliance checklist to every sentence before including it in your output. If you cannot confirm a piece of information, you must explicitly state it is unconfirmed using the approved uncertainty markers. You must never use vague language to conceal missing information. You must never exceed 30 words in a single sentence. You must write events in the order they occur. You must separate facts from interpretations. Violations of Priority 1 rules are not permitted under any circumstance.",
       "REFINEMENT INSTRUCTIONS. ADD TO EXISTING SYSTEM PROMPT.",
       "STRICT WORD COUNT ENFORCEMENT. You must count the words in every sentence before including it in your output. No sentence may exceed 30 words. This rule has no exceptions. If a sentence exceeds 30 words at any point during drafting, you must split it before outputting it. Do not wait until the end to check. Check every sentence as it is written.",
-      "MULTI-FACT SENTENCE PROHIBITION. When an event produces more than one distinct outcome, each outcome must be written as its own sentence. A sentence must never combine a death toll, a survival count, and a rescue method into one sentence. Each is a separate fact. Each requires a separate sentence. Apply this rule to any sentence that contains more than one number, more than one named outcome, or more than one named party.",
+      "MULTI-FACT SENTENCE CONTROL. Keep separate outcomes in separate sentences when combining them would confuse cause, severity, timing, or responsibility. Do not split closely related simple actions into separate sentences merely because they came from separate source items.",
       "NESTED CLAUSE PROHIBITION, EXTENDED. When describing a sequence of conditions that led to an outcome, do not write them as a single sentence. Each condition must be its own sentence. Each outcome must be its own sentence. The following structure is prohibited: '[Action] while [condition] and [condition], which led to [outcome].' Rewrite this as sentence 1, the action. Sentence 2, the first condition. Sentence 3, the second condition. Sentence 4, the outcome.",
-      "CAUSAL CHAIN RULE. When one event directly causes another, write the cause as one sentence and the effect as the next sentence. Do not place the cause and effect in the same sentence joined by 'which', 'causing', 'resulting in', or 'leading to'. Use a transitional opener on the effect sentence instead, for example 'As a result,' or 'This caused' or 'Subsequently,'.",
-      "RESOLUTION STATEMENT REQUIREMENT. When a paragraph describes an incident, event, or situation where further information exists, such as an investigation, inquiry, findings, or follow-up report, the final sentence of the paragraph must reference this. If investigation findings are known, state them. If they are not included in the paragraph, state that further detail is available and identify where. If no follow-up information exists, state: 'No further information was available at the time of this report.' Do not end a paragraph on an unresolved fact without this closing statement.",
+      "CAUSAL CHAIN RULE. When one event directly causes another, write the cause before the effect. Use 'As a result,' only when a causal link is explicitly supported and the phrase improves clarity. Do not use 'Subsequently' to imply causation.",
+      "INFORMATION GAP RULE. Do not end every paragraph with a missing-information statement. Put missing information in missing_information unless a specific unknown is essential to understanding that paragraph.",
       "DEATH, INJURY, AND OUTCOME SEQUENCING RULE. When an incident results in fatalities, injuries, or significant harm, these must be stated in the following order. Fatalities, stated first, in their own sentence. Injuries or survivors, stated second, in their own sentence. Rescue, recovery, or response details, stated third, in their own sentence. Do not combine any of these into a single sentence regardless of how closely related they appear.",
-      "SELF-CHECK INSTRUCTION. APPEND TO EVERY OUTPUT TASK. Before submitting your output, re-read every sentence and answer the following for each one. Is this sentence 30 words or fewer? Does this sentence contain only one fact or idea? Does this sentence contain a clause nested inside another clause? Does this sentence combine a cause and effect using 'which', 'causing', or 'leading to'? If this sentence contains an unresolved fact, does the next sentence resolve it or acknowledge it explicitly? If the answer to any of these checks is a violation, rewrite the sentence before outputting it. Do not output a sentence that fails any check.",
+      "SELF-CHECK INSTRUCTION. APPEND TO EVERY OUTPUT TASK. Before submitting your output, re-read every sentence and answer the following for each one. Is this sentence 30 words or fewer? Does this sentence have one clear purpose? Does this sentence contain a clause nested inside another clause? Does this sentence combine a cause and effect using 'which', 'causing', or 'leading to'? Does this paragraph avoid repeated openings and repeated transition words? If this sentence contains an unresolved fact, does the next sentence resolve it or acknowledge it explicitly? If the answer to any of these checks is a violation, rewrite the sentence before outputting it. Do not output a sentence that fails any check.",
       "Use only the information provided in the input.",
       "Do not infer, assume, estimate, or invent facts.",
       "If information is missing, list it under missing_information.",
@@ -546,6 +498,9 @@ export async function POST(request: NextRequest) {
       "If multiple supported details describe the same place, time, event, or circumstance at different levels of specificity, merge them into one natural sentence instead of listing them separately.",
       "For example, if one supported detail gives a site and another gives a more specific area within that site, write them together naturally as one location phrase such as 'at the site, within the specific area' rather than adding a second clause that sounds like metadata.",
       "Do not write phrases such as 'with sequence steps occurring at', 'supporting information indicates', 'the nodes show', 'the record states', or similar constructions.",
+      "NARRATIVE QUALITY RULE. For simple or sparse incident maps, do not convert every source item into a separate sentence. Synthesize adjacent, related steps into a readable account while preserving the supported order and facts.",
+      "NARRATIVE QUALITY RULE. Avoid repeated openings such as 'At approximately', 'Subsequently', 'The worker', or the same person's full name in every sentence. Use the time only when it helps the reader follow the sequence. Use pronouns when the referent is clear.",
+      "NARRATIVE QUALITY RULE. No paragraph may contain the same transition opener more than once. A paragraph must not read like a list of database events joined by repeated connector words.",
       "Long Description paragraph 1 must state: on this date, at this time, this happened in this location, which resulted in these outcomes, what task was being completed and or what conditions existed, and whether an injury occurred or did not occur if explicitly supported.",
       "Long Description paragraph 1 must use sequence nodes, task and condition nodes, and outcome nodes where available, but it must combine them into one easy-to-read opening account.",
       "Long Description paragraph 1 must explicitly say that an item is unknown at this stage when the relevant information is not available.",
@@ -557,6 +512,7 @@ export async function POST(request: NextRequest) {
       "The Long Description must read like a step-by-step incident narrative, not a thematic summary.",
       "Long Description paragraph 2 must be written as a coherent narrative with natural sentence structure, transitions, and links between events.",
       "Long Description paragraph 2 may reuse important investigation terminology from the source information, but it must not preserve awkward source phrasing if it harms readability.",
+      "Long Description paragraph 2 must avoid mechanical repetition. Do not begin each sentence with the time, the actor's full name, or 'Subsequently'.",
       "Long Description paragraph 3 must explain which controls or barriers contributed, whether they were present or absent, effective or ineffective, and how the predisposing factors and findings support that view.",
       "Long Description paragraph 3 must not use self-contradictory wording such as saying controls were present but absent.",
       "If multiple controls were identified and they had different states, describe them precisely, for example: some controls were identified, but several were missing, failed, ineffective, or overwhelmed at key points.",
@@ -630,6 +586,11 @@ export async function POST(request: NextRequest) {
     }
 
     if (!outputText) {
+      await recordReportActivity("failed", "OpenAI report output failed.", {
+        source: "openai",
+        diagnostic,
+        trace,
+      });
       return NextResponse.json(
         {
           error: "OpenAI returned no structured text output.",
@@ -644,7 +605,13 @@ export async function POST(request: NextRequest) {
     try {
       parsed = JSON.parse(outputText);
       addTrace("Structured JSON parsed successfully.");
-    } catch {
+    } catch (parseError) {
+      await recordReportActivity("failed", "OpenAI report JSON failed.", {
+        source: "openai",
+        error: parseError instanceof Error ? parseError.message : String(parseError),
+        diagnostic,
+        trace,
+      });
       return NextResponse.json(
         {
           error: "OpenAI returned invalid JSON.",
@@ -655,6 +622,11 @@ export async function POST(request: NextRequest) {
     }
 
     if (!isGenerateReportResponse(parsed)) {
+      await recordReportActivity("failed", "OpenAI report schema failed.", {
+        source: "openai",
+        diagnostic,
+        trace,
+      });
       return NextResponse.json(
         {
           error: "OpenAI returned a response that did not match the expected schema.",
@@ -665,6 +637,8 @@ export async function POST(request: NextRequest) {
     }
 
     parsed.readiness = readiness;
+    polishGeneratedNarrativeSections(parsed);
+    addTrace("Narrative transition polish applied.");
 
     if (responseRecoveryNodeCount === 0) {
       parsed.report.sections.response_and_recovery = {
@@ -727,9 +701,15 @@ export async function POST(request: NextRequest) {
     addTrace("Attempted to save generated report.");
 
     if (saveError || !savedReport) {
+      await recordReportActivity("failed", "Report save failed.", {
+        source: "supabase",
+        error: saveError?.message ?? "Saved report payload missing.",
+        nextVersionNumber,
+        trace,
+      });
       return NextResponse.json(
         {
-          error: saveError.message || "Report generated but could not be saved.",
+          error: saveError?.message || "Report generated but could not be saved.",
           diagnostic: { trace },
         },
         { status: 500 },
@@ -747,6 +727,13 @@ export async function POST(request: NextRequest) {
     addTrace("Attempted to sync system map long description.");
 
     if (mapUpdateError) {
+      await recordReportActivity("failed", "Report map sync failed.", {
+        source: "supabase",
+        error: mapUpdateError.message,
+        savedReportId: savedReport.id,
+        versionNumber: savedReport.version_number,
+        trace,
+      });
       return NextResponse.json(
         {
           error: "Report generated and saved, but the investigation long description could not be updated.",
@@ -757,11 +744,23 @@ export async function POST(request: NextRequest) {
     }
 
     addTrace("Generated report saved successfully.");
+    await recordReportActivity("success", "Report generated.", {
+      source: "openai",
+      savedReportId: savedReport.id,
+      versionNumber: savedReport.version_number,
+      status: savedReport.status,
+      generatedAt: savedReport.generated_at,
+    });
     return NextResponse.json({
       ...parsed,
       saved_report: savedReport,
     });
   } catch (error) {
+    await recordReportActivity("failed", "Report generation failed.", {
+      source: "application",
+      error: error instanceof Error ? error.message : String(error),
+      trace,
+    });
     return NextResponse.json(
       {
         error: error instanceof Error ? error.message : "Unable to generate report.",

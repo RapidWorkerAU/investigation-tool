@@ -12,10 +12,10 @@ import { createSupabaseBrowser } from "@/lib/supabase/client";
 
 type AccountSectionId = "user-info" | "my-access" | "delete-account";
 
-const accountTabs: Array<{ id: AccountSectionId; label: string }> = [
-  { id: "user-info", label: "User Info" },
-  { id: "my-access", label: "My Access" },
-  { id: "delete-account", label: "Delete Account" },
+const accountTabs: Array<{ id: AccountSectionId; label: string; description: string; icon: string }> = [
+  { id: "user-info", label: "My Profile", description: "Name, email and password", icon: "/icons/account.svg" },
+  { id: "my-access", label: "Access", description: "Plan, billing and renewal", icon: "/icons/time.svg" },
+  { id: "delete-account", label: "Delete Account", description: "Permanent account removal", icon: "/icons/delete.svg" },
 ];
 
 const formatDateTime = (value: string | null) =>
@@ -90,6 +90,21 @@ const getAccessStatusTone = (value: BillingAccessState["currentAccessStatus"] | 
     default:
       return styles.accessStatusPillBad;
   }
+};
+
+const getAccountInitials = (name: string, fallback: string) => {
+  const source = name.trim() || fallback.trim();
+  if (!source) return "IT";
+
+  const parts = source.includes("@")
+    ? source.split("@")[0].split(/[._-]+/)
+    : source.split(/\s+/);
+
+  return parts
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("") || "IT";
 };
 
 export default function AccountPage() {
@@ -427,12 +442,347 @@ export default function AccountPage() {
     }
   };
 
+  const activeAccountTab = accountTabs.find((tab) => tab.id === activeSection) ?? accountTabs[0];
+  const profileInitials = getAccountInitials(fullName, email);
+
+  const startUserInfoEdit = () => {
+    setPassword("");
+    setConfirmPassword("");
+    setShowPassword(false);
+    setShowConfirmPassword(false);
+    setSubmitAttempted(false);
+    setUserInfoErrorField(null);
+    setUserInfoMessage("");
+    setUserInfoMessageType("");
+    setUserInfoEditing(true);
+  };
+
+  const renderProfileSection = () => (
+    <div className={styles.accountSettingsPanel}>
+      <div className={styles.accountProfileHero}>
+        <div className={styles.accountProfileAvatar} aria-hidden="true">
+          {profileInitials}
+        </div>
+        <div className={styles.accountProfileIdentity}>
+          <strong>{fullName || username || "Investigation Tool user"}</strong>
+          <span>{email || "No email saved"}</span>
+        </div>
+        {!userInfoEditing ? (
+          <button type="button" className={styles.accountEditButton} onClick={startUserInfoEdit} disabled={loading}>
+            <Image src="/icons/edit.svg" alt="" width={15} height={15} />
+            <span>Edit</span>
+          </button>
+        ) : null}
+      </div>
+
+      <div className={styles.accountSettingsDetailCard}>
+        <div className={styles.accountSettingsCardHeader}>
+          <div>
+            <h3>Personal Information</h3>
+            <p>Core account details used for sign-in and your workspace identity.</p>
+          </div>
+          {!userInfoEditing ? (
+            <button type="button" className={styles.accountEditButton} onClick={startUserInfoEdit} disabled={loading}>
+              <Image src="/icons/edit.svg" alt="" width={15} height={15} />
+              <span>Edit</span>
+            </button>
+          ) : null}
+        </div>
+        {!userInfoEditing ? (
+          <div className={styles.accountInfoGrid}>
+            <div className={styles.accountInfoItem}>
+              <span>Full Name</span>
+              <strong>{fullName || "-"}</strong>
+            </div>
+            <div className={styles.accountInfoItem}>
+              <span>Username</span>
+              <strong>{username || "-"}</strong>
+            </div>
+            <div className={styles.accountInfoItem}>
+              <span>Email Address</span>
+              <strong>{email || "-"}</strong>
+            </div>
+            <div className={styles.accountInfoItem}>
+              <span>Password</span>
+              <strong>••••••••</strong>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className={styles.accountFormGrid}>
+              <label className={styles.accountField}>
+                <span>Full Name</span>
+                <input className={styles.input} value={fullName} onChange={(event) => setFullName(event.target.value)} autoComplete="name" />
+              </label>
+              <label className={styles.accountField}>
+                <span>Username</span>
+                <input className={styles.input} value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" />
+              </label>
+              <label className={styles.accountField}>
+                <span>Set New Password</span>
+                <div className={styles.passwordField}>
+                  <input
+                    className={`${styles.input} ${styles.passwordInput} ${passwordHasError ? styles.inputError : ""}`}
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    autoComplete="new-password"
+                    placeholder="Optional"
+                  />
+                  <button
+                    type="button"
+                    className={styles.passwordToggle}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    onClick={() => setShowPassword((current) => !current)}
+                  >
+                    <Image
+                      src={showPassword ? "/icons/visible.svg" : "/icons/hidden.svg"}
+                      alt=""
+                      width={18}
+                      height={18}
+                      className={styles.passwordToggleIcon}
+                    />
+                  </button>
+                </div>
+                <span className={`${styles.fieldStatusRight} ${styles.fieldStatusSpacer}`} aria-hidden="true">
+                  .
+                </span>
+              </label>
+              <label className={styles.accountField}>
+                <span>Confirm Password</span>
+                <div className={styles.passwordField}>
+                  <input
+                    className={`${styles.input} ${styles.passwordInput} ${confirmPasswordHasError ? styles.inputError : ""}`}
+                    type={showConfirmPassword ? "text" : "password"}
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    autoComplete="new-password"
+                    placeholder={password.trim().length > 0 ? "Confirm new password" : ""}
+                    disabled={password.trim().length === 0}
+                  />
+                  <button
+                    type="button"
+                    className={styles.passwordToggle}
+                    aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+                    onClick={() => setShowConfirmPassword((current) => !current)}
+                  >
+                    <Image
+                      src={showConfirmPassword ? "/icons/visible.svg" : "/icons/hidden.svg"}
+                      alt=""
+                      width={18}
+                      height={18}
+                      className={styles.passwordToggleIcon}
+                    />
+                  </button>
+                </div>
+                <span
+                  className={`${styles.fieldStatusRight} ${
+                    passwordProvided
+                      ? passwordsMatch && !passwordTooShort
+                        ? styles.fieldHelpSuccess
+                        : styles.fieldHelpError
+                      : styles.fieldStatusSpacer
+                  }`}
+                  aria-hidden={passwordProvided ? undefined : "true"}
+                >
+                  {passwordProvided ? (passwordsMatch && !passwordTooShort ? "Passwords Match." : "Passwords Do Not Match") : "."}
+                </span>
+              </label>
+              <label className={styles.accountField}>
+                <span>Email Address</span>
+                <input
+                  className={`${styles.input} ${emailHasError ? styles.inputError : ""}`}
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  autoComplete="email"
+                />
+              </label>
+              <label className={styles.accountField}>
+                <span>Confirm Email Address</span>
+                <input
+                  className={`${styles.input} ${emailHasError ? styles.inputError : ""}`}
+                  type="email"
+                  value={confirmEmail}
+                  onChange={(event) => setConfirmEmail(event.target.value)}
+                  autoComplete="email"
+                />
+              </label>
+            </div>
+
+            <div className={styles.accountSettingsActions}>
+              <span
+                className={`${styles.inlineFormMessage} ${
+                  userInfoMessageType === "error"
+                    ? styles.messageError
+                    : userInfoMessageType === "success"
+                      ? styles.messageSuccess
+                      : ""
+                }`}
+              >
+                {userInfoMessage}
+              </span>
+              <div className={styles.accountSettingsActionButtons}>
+                <button type="button" className={styles.button} onClick={cancelUserInfoEdit} disabled={saving}>
+                  Cancel
+                </button>
+                <button type="button" className={`${styles.button} ${styles.accountPrimaryButton}`} onClick={() => void save()} disabled={saving || loading}>
+                  {loading ? "Loading..." : saving ? "Saving..." : "Update Info"}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+
+  const renderAccessSection = () => (
+    <div className={styles.accountSettingsPanel}>
+      <div className={styles.accountAccessHeroCard}>
+        <div>
+          <span className={styles.accountSettingsEyebrow}>Current Access</span>
+          <h3>{formatAccessType(accessState?.currentAccessType ?? null)}</h3>
+        </div>
+        <span className={`${styles.accessStatusPill} ${getAccessStatusTone(accessState?.currentAccessStatus ?? null)}`}>
+          {formatAccessStatus(accessState?.currentAccessStatus ?? null)}
+        </span>
+      </div>
+
+      <div className={styles.accountSettingsDetailCard}>
+        <div className={styles.accountSettingsCardHeader}>
+          <div>
+            <h3>Access Details</h3>
+            <p>Plan dates are shown in {accessTimeZoneLabel}.</p>
+          </div>
+        </div>
+
+        <div className={styles.accountInfoGrid}>
+          <div className={styles.accountInfoItem}>
+            <span>Access Type</span>
+            <strong>{formatAccessType(accessState?.currentAccessType ?? null)}</strong>
+          </div>
+          <div className={styles.accountInfoItem}>
+            <span>Status</span>
+            <strong
+              className={`${styles.accessStatusPill} ${styles.accountStatusPillValue} ${getAccessStatusTone(accessState?.currentAccessStatus ?? null)}`}
+            >
+              {formatAccessStatus(accessState?.currentAccessStatus ?? null)}
+            </strong>
+          </div>
+          <div className={styles.accountInfoItem}>
+            <span>Started</span>
+            <strong>{renderAccessDateTimeTable(accessState?.currentPeriodStartsAt ?? null)}</strong>
+          </div>
+          <div className={styles.accountInfoItem}>
+            <span>Expires</span>
+            <strong>{renderAccessDateTimeTable(accessState?.currentPeriodEndsAt ?? null)}</strong>
+          </div>
+        </div>
+
+        <div className={styles.accountSettingsActions}>
+          <span />
+          <div className={styles.accountSettingsActionButtons}>
+            <button
+              type="button"
+              className={`${styles.button} ${styles.buttonSecondary} ${styles.accessActionButton}`}
+              onClick={() => void openBillingPortal()}
+              disabled={!canOpenBillingPortal || openingBillingPortal}
+            >
+              {openingBillingPortal && canOpenBillingPortal ? "Opening..." : "Open Billing Portal"}
+            </button>
+            <button
+              type="button"
+              className={`${styles.button} ${styles.buttonSecondary} ${styles.accessActionButton}`}
+              onClick={() => router.push("/subscribe")}
+              disabled={!canPurchasePass30}
+            >
+              Renew Access
+            </button>
+            <button
+              type="button"
+              className={`${styles.button} ${styles.buttonSecondary} ${styles.accessActionButton}`}
+              onClick={() => router.push("/subscribe")}
+              disabled={!canChooseAccessType}
+            >
+              Upgrade Access
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {accessState?.readOnlyReason ? (
+        <div className={styles.accountDangerBox}>
+          <strong>Access restriction</strong>
+          <p>{accessState.readOnlyReason}</p>
+        </div>
+      ) : null}
+    </div>
+  );
+
+  const renderDeleteSection = () => (
+    <div className={`${styles.accountSettingsPanel} ${styles.accountDeleteSection}`}>
+      <div className={styles.accountSettingsDetailCard}>
+        <div className={styles.accountDeleteSummary}>
+          <strong>Delete your account</strong>
+          <p className={styles.accountDeleteLead}>
+            Deleting your account permanently removes your Investigation Tool access and starts a full cleanup of the data tied to
+            that account. This is intended for cases where you no longer want the account, its maps, or the content created inside
+            the workspace to remain in the system.
+          </p>
+          <p className={styles.accountDeleteLead}>
+            Once the delete process starts, it cannot be cancelled or recovered. If you may need your account, investigation maps,
+            or related content again, do not continue.
+          </p>
+          <strong>Summary</strong>
+          <ul className={styles.accountDeleteList}>
+            <li>Your login access will be removed</li>
+            <li>Investigation maps you created will be deleted</li>
+            <li>Content and records you created inside those maps will be removed</li>
+            <li>This action is permanent and cannot be reversed</li>
+          </ul>
+        </div>
+        <div className={styles.accountDeleteActions}>
+          <label className={styles.accountCheckboxRow}>
+            <input
+              type="checkbox"
+              checked={deleteAcknowledged}
+              onChange={(event) => setDeleteAcknowledged(event.target.checked)}
+            />
+            <span>I understand this action is permanent and cannot be undone.</span>
+          </label>
+          <button
+            type="button"
+            className={`${styles.buttonDanger} ${styles.accountDeleteButton}`}
+            disabled={!deleteAcknowledged || deleteStatus === "running"}
+            onClick={() => void handleDeleteAccount()}
+          >
+            Delete Account
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderAccountSection = (sectionId: AccountSectionId) => {
+    switch (sectionId) {
+      case "user-info":
+        return renderProfileSection();
+      case "my-access":
+        return renderAccessSection();
+      case "delete-account":
+        return renderDeleteSection();
+      default:
+        return null;
+    }
+  };
+
   return (
     <DashboardShell
       activeNav="account"
       eyebrow="Account"
-      title="Edit Profile"
-      subtitle="Manage your profile, account data and subscription history."
+      title="Account Settings"
+      subtitle="Manage your profile, access and account data."
     >
       <section className={styles.accountCard}>
         {message && activeSection !== "user-info" ? (
@@ -441,76 +791,157 @@ export default function AccountPage() {
           </p>
         ) : null}
 
-        <div className={styles.reportLayout}>
-          <div className={styles.reportToggleBar}>
-            <div className={`${styles.reportToggleGroup} ${styles.accountToggleGroup}`} role="tablist" aria-label="Account sections">
+        <div className={styles.accountSettingsSurface}>
+          <aside className={styles.accountSettingsSidebar} aria-label="Account settings menu">
+            <div className={styles.accountSettingsSidebarHeader}>
+              <span>Settings</span>
+              <strong>Account</strong>
+            </div>
+            <div className={styles.accountSettingsNav} role="tablist" aria-label="Account sections">
               {accountTabs.map((tab) => (
                 <button
                   key={tab.id}
                   type="button"
                   role="tab"
                   aria-selected={activeSection === tab.id}
-                  className={`${styles.reportToggleButton} ${styles.accountToggleButton} ${activeSection === tab.id ? styles.reportToggleButtonActive : ""}`}
+                  className={`${styles.accountSettingsNavItem} ${activeSection === tab.id ? styles.accountSettingsNavItemActive : ""}`}
                   onClick={() => setActiveSection(tab.id)}
                 >
-                  {tab.id === "delete-account" ? (
-                    <>
-                      <span className={styles.accountToggleDesktopLabel}>Delete Account</span>
-                      <span className={styles.accountToggleMobileLabel}>Delete Acc.</span>
-                    </>
-                  ) : (
-                    tab.label
-                  )}
+                  <span className={styles.accountSettingsNavIcon} aria-hidden="true">
+                    <Image src={tab.icon} alt="" width={18} height={18} />
+                  </span>
+                  <span className={styles.accountSettingsNavCopy}>
+                    <strong>{tab.label}</strong>
+                    <small>{tab.description}</small>
+                  </span>
                 </button>
               ))}
             </div>
+          </aside>
+
+          <div className={styles.accountSettingsMobileAccordion} aria-label="Account settings sections">
+            {accountTabs.map((tab) => {
+              const isOpen = activeSection === tab.id;
+              const panelId = `account-mobile-panel-${tab.id}`;
+
+              return (
+                <div
+                  key={tab.id}
+                  className={`${styles.accountSettingsAccordionItem} ${isOpen ? styles.accountSettingsAccordionItemOpen : ""}`}
+                >
+                  <button
+                    type="button"
+                    className={styles.accountSettingsAccordionButton}
+                    aria-expanded={isOpen}
+                    aria-controls={panelId}
+                    onClick={() => setActiveSection(tab.id)}
+                  >
+                    <span className={styles.accountSettingsNavIcon} aria-hidden="true">
+                      <Image src={tab.icon} alt="" width={18} height={18} />
+                    </span>
+                    <span className={styles.accountSettingsNavCopy}>
+                      <strong>{tab.label}</strong>
+                      <small>{tab.description}</small>
+                    </span>
+                    <span className={styles.accountSettingsAccordionChevron} aria-hidden="true" />
+                  </button>
+                  {isOpen ? (
+                    <div id={panelId} className={styles.accountSettingsMobilePanel}>
+                      {renderAccountSection(tab.id)}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
 
+          <div className={styles.accountSettingsContent}>
+            <div className={styles.accountSettingsContentHeader}>
+              <div>
+                <h2>{activeAccountTab.label}</h2>
+                <p>{activeAccountTab.description}</p>
+              </div>
+            </div>
+
           {activeSection === "user-info" ? (
-            <div className={styles.reportSection}>
-              <div className={styles.reportScopeBlock}>
+            <div className={styles.accountSettingsPanel}>
+              <div className={styles.accountProfileHero}>
+                <div className={styles.accountProfileAvatar} aria-hidden="true">
+                  {profileInitials}
+                </div>
+                <div className={styles.accountProfileIdentity}>
+                  <strong>{fullName || username || "Investigation Tool user"}</strong>
+                  <span>{email || "No email saved"}</span>
+                </div>
+                {!userInfoEditing ? (
+                  <button
+                    type="button"
+                    className={styles.accountEditButton}
+                    onClick={() => {
+                      setPassword("");
+                      setConfirmPassword("");
+                      setShowPassword(false);
+                      setShowConfirmPassword(false);
+                      setSubmitAttempted(false);
+                      setUserInfoErrorField(null);
+                      setUserInfoMessage("");
+                      setUserInfoMessageType("");
+                      setUserInfoEditing(true);
+                    }}
+                    disabled={loading}
+                  >
+                    <Image src="/icons/edit.svg" alt="" width={15} height={15} />
+                    <span>Edit</span>
+                  </button>
+                ) : null}
+              </div>
+
+              <div className={styles.accountSettingsDetailCard}>
+                <div className={styles.accountSettingsCardHeader}>
+                  <div>
+                    <h3>Personal Information</h3>
+                    <p>Core account details used for sign-in and your workspace identity.</p>
+                  </div>
+                  {!userInfoEditing ? (
+                    <button
+                      type="button"
+                      className={styles.accountEditButton}
+                      onClick={() => {
+                        setPassword("");
+                        setConfirmPassword("");
+                        setShowPassword(false);
+                        setShowConfirmPassword(false);
+                        setSubmitAttempted(false);
+                        setUserInfoErrorField(null);
+                        setUserInfoMessage("");
+                        setUserInfoMessageType("");
+                        setUserInfoEditing(true);
+                      }}
+                      disabled={loading}
+                    >
+                      <Image src="/icons/edit.svg" alt="" width={15} height={15} />
+                      <span>Edit</span>
+                    </button>
+                  ) : null}
+                </div>
                 {!userInfoEditing ? (
                   <>
-                    <div className={styles.reportScopeSummaryGrid}>
-                      <div className={styles.reportScopeSummaryCard}>
-                        <span className={styles.reportScopeReadLabel}>Full Name</span>
-                        <span className={styles.reportScopeReadValue}>{fullName || "-"}</span>
+                    <div className={styles.accountInfoGrid}>
+                      <div className={styles.accountInfoItem}>
+                        <span>Full Name</span>
+                        <strong>{fullName || "-"}</strong>
                       </div>
-                      <div className={styles.reportScopeSummaryCard}>
-                        <span className={styles.reportScopeReadLabel}>Username</span>
-                        <span className={styles.reportScopeReadValue}>{username || "-"}</span>
+                      <div className={styles.accountInfoItem}>
+                        <span>Username</span>
+                        <strong>{username || "-"}</strong>
                       </div>
-                      <div className={styles.reportScopeSummaryCard}>
-                        <span className={styles.reportScopeReadLabel}>Email Address</span>
-                        <span className={styles.reportScopeReadValue}>{email || "-"}</span>
+                      <div className={styles.accountInfoItem}>
+                        <span>Email Address</span>
+                        <strong>{email || "-"}</strong>
                       </div>
-                      <div className={styles.reportScopeSummaryCard}>
-                        <span className={styles.reportScopeReadLabel}>Password</span>
-                        <span className={styles.reportScopeReadValue}>••••••••</span>
-                      </div>
-                    </div>
-
-                    <div className={styles.reportScopeActions}>
-                      <span />
-                      <div className={styles.reportScopeActionButtons}>
-                        <button
-                          type="button"
-                          className={styles.button}
-                          onClick={() => {
-                            setPassword("");
-                            setConfirmPassword("");
-                            setShowPassword(false);
-                            setShowConfirmPassword(false);
-                            setSubmitAttempted(false);
-                            setUserInfoErrorField(null);
-                            setUserInfoMessage("");
-                            setUserInfoMessageType("");
-                            setUserInfoEditing(true);
-                          }}
-                          disabled={loading}
-                        >
-                          {loading ? "Loading..." : "Edit User Info"}
-                        </button>
+                      <div className={styles.accountInfoItem}>
+                        <span>Password</span>
+                        <strong>••••••••</strong>
                       </div>
                     </div>
                   </>
@@ -617,7 +1048,7 @@ export default function AccountPage() {
                       </label>
                     </div>
 
-                    <div className={styles.reportScopeActions}>
+                    <div className={styles.accountSettingsActions}>
                       <span
                         className={`${styles.inlineFormMessage} ${
                           userInfoMessageType === "error"
@@ -629,7 +1060,7 @@ export default function AccountPage() {
                       >
                         {userInfoMessage}
                       </span>
-                      <div className={styles.reportScopeActionButtons}>
+                      <div className={styles.accountSettingsActionButtons}>
                         <button type="button" className={styles.button} onClick={cancelUserInfoEdit} disabled={saving}>
                           Cancel
                         </button>
@@ -645,98 +1076,53 @@ export default function AccountPage() {
           ) : null}
 
           {activeSection === "my-access" ? (
-            <div className={styles.reportSection}>
-              <div className={styles.reportScopeBlock}>
-                <div className={`${styles.tableWrap} ${styles.reportDataTableWrap} ${styles.accountAccessTableWrap}`}>
-                  <table className={`${styles.table} ${styles.reportDataTable} ${styles.accountAccessTable}`}>
-                    <colgroup>
-                      <col style={{ width: "16%" }} />
-                      <col style={{ width: "12%" }} />
-                      <col style={{ width: "18%" }} />
-                      <col style={{ width: "18%" }} />
-                      <col style={{ width: "36%" }} />
-                    </colgroup>
-                    <thead>
-                      <tr>
-                        <th>Access Type</th>
-                        <th>Status</th>
-                        <th>Started</th>
-                        <th>Expires</th>
-                        <th>Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td>{formatAccessType(accessState?.currentAccessType ?? null)}</td>
-                        <td>
-                          <span
-                            className={`${styles.accessStatusPill} ${getAccessStatusTone(accessState?.currentAccessStatus ?? null)}`}
-                          >
-                            {formatAccessStatus(accessState?.currentAccessStatus ?? null)}
-                          </span>
-                        </td>
-                        <td>{renderAccessDateTimeTable(accessState?.currentPeriodStartsAt ?? null)}</td>
-                        <td>{renderAccessDateTimeTable(accessState?.currentPeriodEndsAt ?? null)}</td>
-                        <td>
-                          <div className={styles.accessActionGroup}>
-                            <button
-                              type="button"
-                              className={`${styles.button} ${styles.buttonSecondary} ${styles.accessActionButton}`}
-                              onClick={() => void openBillingPortal()}
-                              disabled={!canOpenBillingPortal || openingBillingPortal}
-                            >
-                              {openingBillingPortal && canOpenBillingPortal ? "Opening..." : "Open Billing Portal"}
-                            </button>
-                            <button
-                              type="button"
-                              className={`${styles.button} ${styles.buttonSecondary} ${styles.accessActionButton}`}
-                              onClick={() => router.push("/subscribe")}
-                              disabled={!canPurchasePass30}
-                            >
-                              Renew Access
-                            </button>
-                            <button
-                              type="button"
-                              className={`${styles.button} ${styles.buttonSecondary} ${styles.accessActionButton}`}
-                              onClick={() => router.push("/subscribe")}
-                              disabled={!canChooseAccessType}
-                            >
-                              Upgrade Access
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
+            <div className={styles.accountSettingsPanel}>
+              <div className={styles.accountAccessHeroCard}>
+                <div>
+                  <span className={styles.accountSettingsEyebrow}>Current Access</span>
+                  <h3>{formatAccessType(accessState?.currentAccessType ?? null)}</h3>
+                </div>
+                <span
+                  className={`${styles.accessStatusPill} ${getAccessStatusTone(accessState?.currentAccessStatus ?? null)}`}
+                >
+                  {formatAccessStatus(accessState?.currentAccessStatus ?? null)}
+                </span>
+              </div>
+
+              <div className={styles.accountSettingsDetailCard}>
+                <div className={styles.accountSettingsCardHeader}>
+                  <div>
+                    <h3>Access Details</h3>
+                    <p>Plan dates are shown in {accessTimeZoneLabel}.</p>
+                  </div>
                 </div>
 
-                <div className={styles.accountAccessMobileCard}>
-                  <div className={styles.accountAccessMobileGrid}>
-                    <div className={styles.accountAccessMobileItem}>
-                      <span className={styles.reportScopeReadLabel}>Access Type</span>
-                      <span className={styles.reportScopeReadValue}>{formatAccessType(accessState?.currentAccessType ?? null)}</span>
-                    </div>
-                    <div className={styles.accountAccessMobileItem}>
-                      <span className={styles.reportScopeReadLabel}>Status</span>
-                      <span className={styles.accountAccessMobileStatusWrap}>
-                        <span
-                          className={`${styles.accessStatusPill} ${getAccessStatusTone(accessState?.currentAccessStatus ?? null)}`}
-                        >
-                          {formatAccessStatus(accessState?.currentAccessStatus ?? null)}
-                        </span>
-                      </span>
-                    </div>
-                    <div className={styles.accountAccessMobileItem}>
-                      <span className={styles.reportScopeReadLabel}>Started</span>
-                      {renderAccessDateTimeMobile(accessState?.currentPeriodStartsAt ?? null)}
-                    </div>
-                    <div className={styles.accountAccessMobileItem}>
-                      <span className={styles.reportScopeReadLabel}>Expires</span>
-                      {renderAccessDateTimeMobile(accessState?.currentPeriodEndsAt ?? null)}
-                    </div>
+                <div className={styles.accountInfoGrid}>
+                  <div className={styles.accountInfoItem}>
+                    <span>Access Type</span>
+                    <strong>{formatAccessType(accessState?.currentAccessType ?? null)}</strong>
                   </div>
+                  <div className={styles.accountInfoItem}>
+                    <span>Status</span>
+                    <strong
+                      className={`${styles.accessStatusPill} ${styles.accountStatusPillValue} ${getAccessStatusTone(accessState?.currentAccessStatus ?? null)}`}
+                    >
+                      {formatAccessStatus(accessState?.currentAccessStatus ?? null)}
+                    </strong>
+                  </div>
+                  <div className={styles.accountInfoItem}>
+                    <span>Started</span>
+                    <strong>{renderAccessDateTimeTable(accessState?.currentPeriodStartsAt ?? null)}</strong>
+                  </div>
+                  <div className={styles.accountInfoItem}>
+                    <span>Expires</span>
+                    <strong>{renderAccessDateTimeTable(accessState?.currentPeriodEndsAt ?? null)}</strong>
+                  </div>
+                </div>
 
-                  <div className={styles.accountAccessMobileActions}>
+                <div className={styles.accountSettingsActions}>
+                  <span />
+                  <div className={styles.accountSettingsActionButtons}>
                     <button
                       type="button"
                       className={`${styles.button} ${styles.buttonSecondary} ${styles.accessActionButton}`}
@@ -763,6 +1149,7 @@ export default function AccountPage() {
                     </button>
                   </div>
                 </div>
+              </div>
 
                 {accessState?.readOnlyReason ? (
                   <div className={styles.accountDangerBox}>
@@ -770,13 +1157,12 @@ export default function AccountPage() {
                     <p>{accessState.readOnlyReason}</p>
                   </div>
                 ) : null}
-              </div>
             </div>
           ) : null}
 
           {activeSection === "delete-account" ? (
-            <div className={`${styles.reportSection} ${styles.accountDeleteSection}`}>
-              <div className={styles.reportScopeBlock}>
+            <div className={`${styles.accountSettingsPanel} ${styles.accountDeleteSection}`}>
+              <div className={styles.accountSettingsDetailCard}>
                 <div className={styles.accountDeleteSummary}>
                   <strong>Delete your account</strong>
                   <p className={styles.accountDeleteLead}>
@@ -817,6 +1203,7 @@ export default function AccountPage() {
               </div>
             </div>
           ) : null}
+          </div>
         </div>
         {deleteModalOpen ? (
           <div className={styles.modalBackdrop}>

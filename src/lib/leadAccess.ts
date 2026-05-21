@@ -25,6 +25,7 @@ export type LeadAccessHistoryRow = {
   campaign_id: string;
   campaign_slug: string;
   campaign_title: string;
+  issued_code: string | null;
   code_last4: string | null;
   note: string | null;
   reserved_email: string | null;
@@ -38,6 +39,7 @@ type LeadMapAccessCode = {
   id: string;
   campaign_id: string;
   code_hash: string;
+  issued_code: string | null;
   code_last4: string | null;
   note?: string | null;
   reserved_email: string | null;
@@ -72,6 +74,8 @@ type CookieReader = {
 const COOKIE_PREFIX = "lead_map_access_";
 const CANVAS_ELEMENT_SELECT_COLUMNS =
   "id,map_id,element_type,heading,color_hex,created_by_user_id,element_config,pos_x,pos_y,width,height,created_at,updated_at";
+const LEAD_ACCESS_CODE_SELECT_COLUMNS =
+  "id,campaign_id,code_hash,issued_code,code_last4,note,reserved_email,redeemed_email,redeemed_at,revoked_at,generated_at,generated_by_user_id";
 const LEAD_ACCESS_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 function getLeadAccessSecret() {
@@ -224,7 +228,7 @@ export async function listLeadAccessHistory(limit = 24) {
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
     .from("lead_map_access_codes")
-    .select("id,campaign_id,code_last4,note,reserved_email,redeemed_email,redeemed_at,revoked_at,generated_at")
+    .select("id,campaign_id,issued_code,code_last4,note,reserved_email,redeemed_email,redeemed_at,revoked_at,generated_at")
     .order("generated_at", { ascending: false })
     .limit(limit);
 
@@ -235,6 +239,7 @@ export async function listLeadAccessHistory(limit = 24) {
   const rows = (data ?? []) as Array<{
     id: string;
     campaign_id: string;
+    issued_code: string | null;
     code_last4: string | null;
     note: string | null;
     reserved_email: string | null;
@@ -266,6 +271,7 @@ export async function listLeadAccessHistory(limit = 24) {
       campaign_id: row.campaign_id,
       campaign_slug: campaign?.slug ?? "",
       campaign_title: campaign?.title ?? "Unknown campaign",
+      issued_code: row.issued_code,
       code_last4: row.code_last4,
       note: row.note,
       reserved_email: row.reserved_email,
@@ -281,7 +287,7 @@ export async function fetchLeadAccessCodeByHash(campaignId: string, codeHash: st
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
     .from("lead_map_access_codes")
-    .select("id,campaign_id,code_hash,code_last4,note,reserved_email,redeemed_email,redeemed_at,revoked_at,generated_at,generated_by_user_id")
+    .select(LEAD_ACCESS_CODE_SELECT_COLUMNS)
     .eq("campaign_id", campaignId)
     .eq("code_hash", codeHash)
     .maybeSingle();
@@ -297,7 +303,7 @@ export async function fetchLeadAccessCodeById(codeId: string) {
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
     .from("lead_map_access_codes")
-    .select("id,campaign_id,code_hash,code_last4,note,reserved_email,redeemed_email,redeemed_at,revoked_at,generated_at,generated_by_user_id")
+    .select(LEAD_ACCESS_CODE_SELECT_COLUMNS)
     .eq("id", codeId)
     .maybeSingle();
 
@@ -314,7 +320,7 @@ export async function revokeLeadAccessCode(codeId: string) {
     .from("lead_map_access_codes")
     .update({ revoked_at: new Date().toISOString() })
     .eq("id", codeId)
-    .select("id,campaign_id,code_hash,code_last4,note,reserved_email,redeemed_email,redeemed_at,revoked_at,generated_at,generated_by_user_id")
+    .select(LEAD_ACCESS_CODE_SELECT_COLUMNS)
     .maybeSingle();
 
   if (error) {
@@ -349,7 +355,7 @@ export async function redeemLeadAccessCode(codeId: string, email: string) {
     .eq("id", codeId)
     .is("redeemed_at", null)
     .is("revoked_at", null)
-    .select("id,campaign_id,code_hash,code_last4,note,reserved_email,redeemed_email,redeemed_at,revoked_at,generated_at,generated_by_user_id")
+    .select(LEAD_ACCESS_CODE_SELECT_COLUMNS)
     .maybeSingle();
 
   if (error) {
@@ -403,12 +409,13 @@ export async function createLeadAccessCodeForEmail({
       .insert({
         campaign_id: campaign.id,
         code_hash: codeHash,
+        issued_code: code,
         code_last4: normalizedCode.slice(-4),
         reserved_email: reservedEmail,
         note: note?.trim() || null,
         generated_by_user_id: generatedBy.userId,
       })
-      .select("id,campaign_id,code_hash,code_last4,note,reserved_email,redeemed_email,redeemed_at,revoked_at,generated_at,generated_by_user_id")
+      .select(LEAD_ACCESS_CODE_SELECT_COLUMNS)
       .single();
 
     if (!error && data) {
@@ -474,7 +481,9 @@ export async function fetchLeadMapSnapshot(mapId: string): Promise<SystemMapCanv
   if (nodeRes.error) throw new Error(nodeRes.error.message || "Unable to load map documents.");
   if (elementRes.error) throw new Error(elementRes.error.message || "Unable to load map elements.");
   if (relationRes.error) throw new Error(relationRes.error.message || "Unable to load map relationships.");
-  if (anchorLinkRes.error) throw new Error(anchorLinkRes.error.message || "Unable to load map anchor links.");
+  if (anchorLinkRes.error && anchorLinkRes.error.code !== "42501") {
+    throw new Error(anchorLinkRes.error.message || "Unable to load map anchor links.");
+  }
 
   const elements = (elementRes.data ?? []) as CanvasElementRow[];
   const imageUrlsByElementId = await createLeadMapSignedUrls(elements);
@@ -485,7 +494,7 @@ export async function fetchLeadMapSnapshot(mapId: string): Promise<SystemMapCanv
     nodes: (nodeRes.data ?? []) as DocumentNodeRow[],
     elements,
     relations: (relationRes.data ?? []) as NodeRelationRow[],
-    anchorLinks: (anchorLinkRes.data ?? []),
+    anchorLinks: (anchorLinkRes.error ? [] : anchorLinkRes.data ?? []),
     imageUrlsByElementId,
   };
 }
