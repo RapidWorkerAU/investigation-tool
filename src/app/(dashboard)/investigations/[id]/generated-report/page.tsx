@@ -1970,6 +1970,19 @@ export default function GeneratedInvestigationReportPage() {
             router.push(`/login?returnTo=${encodeURIComponent(`/investigations/${params.id}/generated-report?reportId=${reportId}`)}`);
             return;
           }
+          const { data: caseStudyRows, error: caseStudyError } = await supabase.rpc("get_case_study_map_access", {
+            p_map_id: params.id,
+          });
+          if (caseStudyError) {
+            setError(caseStudyError.message || "Unable to confirm case study access.");
+            setGenerating(false);
+            setLoading(false);
+            return;
+          }
+          if (Array.isArray(caseStudyRows) && caseStudyRows.length > 0) {
+            router.replace(`/investigations/${params.id}?from=case-studies`);
+            return;
+          }
           const organisationBranding = await loadOrganisationBranding(accessToken).catch(() => normalizeOrganisationBranding(null));
 
           appendActivityLog("Loading saved report data and related investigation records.");
@@ -2045,6 +2058,19 @@ export default function GeneratedInvestigationReportPage() {
           if (cancelled) return;
           if (!accessToken) {
             router.push(`/login?returnTo=${encodeURIComponent(`/investigations/${params.id}/generated-report`)}`);
+            return;
+          }
+          const { data: caseStudyRows, error: caseStudyError } = await supabase.rpc("get_case_study_map_access", {
+            p_map_id: params.id,
+          });
+          if (caseStudyError) {
+            setError(caseStudyError.message || "Unable to confirm case study access.");
+            setGenerating(false);
+            setLoading(false);
+            return;
+          }
+          if (Array.isArray(caseStudyRows) && caseStudyRows.length > 0) {
+            router.replace(`/investigations/${params.id}?from=case-studies`);
             return;
           }
 

@@ -12,6 +12,7 @@ type DashboardPageSkeletonProps = {
   activeNav?:
     | "dashboard"
     | "templates"
+    | "case-studies"
     | "lead-access"
     | "lead-access-notes"
     | "account"

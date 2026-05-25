@@ -11,6 +11,7 @@ type MapPageProps = {
     templateGlobal?: string;
     templateVisibility?: string;
     from?: string;
+    caseStudy?: string;
   }>;
 };
 
@@ -24,7 +25,7 @@ export const viewport: Viewport = {
 
 export default async function SystemMapPage({ params, searchParams }: MapPageProps) {
   const { mapId } = await params;
-  const { welcome, templateEditor, templateId, templateName, templateGlobal, templateVisibility, from } = await searchParams;
+  const { welcome, templateEditor, templateId, templateName, templateGlobal, templateVisibility, from, caseStudy } = await searchParams;
   const resolvedTemplateVisibility =
     templateVisibility === "organisation" || templateVisibility === "global" || templateVisibility === "private"
       ? templateVisibility
@@ -40,7 +41,8 @@ export default async function SystemMapPage({ params, searchParams }: MapPagePro
       templateEditorTemplateName={templateEditor === "1" ? templateName ?? null : null}
       templateEditorIsGlobal={templateEditor === "1" ? templateGlobal === "1" : false}
       templateEditorVisibility={templateEditor === "1" ? resolvedTemplateVisibility : "private"}
-      entrySource={from === "templates" ? "templates" : "dashboard"}
+      entrySource={from === "templates" ? "templates" : from === "case-studies" ? "case-studies" : "dashboard"}
+      forceReadOnly={caseStudy === "1" || from === "case-studies"}
     />
   );
 }

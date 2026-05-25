@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sendWebsiteErrorEmail } from "@/lib/email/siteErrors";
+import { enforceRateLimit } from "@/lib/rateLimit";
 import { getSiteIssueUserMessage, type SiteIssueReport } from "@/lib/siteIssues/shared";
 
 function configuredSiteOrigin() {
@@ -83,6 +84,13 @@ export async function POST(request: NextRequest) {
   if (!hasAllowedOrigin(request)) {
     return NextResponse.json({ error: "Origin not allowed." }, { status: 403 });
   }
+
+  const limit = enforceRateLimit(request, {
+    scope: "site-error-report",
+    limit: 20,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (limit) return limit;
 
   try {
     const body = await request.json();

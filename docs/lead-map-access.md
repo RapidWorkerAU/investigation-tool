@@ -37,13 +37,13 @@ values (
   'e9df9c19-104d-49b5-ada6-14875b46b528',
   'Piper Alpha',
   'Read-only case study access for the Piper Alpha investigation map.',
-  24
+  0
 );
 ```
 
-`session_duration_hours` is currently constrained to `1` through `24`, so 24 hours is the maximum without a schema change.
+`session_duration_hours` is constrained to `0` through `24`. Use `0` for no app-level expiry; matching email and access code checks still apply.
 
-## Generate one-time codes
+## Generate access codes
 
 Use the internal generator page after the campaign exists:
 
@@ -69,6 +69,6 @@ The plaintext code is only shown once at generation time, so copy it into your e
 
 - First successful redemption stores the submitted email and the redemption timestamp.
 - If the code was generated for a specific email, redemption is only allowed for that email.
-- The code cannot be redeemed again.
-- The same browser can close and reopen the guest viewer until the signed guest-session cookie expires.
-- After expiry, the redeemed code stays blocked and the user must request a new code.
+- For campaigns with a positive `session_duration_hours`, the code cannot be redeemed again.
+- For campaigns with `session_duration_hours = 0`, the same email/code pair can be used again and there is no app-level session expiry.
+- The same browser can close and reopen the guest viewer while the signed guest-session cookie is present.

@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import DashboardShell from "@/components/dashboard/DashboardShell";
 import styles from "@/components/dashboard/DashboardShell.module.css";
 import { DashboardPageSkeleton } from "@/components/dashboard/DashboardTableLoadingState";
@@ -41,6 +41,25 @@ type MemberProfileRow = {
   user_id: string;
   role: string;
   email: string | null;
+};
+
+type CaseStudyAccessRow = {
+  id: string;
+  slug: string;
+  campaign_title: string;
+  campaign_description: string | null;
+  owner_email: string | null;
+  session_duration_hours: number;
+};
+
+type ReportCanvasElementRow = {
+  id: string;
+  element_type: string;
+  heading: string;
+  element_config: Record<string, unknown> | null;
+  pos_x: number;
+  pos_y: number;
+  created_at: string;
 };
 
 type SequenceElementRow = {
@@ -280,6 +299,19 @@ const reportTabs: Array<{ id: ReportTab; label: string }> = [
 ];
 
 const TABLE_PAGE_SIZE = 5;
+const REPORT_ELEMENT_TYPES = [
+  "incident_sequence_step",
+  "incident_outcome",
+  "person",
+  "incident_factor",
+  "incident_system_factor",
+  "incident_task_condition",
+  "incident_response_recovery",
+  "incident_control_barrier",
+  "incident_evidence",
+  "incident_finding",
+  "incident_recommendation",
+];
 
 const formatDate = (value: string) =>
   new Date(value).toLocaleString("en-AU", {
@@ -393,10 +425,32 @@ const getRecommendationActionTypePillClass = (value: string) => {
   }
 };
 
+const buildCaseStudyAccessState = (userId: string): BillingAccessState => ({
+  userId,
+  stripeCustomerId: null,
+  accessSelectionRequired: false,
+  currentAccessType: "subscription_monthly",
+  currentAccessStatus: "active",
+  currentAccessPeriodId: null,
+  currentStripeSubscriptionId: null,
+  currentStripePriceId: null,
+  cancellationScheduled: false,
+  currentPeriodStartsAt: null,
+  currentPeriodEndsAt: null,
+  readOnlyReason: "Case studies are read only.",
+  canCreateMaps: false,
+  canEditMaps: false,
+  canExport: false,
+  canShareMaps: false,
+  canDuplicateMaps: false,
+});
+
 export default function InvestigationReportPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = useMemo(() => createSupabaseBrowser(), []);
+  const enteredFromCaseStudies = searchParams.get("from") === "case-studies";
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -457,6 +511,7 @@ export default function InvestigationReportPage() {
   const [factorFilterMenuPosition, setFactorFilterMenuPosition] = useState<FactorFilterMenuPosition | null>(null);
   const [mobileFilterOverlayOpen, setMobileFilterOverlayOpen] = useState(false);
   const [accessState, setAccessState] = useState<BillingAccessState | null>(null);
+  const [isCaseStudyView, setIsCaseStudyView] = useState(false);
   const [reportActionId, setReportActionId] = useState<string | null>(null);
   const [pendingDeleteReportRow, setPendingDeleteReportRow] = useState<SavedInvestigationReportRow | null>(null);
   const [showCreateVersionModal, setShowCreateVersionModal] = useState(false);
@@ -1406,6 +1461,7 @@ export default function InvestigationReportPage() {
     const load = async () => {
       setLoading(true);
       setError(null);
+      setIsCaseStudyView(false);
 
       const {
         data: { user },
@@ -1426,32 +1482,41 @@ export default function InvestigationReportPage() {
         return;
       }
 
-      const accessState = await fetchAccessState(session.access_token);
-      setAccessState(accessState);
+      const { data: caseStudyRows, error: caseStudyError } = await supabase.rpc("get_case_study_map_access", {
+        p_map_id: params.id,
+      });
 
-      if (accessRequiresSelection(accessState)) {
-        router.push("/subscribe");
+      if (caseStudyError) {
+        setError(caseStudyError.message || "Unable to confirm case study access.");
+        setLoading(false);
         return;
       }
 
-      if (accessBlocksInvestigationEntry(accessState)) {
-        router.push("/dashboard?mapAccess=blocked");
-        return;
+      const caseStudyAccess = (((caseStudyRows ?? []) as CaseStudyAccessRow[])[0] ?? null);
+      const nextIsCaseStudyView = Boolean(caseStudyAccess?.id);
+      setIsCaseStudyView(nextIsCaseStudyView);
+
+      if (nextIsCaseStudyView) {
+        setAccessState(buildCaseStudyAccessState(user.id));
+      } else {
+        const accessState = await fetchAccessState(session.access_token);
+        setAccessState(accessState);
+
+        if (accessRequiresSelection(accessState)) {
+          router.push("/subscribe");
+          return;
+        }
+
+        if (accessBlocksInvestigationEntry(accessState)) {
+          router.push("/dashboard?mapAccess=blocked");
+          return;
+        }
       }
 
       const [
         { data: mapRow, error: mapError },
         { data: memberRows, error: memberError },
-        { data: sequenceElements, error: sequenceError },
-        { data: outcomeElements, error: outcomeError },
-        { data: personElements, error: peopleError },
-        { data: factorElements, error: factorError },
-        { data: taskConditionElements, error: taskConditionError },
-        { data: recoveryElements, error: recoveryError },
-        { data: controlBarrierElements, error: controlBarrierError },
-        { data: evidenceElements, error: evidenceError },
-        { data: findingElements, error: findingError },
-        { data: recommendationElements, error: recommendationError },
+        { data: reportElements, error: reportElementsError },
         { data: reportRows, error: reportsError },
       ] = await Promise.all([
         supabase
@@ -1466,79 +1531,18 @@ export default function InvestigationReportPage() {
         supabase
           .schema("ms")
           .from("canvas_elements")
-          .select("id,heading,element_config,pos_x,pos_y,created_at")
+          .select("id,element_type,heading,element_config,pos_x,pos_y,created_at")
           .eq("map_id", params.id)
-          .eq("element_type", "incident_sequence_step")
+          .in("element_type", REPORT_ELEMENT_TYPES)
           .order("created_at", { ascending: true }),
-        supabase
-          .schema("ms")
-          .from("canvas_elements")
-          .select("id,heading,element_config,created_at")
-          .eq("map_id", params.id)
-          .eq("element_type", "incident_outcome")
-          .order("created_at", { ascending: true }),
-        supabase
-          .schema("ms")
-          .from("canvas_elements")
-          .select("id,heading,element_config,created_at")
-          .eq("map_id", params.id)
-          .eq("element_type", "person")
-          .order("created_at", { ascending: true }),
-        supabase
-          .schema("ms")
-          .from("canvas_elements")
-          .select("id,element_type,heading,element_config,created_at")
-          .eq("map_id", params.id)
-          .in("element_type", ["incident_factor", "incident_system_factor"])
-          .order("created_at", { ascending: true }),
-        supabase
-          .schema("ms")
-          .from("canvas_elements")
-          .select("id,heading,element_config,created_at")
-          .eq("map_id", params.id)
-          .eq("element_type", "incident_task_condition")
-          .order("created_at", { ascending: true }),
-        supabase
-          .schema("ms")
-          .from("canvas_elements")
-          .select("id,heading,element_config,created_at")
-          .eq("map_id", params.id)
-          .eq("element_type", "incident_response_recovery")
-          .order("created_at", { ascending: true }),
-        supabase
-          .schema("ms")
-          .from("canvas_elements")
-          .select("id,heading,element_config,created_at")
-          .eq("map_id", params.id)
-          .eq("element_type", "incident_control_barrier")
-          .order("created_at", { ascending: true }),
-        supabase
-          .schema("ms")
-          .from("canvas_elements")
-          .select("id,heading,element_config,created_at")
-          .eq("map_id", params.id)
-          .eq("element_type", "incident_evidence")
-          .order("created_at", { ascending: true }),
-        supabase
-          .schema("ms")
-          .from("canvas_elements")
-          .select("id,heading,element_config,created_at")
-          .eq("map_id", params.id)
-          .eq("element_type", "incident_finding")
-          .order("created_at", { ascending: true }),
-        supabase
-          .schema("ms")
-          .from("canvas_elements")
-          .select("id,heading,element_config,created_at")
-          .eq("map_id", params.id)
-          .eq("element_type", "incident_recommendation")
-          .order("created_at", { ascending: true }),
-        supabase
-          .schema("ms")
-          .from("investigation_reports")
-          .select("id,status,generated_at,updated_at,version_number,ai_output_json")
-          .eq("case_id", params.id)
-          .order("version_number", { ascending: false }),
+        nextIsCaseStudyView
+          ? Promise.resolve({ data: [], error: null })
+          : supabase
+              .schema("ms")
+              .from("investigation_reports")
+              .select("id,status,generated_at,updated_at,version_number,ai_output_json")
+              .eq("case_id", params.id)
+              .order("version_number", { ascending: false }),
       ]);
 
       if (mapError) {
@@ -1553,62 +1557,8 @@ export default function InvestigationReportPage() {
         return;
       }
 
-      if (sequenceError) {
-        setError(sequenceError.message);
-        setLoading(false);
-        return;
-      }
-
-      if (outcomeError) {
-        setError(outcomeError.message);
-        setLoading(false);
-        return;
-      }
-
-      if (peopleError) {
-        setError(peopleError.message);
-        setLoading(false);
-        return;
-      }
-
-      if (factorError) {
-        setError(factorError.message);
-        setLoading(false);
-        return;
-      }
-
-      if (taskConditionError) {
-        setError(taskConditionError.message);
-        setLoading(false);
-        return;
-      }
-
-      if (recoveryError) {
-        setError(recoveryError.message);
-        setLoading(false);
-        return;
-      }
-
-      if (controlBarrierError) {
-        setError(controlBarrierError.message);
-        setLoading(false);
-        return;
-      }
-
-      if (evidenceError) {
-        setError(evidenceError.message);
-        setLoading(false);
-        return;
-      }
-
-      if (findingError) {
-        setError(findingError.message);
-        setLoading(false);
-        return;
-      }
-
-      if (recommendationError) {
-        setError(recommendationError.message);
+      if (reportElementsError) {
+        setError(reportElementsError.message);
         setLoading(false);
         return;
       }
@@ -1621,7 +1571,13 @@ export default function InvestigationReportPage() {
 
       const members = (memberRows ?? []) as MemberProfileRow[];
       const currentMap = mapRow as MapRow;
-      const sequenceData = ((sequenceElements ?? []) as SequenceElementRow[])
+      const elementsByType = new Map<string, ReportCanvasElementRow[]>();
+      ((reportElements ?? []) as ReportCanvasElementRow[]).forEach((row) => {
+        elementsByType.set(row.element_type, [...(elementsByType.get(row.element_type) ?? []), row]);
+      });
+      const elementsForType = <T,>(type: string) => (elementsByType.get(type) ?? []) as unknown as T[];
+
+      const sequenceData = elementsForType<SequenceElementRow>("incident_sequence_step")
         .map((row) => {
           const config = row.element_config ?? {};
           const timestamp = String(config.timestamp ?? "").trim();
@@ -1648,7 +1604,7 @@ export default function InvestigationReportPage() {
           return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
         });
 
-      const outcomeData: OutcomeReportRow[] = ((outcomeElements ?? []) as OutcomeElementRow[]).map((row) => {
+      const outcomeData: OutcomeReportRow[] = elementsForType<OutcomeElementRow>("incident_outcome").map((row) => {
         const config = row.element_config ?? {};
         return {
           id: row.id,
@@ -1663,7 +1619,7 @@ export default function InvestigationReportPage() {
         };
       });
 
-      const peopleData = ((personElements ?? []) as PersonElementRow[]).map((row) => {
+      const peopleData = elementsForType<PersonElementRow>("person").map((row) => {
         const config = row.element_config ?? {};
         const normalizedHeading = String(row.heading ?? "").replace(/\\n/g, "\n");
         const headingLines = normalizedHeading.split("\n");
@@ -1677,7 +1633,10 @@ export default function InvestigationReportPage() {
         };
       });
 
-      const factorData: FactorReportRow[] = ((factorElements ?? []) as FactorElementRow[]).map((row) => {
+      const factorData: FactorReportRow[] = [
+        ...elementsForType<FactorElementRow>("incident_factor"),
+        ...elementsForType<FactorElementRow>("incident_system_factor"),
+      ].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()).map((row) => {
         const config = row.element_config ?? {};
         const isSystemFactor = row.element_type === "incident_system_factor";
         const rawPresence = String(
@@ -1717,7 +1676,7 @@ export default function InvestigationReportPage() {
         };
       });
 
-      const taskConditionData: TaskConditionReportRow[] = ((taskConditionElements ?? []) as TaskConditionElementRow[]).map(
+      const taskConditionData: TaskConditionReportRow[] = elementsForType<TaskConditionElementRow>("incident_task_condition").map(
         (row) => {
           const config = row.element_config ?? {};
           return {
@@ -1731,7 +1690,7 @@ export default function InvestigationReportPage() {
         }
       );
 
-      const recoveryData: RecoveryReportRow[] = ((recoveryElements ?? []) as RecoveryElementRow[]).map((row) => {
+      const recoveryData: RecoveryReportRow[] = elementsForType<RecoveryElementRow>("incident_response_recovery").map((row) => {
         const config = row.element_config ?? {};
         return {
           id: row.id,
@@ -1743,7 +1702,7 @@ export default function InvestigationReportPage() {
       });
 
       const controlBarrierData: ControlBarrierReportRow[] = (
-        (controlBarrierElements ?? []) as ControlBarrierElementRow[]
+        elementsForType<ControlBarrierElementRow>("incident_control_barrier")
       ).map((row) => {
         const config = row.element_config ?? {};
         return {
@@ -1758,7 +1717,8 @@ export default function InvestigationReportPage() {
         };
       });
 
-      const evidenceData: EvidenceReportRow[] = ((evidenceElements ?? []) as EvidenceElementRow[]).map((row) => {
+      const evidenceElements = elementsForType<EvidenceElementRow>("incident_evidence");
+      const evidenceData: EvidenceReportRow[] = evidenceElements.map((row) => {
         const config = row.element_config ?? {};
         return {
           id: row.id,
@@ -1772,7 +1732,7 @@ export default function InvestigationReportPage() {
         };
       });
 
-      const findingData: FindingReportRow[] = ((findingElements ?? []) as FindingElementRow[]).map((row) => {
+      const findingData: FindingReportRow[] = elementsForType<FindingElementRow>("incident_finding").map((row) => {
         const config = row.element_config ?? {};
         return {
           id: row.id,
@@ -1784,7 +1744,7 @@ export default function InvestigationReportPage() {
       });
 
       const recommendationData: RecommendationReportRow[] = (
-        (recommendationElements ?? []) as RecommendationElementRow[]
+        elementsForType<RecommendationElementRow>("incident_recommendation")
       ).map((row) => {
         const config = row.element_config ?? {};
         return {
@@ -1798,7 +1758,7 @@ export default function InvestigationReportPage() {
         };
       });
 
-      const evidencePathPairs = ((evidenceElements ?? []) as EvidenceElementRow[])
+      const evidencePathPairs = evidenceElements
         .map((row) => {
           const config = row.element_config ?? {};
           const path = String(config.media_storage_path ?? "").trim();
@@ -1830,7 +1790,7 @@ export default function InvestigationReportPage() {
       }
 
       setMap(currentMap);
-      setOwnerEmail(members.find((member) => member.user_id === currentMap.owner_id)?.email ?? null);
+      setOwnerEmail(members.find((member) => member.user_id === currentMap.owner_id)?.email ?? caseStudyAccess?.owner_email ?? null);
       setScopeMetaForm({
         title: currentMap.title ?? "",
       });
@@ -1870,8 +1830,9 @@ export default function InvestigationReportPage() {
     setScopeMetaForm((current) => ({ ...current, [field]: value }));
   };
 
-  const canEditScope = accessState?.canEditMaps ?? true;
+  const canEditScope = !isCaseStudyView && (accessState?.canEditMaps ?? true);
   const scopeEditDisabledReason = (() => {
+    if (isCaseStudyView) return "Case studies are read only.";
     if (canEditScope) return null;
     if (accessState?.currentAccessStatus === "expired") return "Editing is unavailable because this access period has expired.";
     if (accessState?.currentAccessStatus === "payment_failed") return "Editing is unavailable until payment details are updated.";
@@ -1977,13 +1938,15 @@ export default function InvestigationReportPage() {
 
   const hasSavedReports = savedReports.length > 0;
   const reportGenerationDisabledReason =
-    accessState && !accessCanUseReportGeneration(accessState)
+    isCaseStudyView
+      ? "Report generation is unavailable for read-only case studies."
+      : accessState && !accessCanUseReportGeneration(accessState)
       ? "Report generation is not available on the 7 day free trial."
       : null;
   const canUseReportGeneration = reportGenerationDisabledReason === null;
 
   const handleGenerateReportAction = () => {
-    if (!canUseReportGeneration) return;
+    if (isCaseStudyView || !canUseReportGeneration) return;
 
     if (hasSavedReports) {
       setShowCreateVersionModal(true);
@@ -2064,13 +2027,21 @@ export default function InvestigationReportPage() {
   const pagedEvidence = getPagedRows(filteredEvidenceRows, "evidence");
   const pagedFindings = getPagedRows(filteredFindingRows, "finding");
   const pagedRecommendations = getPagedRows(filteredRecommendationRows, "recommendation");
+  const activeShellNav = isCaseStudyView || enteredFromCaseStudies ? "case-studies" : "dashboard";
+  const backHref = isCaseStudyView || enteredFromCaseStudies ? "/case-studies" : "/dashboard";
+  const openMapHref = isCaseStudyView
+    ? `/investigations/${params.id}/canvas?from=case-studies`
+    : `/investigations/${params.id}/canvas`;
+  const detailSubtitle = isCaseStudyView
+    ? "Review this read-only case study before opening the incident map."
+    : "Review the investigation record before opening the incident map.";
 
   if (loading) {
     return (
       <DashboardPageSkeleton
-        activeNav="dashboard"
+        activeNav={activeShellNav}
         title="Investigation Report"
-        subtitle="Review the investigation record before opening the incident map."
+        subtitle={detailSubtitle}
         variant="detail"
       />
     );
@@ -2078,13 +2049,13 @@ export default function InvestigationReportPage() {
 
   return (
     <DashboardShell
-      activeNav="dashboard"
+      activeNav={activeShellNav}
       eyebrow="Investigation Tool"
       title={loading ? "Investigation Report" : map?.title ?? "Investigation Report"}
-      subtitle={loading ? undefined : "Review the investigation record before opening the incident map."}
+      subtitle={loading ? undefined : detailSubtitle}
       headerLead={
         !loading && !error && map ? (
-          <button type="button" className={styles.reportBackButton} onClick={() => router.push("/dashboard")} aria-label="Go to dashboard">
+          <button type="button" className={styles.reportBackButton} onClick={() => router.push(backHref)} aria-label="Go back">
             <Image src="/icons/back.svg" alt="" width={18} height={18} className={styles.reportBackIcon} />
             <span>Back</span>
           </button>
@@ -2161,7 +2132,7 @@ export default function InvestigationReportPage() {
                   <button
                     type="button"
                     className={`${styles.button} ${styles.buttonAccent}`}
-                    onClick={() => router.push(`/investigations/${map.id}/canvas`)}
+                    onClick={() => router.push(openMapHref)}
                     title="Open Incident Map"
                     aria-label="Open Incident Map"
                   >
@@ -3320,6 +3291,9 @@ export default function InvestigationReportPage() {
                   )}
                 </>
               ) : activeTab === "reports" ? (
+                isCaseStudyView ? (
+                  renderMobileEmptyState("Reports are not available for read-only case studies.")
+                ) : (
                 <>
                   {savedReports.length > 0 ? (
                     <div className={styles.tableToolbar}>
@@ -3528,6 +3502,7 @@ export default function InvestigationReportPage() {
                     ? renderPagination("reports", sortedSavedReports.length, pagedReports.currentPage, pagedReports.totalPages)
                     : null}
                 </>
+                )
               ) : (
                 <div className={styles.reportCard}>
                   <h3>{reportTabs.find((tab) => tab.id === activeTab)?.label}</h3>

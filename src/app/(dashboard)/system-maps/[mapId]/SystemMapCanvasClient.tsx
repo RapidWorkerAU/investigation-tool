@@ -310,6 +310,7 @@ function SystemMapCanvasInner({
   templateEditorVisibility,
   entrySource,
   viewerMode,
+  forceReadOnly,
   initialSnapshot,
   guestSessionEmail,
   guestCampaignSlug,
@@ -323,8 +324,9 @@ function SystemMapCanvasInner({
   templateEditorTemplateName: string | null;
   templateEditorIsGlobal: boolean;
   templateEditorVisibility: InvestigationTemplateVisibility;
-  entrySource: "dashboard" | "templates";
+  entrySource: "dashboard" | "templates" | "case-studies";
   viewerMode: "member" | "guest";
+  forceReadOnly: boolean;
   initialSnapshot: SystemMapCanvasSnapshot | null;
   guestSessionEmail: string | null;
   guestCampaignSlug: string | null;
@@ -483,8 +485,8 @@ function SystemMapCanvasInner({
     accessState?.currentAccessStatus === "active" &&
     accessState.currentAccessType === "pass_30d" &&
     !hasCurrentPassAssignment;
-  const accessAllowsEditing = !isGuestViewer && (accessState?.canEditMaps ?? true) && !passScopedWriteBlocked;
-  const canSaveTemplate = hasActiveTemplateAccess(accessState);
+  const accessAllowsEditing = !isGuestViewer && !forceReadOnly && (accessState?.canEditMaps ?? true) && !passScopedWriteBlocked;
+  const canSaveTemplate = !forceReadOnly && hasActiveTemplateAccess(accessState);
   const isTemplateEditor = Boolean(templateEditorTemplateId);
   const isPlatformAdmin = userId === platformAdminUserId || accessState?.userId === platformAdminUserId;
   const canWriteMap = accessAllowsEditing && (mapRole === "partial_write" || mapRole === "full_write");
@@ -493,7 +495,7 @@ function SystemMapCanvasInner({
   const canCreateSticky = accessAllowsEditing && !!userId;
   const allowedNodeKinds = useMemo(() => getAllowedNodeKindsForCategory(mapCategoryId), [mapCategoryId]);
   const canUseWizard = canWriteMap && allowedNodeKinds.some((kind) => kind.startsWith("incident_"));
-  const canUseSuggestionCheck = !isGuestViewer && !!map;
+  const canUseSuggestionCheck = !isGuestViewer && !forceReadOnly && !!map;
   const {
     isLoadingSuggestions,
     suggestionProgress,
@@ -514,7 +516,9 @@ function SystemMapCanvasInner({
     relations,
     userId,
   });
-  const readOnlyActionReason = !accessAllowsEditing
+  const readOnlyActionReason = forceReadOnly
+    ? "Case studies are read only."
+    : !accessAllowsEditing
     ? passScopedWriteBlocked
       ? "This map belongs to an older 30 Day Access period. Start monthly access to restore full editing across older pass maps."
       : accessState?.readOnlyReason || "This map is read only for your current access."
@@ -522,14 +526,14 @@ function SystemMapCanvasInner({
   const deleteDisabledReason = !canWriteMap
     ? readOnlyActionReason || "You have view access only for this map."
     : undefined;
-  const backHref = entrySource === "templates" ? "/templates" : "/dashboard";
-  const backTitle = entrySource === "templates" ? "Back to templates" : "Back to dashboard";
+  const backHref = entrySource === "templates" ? "/templates" : entrySource === "case-studies" ? "/case-studies" : "/dashboard";
+  const backTitle = entrySource === "templates" ? "Back to templates" : entrySource === "case-studies" ? "Back to case studies" : "Back to dashboard";
   const canPrintMap = accessAllowsEditing;
   const addDisabledReason = !accessAllowsEditing
-    ? accessState?.readOnlyReason || "This map is read only for your current access."
+    ? readOnlyActionReason || "This map is read only for your current access."
     : "Adding components is unavailable for this map.";
   const wizardDisabledReason = !accessAllowsEditing
-    ? accessState?.readOnlyReason || "The wizard is unavailable while this map is read only."
+    ? readOnlyActionReason || "The wizard is unavailable while this map is read only."
     : "The wizard is unavailable for this map.";
   const templateDisabledReason = canSaveTemplate ? undefined : templateAccessDisabledReason;
   useEffect(() => {
@@ -561,8 +565,9 @@ function SystemMapCanvasInner({
   const relationshipCategoryOptions = useMemo(() => getRelationshipCategoryOptions(mapCategoryId), [mapCategoryId]);
   const canEditElement = useCallback(
     (element: CanvasElementRow) =>
-      canWriteMap || (mapRole === "read" && element.element_type === "sticky_note" && !!userId && element.created_by_user_id === userId),
-    [canWriteMap, mapRole, userId]
+      !forceReadOnly &&
+      (canWriteMap || (mapRole === "read" && element.element_type === "sticky_note" && !!userId && element.created_by_user_id === userId)),
+    [canWriteMap, forceReadOnly, mapRole, userId]
   );
   const mapRoleLabel = useCallback((role: string | null | undefined) => {
     const normalized = (role || "").toLowerCase();
@@ -610,6 +615,7 @@ function SystemMapCanvasInner({
     });
     return m;
   }, [mapMembers]);
+  const displayMapRole = forceReadOnly ? "read" : mapRole;
   const anchorElements = useMemo(
     () => elements.filter((element) => element.element_type === "anchor"),
     [elements]
@@ -1031,6 +1037,7 @@ function SystemMapCanvasInner({
   useSystemMapBootstrap({
     initialSnapshot,
     isGuestViewer,
+    forceReadOnly,
     mapId,
     canvasElementSelectColumns,
     loadMapMembers,
@@ -2770,6 +2777,7 @@ function SystemMapCanvasInner({
     selectedTextBoxId,
   ]);
   const desktopToolbarSelection = useMemo(() => {
+    if (forceReadOnly) return null;
     if (!selectedSingleFlowId) return null;
     if (!selectedSingleFlowId.startsWith("process:")) {
       if (!nodesById.has(selectedSingleFlowId)) return null;
@@ -2815,7 +2823,7 @@ function SystemMapCanvasInner({
           supportsRelationships: true,
         };
     }
-  }, [elementsById, nodesById, selectedSingleFlowId]);
+  }, [elementsById, forceReadOnly, nodesById, selectedSingleFlowId]);
   const availableFactorPeople = useMemo(
     () =>
       elements
@@ -5731,7 +5739,7 @@ function SystemMapCanvasInner({
       handleCanvasNodeClick({
         event,
         node,
-        mapRole,
+        mapRole: displayMapRole,
         elements,
         canEditElement,
         isMobile,
@@ -5741,7 +5749,7 @@ function SystemMapCanvasInner({
         setMobileNodeMenuId,
       });
     },
-    [canEditElement, canvasSelectionSetters, elements, isMobile, mapRole, setSelectedFlowIds]
+    [canEditElement, canvasSelectionSetters, displayMapRole, elements, isMobile, setSelectedFlowIds]
   );
   const handleCanvasNodeSingleClick = useCallback(
     (event: React.MouseEvent, node: Node<FlowData>) => {
@@ -5896,6 +5904,10 @@ function SystemMapCanvasInner({
       event.preventDefault();
       event.stopPropagation();
       armPaneClearSuppression();
+      if (forceReadOnly) {
+        selectCanvasNode(event, node);
+        return;
+      }
       if (desktopNodeAction === "configure" && currentSpecificSelectedFlowId === node.id) return;
       selectCanvasNode(event, node);
       setDesktopNodeAction("configure");
@@ -5904,6 +5916,7 @@ function SystemMapCanvasInner({
       armPaneClearSuppression,
       currentSpecificSelectedFlowId,
       desktopNodeAction,
+      forceReadOnly,
       isNodeTextScrollbarDoubleClick,
       isMobile,
       selectCanvasNode,
@@ -5930,7 +5943,7 @@ function SystemMapCanvasInner({
       <MapCanvasHeader
         map={map}
         isTemplateEditor={isTemplateEditor}
-        mapRole={mapRole}
+        mapRole={displayMapRole}
         accessState={accessState}
         brandHref={isGuestViewer ? null : "/"}
         showMapInfoButton={!isGuestViewer}
@@ -7200,6 +7213,7 @@ export default function SystemMapCanvasClient({
   templateEditorVisibility = templateEditorIsGlobal ? "global" : "private",
   entrySource = "dashboard",
   viewerMode = "member",
+  forceReadOnly = false,
   initialSnapshot = null,
   guestSessionEmail = null,
   guestCampaignSlug = null,
@@ -7213,8 +7227,9 @@ export default function SystemMapCanvasClient({
   templateEditorTemplateName?: string | null;
   templateEditorIsGlobal?: boolean;
   templateEditorVisibility?: InvestigationTemplateVisibility;
-  entrySource?: "dashboard" | "templates";
+  entrySource?: "dashboard" | "templates" | "case-studies";
   viewerMode?: "member" | "guest";
+  forceReadOnly?: boolean;
   initialSnapshot?: SystemMapCanvasSnapshot | null;
   guestSessionEmail?: string | null;
   guestCampaignSlug?: string | null;
@@ -7271,6 +7286,7 @@ export default function SystemMapCanvasClient({
         templateEditorVisibility={templateEditorVisibility}
         entrySource={entrySource}
         viewerMode={viewerMode}
+        forceReadOnly={forceReadOnly}
         initialSnapshot={initialSnapshot}
         guestSessionEmail={guestSessionEmail}
         guestCampaignSlug={guestCampaignSlug}

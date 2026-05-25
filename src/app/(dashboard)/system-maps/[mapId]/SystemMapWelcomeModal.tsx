@@ -180,7 +180,8 @@ const guestQuickActions = [
 ] as const;
 
 function formatGuestAccessDuration(hours: number | null) {
-  if (typeof hours !== "number" || !Number.isFinite(hours) || hours <= 0) return "a limited time";
+  if (typeof hours !== "number" || !Number.isFinite(hours)) return "a limited time";
+  if (hours <= 0) return "no scheduled expiry";
   if (hours % 24 === 0) {
     const days = hours / 24;
     return `${days} day${days === 1 ? "" : "s"}`;
@@ -223,6 +224,7 @@ export function GuestMapWelcomeModal({
   if (!open) return null;
   const durationLabel = formatGuestAccessDuration(sessionDurationHours);
   const expiryLabel = formatGuestAccessExpiry(sessionExpiresAt);
+  const hasScheduledExpiry = Boolean(expiryLabel);
 
   return (
     <div className={`fixed inset-0 z-[122] ${isMobile ? "overflow-y-auto bg-white" : "flex items-center justify-center bg-[rgba(15,23,42,0.52)] px-4 py-6"}`}>
@@ -242,10 +244,15 @@ export function GuestMapWelcomeModal({
                 This public map is read-only, but you can inspect the investigation structure, search for items, zoom around the canvas, and add notes for review.
                 {viewerEmail ? ` You are viewing with ${viewerEmail}.` : ""}
               </p>
-              <p className={`max-w-none text-sm text-slate-600 ${isMobile ? "mt-3 leading-6" : "mt-2 leading-6"}`}>
-                Your access is valid for {durationLabel} from redemption
-                {expiryLabel ? ` and is currently due to expire ${expiryLabel} AWST` : ""}. If you run out of time, request an extension from the person who issued your access code.
-              </p>
+              {hasScheduledExpiry ? (
+                <p className={`max-w-none text-sm text-slate-600 ${isMobile ? "mt-3 leading-6" : "mt-2 leading-6"}`}>
+                  Your access is valid for {durationLabel} from redemption and is currently due to expire {expiryLabel} AWST. If you run out of time, request an extension from the person who issued your access code.
+                </p>
+              ) : (
+                <p className={`max-w-none text-sm text-slate-600 ${isMobile ? "mt-3 leading-6" : "mt-2 leading-6"}`}>
+                  Your access has {durationLabel}. If you need to sign in again, use the same email address and access code.
+                </p>
+              )}
             </div>
             <button
               type="button"

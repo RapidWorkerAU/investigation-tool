@@ -11,6 +11,7 @@ import styles from "./DashboardShell.module.css";
 type NavKey =
   | "dashboard"
   | "templates"
+  | "case-studies"
   | "lead-access"
   | "lead-access-notes"
   | "account"
@@ -35,6 +36,7 @@ type DashboardShellProps = {
 const sidebarLinks = [
   { key: "dashboard" as const, href: "/dashboard", label: "Dashboard", icon: "/icons/house.svg" },
   { key: "templates" as const, href: "/templates", label: "Templates", icon: "/icons/template.svg" },
+  { key: "case-studies" as const, href: "/case-studies", label: "Case Studies", icon: "/icons/documentmap.svg" },
   { key: "account" as const, href: "/account", label: "Edit Account", icon: "/icons/account.svg" },
 ];
 
@@ -483,9 +485,14 @@ export default function DashboardShell({
                 </Link>
               </>
             ) : (
-              <Link href="/templates" onClick={() => setMobileMenuOpen(false)}>
-                Templates
-              </Link>
+              <>
+                <Link href="/templates" onClick={() => setMobileMenuOpen(false)}>
+                  Templates
+                </Link>
+                <Link href="/case-studies" onClick={() => setMobileMenuOpen(false)}>
+                  Case Studies
+                </Link>
+              </>
             )}
             {!isAdminShell && showAdminMenuItem ? (
               <Link href="/admin/users" onClick={() => setMobileMenuOpen(false)}>

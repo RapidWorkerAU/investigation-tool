@@ -110,7 +110,7 @@ export function LeadAccessForm({ slug, title, description }: LeadAccessFormProps
           </form>
 
           <p className={styles.footnote}>
-            Use the same email address the code was issued to. If the code has already been redeemed, request a new one from
+            Use the same email address the code was issued to. If your access does not open, contact
             ashleigh.phillips@hses.com.au.
           </p>
         </section>

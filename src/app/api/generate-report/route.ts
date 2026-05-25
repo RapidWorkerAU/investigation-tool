@@ -3,6 +3,7 @@ import { getOpenAIClient, investigationReportModel } from "@/lib/openai/server";
 import { accessCanUseReportGeneration } from "@/lib/access";
 import { buildDraftReportText } from "@/lib/investigation-report/helpers";
 import { generateReportSchema } from "@/lib/investigation-report/schema";
+import { enforceRateLimit } from "@/lib/rateLimit";
 import { getUserFromAuthHeader } from "@/lib/supabase/auth";
 import { createAuthedServerClient, createServiceRoleClient } from "@/lib/supabase/server";
 import { insertUserProfileActivity } from "@/lib/userProfileActivity";
@@ -266,6 +267,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "caseData.map.id is required." }, { status: 400 });
   }
 
+  const reportLimit = enforceRateLimit(request, {
+    scope: "generate-report",
+    identifier: `${user.userId}:${caseId}`,
+    limit: 8,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (reportLimit) return reportLimit;
+
   const authedSupabase = createAuthedServerClient(token);
   const serviceSupabase = createServiceRoleClient();
   const recordReportActivity = async (
@@ -285,6 +294,28 @@ export async function POST(request: NextRequest) {
       },
     });
   };
+
+  const { data: caseStudyCampaign, error: caseStudyError } = await serviceSupabase
+    .from("lead_map_campaigns")
+    .select("id")
+    .eq("map_id", caseId)
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (caseStudyError) {
+    return NextResponse.json({ error: caseStudyError.message }, { status: 500 });
+  }
+
+  if (caseStudyCampaign) {
+    await recordReportActivity("failed", "Report generation blocked for read-only case study.", {
+      source: "case_study_access_control",
+    });
+    return NextResponse.json(
+      { error: "Report generation is unavailable for read-only case studies." },
+      { status: 403 },
+    );
+  }
+
   addTrace("Refreshing billing profile state.");
   const { data: refreshedAccessState, error: accessStateError } = await serviceSupabase.rpc("refresh_billing_profile_state", {
     p_user_id: user.userId,

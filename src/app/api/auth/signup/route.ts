@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sendAdminNewSignupEmail } from "@/lib/email";
-import { createAnonServerClient } from "@/lib/supabase/server";
+import { enforceRateLimit } from "@/lib/rateLimit";
+import { createAnonServerClient, createServiceRoleClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
@@ -12,6 +13,13 @@ type SignupBody = {
 };
 
 export async function POST(request: NextRequest) {
+  const ipLimit = enforceRateLimit(request, {
+    scope: "auth-signup-ip",
+    limit: 30,
+    windowMs: 15 * 60 * 1000,
+  });
+  if (ipLimit) return ipLimit;
+
   const body = (await request.json().catch(() => null)) as SignupBody | null;
   const email = body?.email?.trim().toLowerCase() ?? "";
   const password = body?.password ?? "";
@@ -22,9 +30,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Email and password are required." }, { status: 400 });
   }
 
-  const supabase = createAnonServerClient();
+  const emailLimit = enforceRateLimit(request, {
+    scope: "auth-signup-email",
+    identifier: email,
+    limit: 5,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (emailLimit) return emailLimit;
 
-  const { data: emailExists, error: emailExistsError } = await supabase.rpc("email_exists_for_auth", {
+  const serviceSupabase = createServiceRoleClient();
+
+  const { data: emailExists, error: emailExistsError } = await serviceSupabase.rpc("email_exists_for_auth", {
     p_email: email,
   });
 
@@ -35,6 +51,8 @@ export async function POST(request: NextRequest) {
   if (emailExists) {
     return NextResponse.json({ error: "That email address is already registered. Please sign in instead." }, { status: 409 });
   }
+
+  const supabase = createAnonServerClient();
 
   const { error } = await supabase.auth.signUp({
     email,

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { emailTemplates, loadEmailRecipientByUserId, sendAdminAccessActivatedEmail, sendResendEmail } from "@/lib/email";
+import { enforceRateLimit } from "@/lib/rateLimit";
 import { getUserFromAuthHeader } from "@/lib/supabase/auth";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 
@@ -10,6 +11,14 @@ export async function POST(request: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
+
+  const limit = enforceRateLimit(request, {
+    scope: "trial-start",
+    identifier: user.userId,
+    limit: 5,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (limit) return limit;
 
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase.rpc("start_trial_access", {

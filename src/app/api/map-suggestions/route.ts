@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createHash } from "node:crypto";
 import { getOpenAIClient, investigationSuggestionsModel } from "@/lib/openai/server";
+import { enforceRateLimit } from "@/lib/rateLimit";
 import { getUserFromAuthHeader } from "@/lib/supabase/auth";
 import { createAuthedServerClient } from "@/lib/supabase/server";
 
@@ -97,6 +98,14 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     );
   }
+
+  const limit = enforceRateLimit(request, {
+    scope: "map-suggestions",
+    identifier: `${authUser.userId}:${body.mapId}`,
+    limit: 20,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (limit) return limit;
 
   const client = getOpenAIClient();
   const supabase = createAuthedServerClient(authHeader.replace("Bearer ", "").trim());

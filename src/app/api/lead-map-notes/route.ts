@@ -13,6 +13,7 @@ import {
   listLeadMapGuestNotesForViewer,
   updateOwnLeadMapGuestNote,
 } from "@/lib/leadMapNotes";
+import { enforceRateLimit } from "@/lib/rateLimit";
 
 async function getGuestNoteSession(request: NextRequest, rawSlug: string) {
   const slug = normalizeLeadAccessSlug(rawSlug);
@@ -86,6 +87,13 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const ipLimit = enforceRateLimit(request, {
+      scope: "lead-map-notes-write-ip",
+      limit: 60,
+      windowMs: 15 * 60 * 1000,
+    });
+    if (ipLimit) return ipLimit;
+
     const body = (await request.json()) as {
       slug?: string;
       displayName?: string;
@@ -98,6 +106,14 @@ export async function POST(request: NextRequest) {
     if ("error" in result) {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
+
+    const sessionLimit = enforceRateLimit(request, {
+      scope: "lead-map-notes-write-session",
+      identifier: result.session.codeId,
+      limit: 30,
+      windowMs: 60 * 60 * 1000,
+    });
+    if (sessionLimit) return sessionLimit;
 
     const text = validateNoteText(body.displayName, body.body);
     if ("error" in text) {
@@ -131,6 +147,13 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
+    const ipLimit = enforceRateLimit(request, {
+      scope: "lead-map-notes-write-ip",
+      limit: 60,
+      windowMs: 15 * 60 * 1000,
+    });
+    if (ipLimit) return ipLimit;
+
     const body = (await request.json()) as {
       slug?: string;
       noteId?: string;
@@ -141,6 +164,15 @@ export async function PATCH(request: NextRequest) {
     if ("error" in result) {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
+
+    const sessionLimit = enforceRateLimit(request, {
+      scope: "lead-map-notes-write-session",
+      identifier: result.session.codeId,
+      limit: 30,
+      windowMs: 60 * 60 * 1000,
+    });
+    if (sessionLimit) return sessionLimit;
+
     if (!body.noteId) {
       return NextResponse.json({ error: "Note ID is required." }, { status: 400 });
     }
@@ -173,11 +205,27 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const ipLimit = enforceRateLimit(request, {
+      scope: "lead-map-notes-write-ip",
+      limit: 60,
+      windowMs: 15 * 60 * 1000,
+    });
+    if (ipLimit) return ipLimit;
+
     const body = (await request.json()) as { slug?: string; noteId?: string };
     const result = await getGuestNoteSession(request, String(body.slug ?? ""));
     if ("error" in result) {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
+
+    const sessionLimit = enforceRateLimit(request, {
+      scope: "lead-map-notes-write-session",
+      identifier: result.session.codeId,
+      limit: 30,
+      windowMs: 60 * 60 * 1000,
+    });
+    if (sessionLimit) return sessionLimit;
+
     if (!body.noteId) {
       return NextResponse.json({ error: "Note ID is required." }, { status: 400 });
     }

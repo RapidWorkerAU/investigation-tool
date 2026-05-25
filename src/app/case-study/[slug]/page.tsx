@@ -16,7 +16,7 @@ export async function generateMetadata({ params }: LeadAccessPageProps): Promise
   }
   return {
     title: `${campaign.title} | Case Study Access`,
-    description: campaign.description || "Redeem a one-time access code to view the read-only case study map.",
+    description: campaign.description || "Redeem an access code to view the read-only case study map.",
   };
 }
 

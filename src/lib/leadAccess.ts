@@ -56,7 +56,7 @@ type LeadAccessSessionPayload = {
   codeId: string;
   mapId: string;
   redeemedEmail: string;
-  expiresAt: string;
+  expiresAt: string | null;
 };
 
 export type LeadAccessSession = {
@@ -64,7 +64,7 @@ export type LeadAccessSession = {
   codeId: string;
   mapId: string;
   redeemedEmail: string;
-  expiresAt: string;
+  expiresAt: string | null;
 };
 
 type CookieReader = {
@@ -77,6 +77,8 @@ const CANVAS_ELEMENT_SELECT_COLUMNS =
 const LEAD_ACCESS_CODE_SELECT_COLUMNS =
   "id,campaign_id,code_hash,issued_code,code_last4,note,reserved_email,redeemed_email,redeemed_at,revoked_at,generated_at,generated_by_user_id";
 const LEAD_ACCESS_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+export const LEAD_ACCESS_INDEFINITE_SESSION_HOURS = 0;
+export const LEAD_ACCESS_PERSISTENT_COOKIE_MAX_AGE_SECONDS = 400 * 24 * 60 * 60;
 
 function getLeadAccessSecret() {
   const secret = process.env.LEAD_ACCESS_SESSION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
@@ -124,6 +126,15 @@ export function buildLeadAccessRedeemedMessage(redeemedEmail: string, redeemedAt
   return `This access code has already been redeemed by ${redeemedEmail} on ${formatLeadAccessDateTime(
     redeemedAt
   )}. Any additional access requests must email ashleigh.phillips@hses.com.au.`;
+}
+
+export function isLeadAccessSessionIndefinite(sessionDurationHours: number) {
+  return Number.isFinite(sessionDurationHours) && sessionDurationHours <= LEAD_ACCESS_INDEFINITE_SESSION_HOURS;
+}
+
+export function getLeadAccessSessionExpiresAt(sessionDurationHours: number) {
+  if (isLeadAccessSessionIndefinite(sessionDurationHours)) return null;
+  return new Date(Date.now() + sessionDurationHours * 60 * 60 * 1000).toISOString();
 }
 
 export function formatLeadAccessDateTime(value: string | Date) {
@@ -182,13 +193,17 @@ export function readLeadAccessSessionFromCookies(cookies: CookieReader, slug: st
     !parsed.codeId ||
     !parsed.mapId ||
     !parsed.redeemedEmail ||
-    !parsed.expiresAt
+    !Object.prototype.hasOwnProperty.call(parsed, "expiresAt") ||
+    (parsed.expiresAt !== null && typeof parsed.expiresAt !== "string")
   ) {
     return null;
   }
 
-  if (new Date(parsed.expiresAt).getTime() <= Date.now()) {
-    return null;
+  if (parsed.expiresAt) {
+    const expiresAtMs = new Date(parsed.expiresAt).getTime();
+    if (Number.isNaN(expiresAtMs) || expiresAtMs <= Date.now()) {
+      return null;
+    }
   }
 
   return normalizeLeadAccessPayload(parsed);

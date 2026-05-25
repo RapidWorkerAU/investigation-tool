@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getUserFromAuthHeader } from "@/lib/supabase/auth";
-import { createAuthedServerClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
   try {
@@ -11,12 +11,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
 
-    const token = authHeader?.replace("Bearer ", "").trim();
-    if (!token) {
-      return NextResponse.json({ error: "Missing access token." }, { status: 401 });
-    }
-
-    const supabase = createAuthedServerClient(token);
+    const supabase = createServiceRoleClient();
     const { error } = await supabase.rpc("accept_pending_organisation_invites", {
       p_user_id: user.userId,
       p_email: user.email,
