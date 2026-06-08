@@ -5230,6 +5230,288 @@
   text-align: center;
 }
 
+.dashboardMobileBadge {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 8px;
+  background: #e8fbff;
+  color: #17a9d6;
+  font-size: 0.62rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+@media (max-width: 860px) {
+  .bodyChrome,
+  .viewport,
+  .deviceShell,
+  .canvas {
+    background: #f5f6ff !important;
+  }
+
+  .mobileHeader {
+    min-height: 52px !important;
+    padding: 8px 12px !important;
+    background: #11143d !important;
+    box-shadow: none !important;
+  }
+
+  .mobileHeaderBrandImage {
+    display: none !important;
+  }
+
+  .mobileHeaderBrandText {
+    color: #ffffff !important;
+    font-size: 0.78rem !important;
+    font-weight: 800 !important;
+  }
+
+  .mobileHeaderMenuButton {
+    width: 28px !important;
+    height: 28px !important;
+    border: 0 !important;
+    border-radius: 7px !important;
+    background: rgba(255, 255, 255, 0.14) !important;
+  }
+
+  .body {
+    padding-right: 12px !important;
+    padding-left: 12px !important;
+  }
+
+  .topbar {
+    margin-bottom: 10px !important;
+    padding: 14px 12px 8px !important;
+    background: transparent !important;
+  }
+
+  .eyebrow {
+    color: #63708b !important;
+    font-size: 0.62rem !important;
+    letter-spacing: 0.1em !important;
+  }
+
+  .title {
+    color: #050816 !important;
+    font-size: 1.22rem !important;
+    line-height: 1.05 !important;
+  }
+
+  .subtitle {
+    color: #64708a !important;
+    font-size: 0.72rem !important;
+  }
+
+  .accountSummary {
+    display: none !important;
+  }
+
+  .accountCard {
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .tableToolbar {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+    margin: 0 0 12px !important;
+  }
+
+  .toolbarControls,
+  .toolbarControls .headerButtons {
+    width: 100% !important;
+  }
+
+  .toolbarControls .headerButtons {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .tableToolbar > span {
+    align-self: flex-end !important;
+    order: 2 !important;
+  }
+
+  .toolbarControls {
+    order: 1 !important;
+  }
+
+  .toolbarControls .headerButtons .button {
+    min-height: 32px !important;
+    border-radius: 7px !important;
+    font-size: 0.74rem !important;
+  }
+
+  .bulkDeleteButton {
+    width: auto !important;
+    min-height: auto !important;
+    border: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+    color: #f43f5e !important;
+    box-shadow: none !important;
+    font-size: 0.62rem !important;
+    text-transform: none !important;
+  }
+
+  .bulkDeleteButton img {
+    display: none !important;
+  }
+
+  .dashboardMobileList {
+    gap: 10px !important;
+    padding-bottom: 24px !important;
+  }
+
+  .dashboardMobileCard {
+    gap: 0 !important;
+    overflow: hidden !important;
+    border: 1px solid #d7e2f3 !important;
+    border-radius: 10px !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+  }
+
+  .dashboardMobileCardToggle {
+    padding: 13px 12px !important;
+    background: #ffffff !important;
+  }
+
+  .dashboardMobileCard > .dashboardMobileCardHeader {
+    padding: 13px 12px !important;
+    background: #ffffff !important;
+  }
+
+  .dashboardMobileCardHeader {
+    gap: 9px !important;
+    align-items: start !important;
+  }
+
+  .dashboardMobileCheckbox {
+    min-width: 18px !important;
+    min-height: 18px !important;
+    padding-top: 2px !important;
+  }
+
+  .dashboardMobileCardTitleBlock {
+    gap: 3px !important;
+  }
+
+  .dashboardMobileCardTitleBlock strong {
+    color: #050816 !important;
+    font-size: 0.78rem !important;
+    font-weight: 800 !important;
+    line-height: 1.2 !important;
+  }
+
+  .dashboardMobileCardTitleBlock span:not(.dashboardMobileBadge) {
+    color: #64708a !important;
+    font-size: 0.68rem !important;
+    line-height: 1.35 !important;
+  }
+
+  .dashboardMobileChevron {
+    min-width: 29px !important;
+    min-height: 29px !important;
+    border: 1px solid #dbe4f3 !important;
+    border-radius: 7px !important;
+    background: #ffffff !important;
+  }
+
+  .dashboardMobileChevron::before {
+    width: 13px !important;
+    height: 13px !important;
+    background-color: #64708a !important;
+  }
+
+  .dashboardMobileCard:has(.dashboardMobileCardToggle[aria-expanded="true"]) {
+    border-color: #2563eb !important;
+    box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.08) !important;
+  }
+
+  .dashboardMobileMeta,
+  .dashboardMobilePrimaryAction,
+  .dashboardMobileActions {
+    background: #ffffff !important;
+  }
+
+  .dashboardMobileMeta {
+    gap: 10px 18px !important;
+    padding: 12px 12px 10px !important;
+    border-top: 1px solid #e8edf7 !important;
+  }
+
+  .dashboardMobileMeta dt {
+    color: #64708a !important;
+    font-size: 0.52rem !important;
+    font-weight: 800 !important;
+  }
+
+  .dashboardMobileMeta dd {
+    color: #0f172a !important;
+    font-size: 0.62rem !important;
+    font-weight: 650 !important;
+    line-height: 1.25 !important;
+  }
+
+  .dashboardMobilePrimaryAction {
+    padding: 8px 12px !important;
+  }
+
+  .dashboardMobilePrimaryAction .button {
+    min-height: 32px !important;
+    border-radius: 7px !important;
+    font-size: 0.7rem !important;
+    line-height: 1.1 !important;
+  }
+
+  .dashboardMobileActions {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 6px !important;
+    padding: 0 12px 12px !important;
+  }
+
+  .dashboardMobileActionButton {
+    min-height: 32px !important;
+    border-radius: 7px !important;
+    padding: 0 6px !important;
+    font-size: 0.62rem !important;
+    gap: 4px !important;
+  }
+
+  .dashboardMobileActionButton img {
+    display: none !important;
+  }
+
+  .toolbarControls .headerButtons {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+
+  .toolbarControls .headerButtons > span:first-child {
+    order: 2 !important;
+  }
+
+  .toolbarControls .headerButtons > span:last-child {
+    order: 1 !important;
+  }
+
+  .toolbarControls .headerButtons .button {
+    width: 100% !important;
+    font-size: 0.7rem !important;
+    line-height: 1 !important;
+  }
+}
+
 @media (max-width: 860px) {
   .bodyChrome {
     background: #fcfaf7;
@@ -5717,6 +5999,223 @@
 
   .mobileToolbarLabel {
     display: inline;
+  }
+
+  .mobileHeader {
+    min-height: 52px;
+    padding: 8px 12px;
+    background: #11143d;
+    box-shadow: none;
+  }
+
+  .mobileHeaderBrandImage {
+    display: none;
+  }
+
+  .mobileHeaderBrandText {
+    color: #ffffff;
+    font-size: 0.78rem;
+    font-weight: 800;
+  }
+
+  .mobileHeaderMenuButton {
+    width: 28px;
+    height: 28px;
+    border: 0;
+    border-radius: 7px;
+    background: rgba(255, 255, 255, 0.14);
+  }
+
+  .canvas,
+  .bodyChrome,
+  .viewport {
+    background: #f5f6ff;
+  }
+
+  .topbar {
+    padding: 14px 12px 8px;
+  }
+
+  .eyebrow {
+    color: #63708b;
+    font-size: 0.62rem;
+  }
+
+  .title {
+    color: #050816;
+    font-size: 1.22rem;
+    line-height: 1.05;
+  }
+
+  .subtitle {
+    color: #64708a;
+    font-size: 0.72rem;
+  }
+
+  .body {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .accountCard {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .tableToolbar {
+    margin: 0 0 14px;
+    gap: 12px;
+  }
+
+  .toolbarControls .headerButtons {
+    gap: 8px;
+  }
+
+  .toolbarControls .headerButtons .button {
+    min-height: 32px;
+    border-radius: 7px;
+    font-size: 0.74rem;
+  }
+
+  .bulkDeleteButton {
+    width: auto;
+    min-height: auto;
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: #f43f5e;
+    box-shadow: none;
+    font-size: 0.62rem;
+  }
+
+  .bulkDeleteButton img {
+    display: none;
+  }
+
+  .dashboardMobileList {
+    gap: 10px;
+    padding-bottom: 24px;
+  }
+
+  .dashboardMobileCard {
+    gap: 0;
+    overflow: hidden;
+    border: 1px solid #d7e2f3;
+    border-radius: 10px;
+    background: #ffffff;
+    box-shadow: none;
+    cursor: default;
+  }
+
+  .dashboardMobileCardToggle {
+    padding: 13px 12px;
+    background: #ffffff;
+  }
+
+  .dashboardMobileCard > .dashboardMobileCardHeader {
+    padding: 13px 12px;
+    background: #ffffff;
+  }
+
+  .dashboardMobileCardHeader {
+    gap: 9px;
+    align-items: start;
+  }
+
+  .dashboardMobileCheckbox {
+    min-width: 18px;
+    min-height: 18px;
+    padding-top: 2px;
+  }
+
+  .dashboardMobileCardTitleBlock {
+    gap: 3px;
+  }
+
+  .dashboardMobileCardTitleBlock strong {
+    color: #050816;
+    font-size: 0.78rem;
+    font-weight: 800;
+    line-height: 1.2;
+  }
+
+  .dashboardMobileCardTitleBlock span:not(.dashboardMobileBadge) {
+    color: #64708a;
+    font-size: 0.68rem;
+    line-height: 1.35;
+  }
+
+  .dashboardMobileChevron {
+    min-width: 29px;
+    min-height: 29px;
+    border: 1px solid #dbe4f3;
+    border-radius: 7px;
+    background: #ffffff;
+  }
+
+  .dashboardMobileChevron::before {
+    width: 13px;
+    height: 13px;
+    background-color: #64708a;
+  }
+
+  .dashboardMobileCard:has(.dashboardMobileCardToggle[aria-expanded="true"]) {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.08);
+  }
+
+  .dashboardMobileMeta {
+    gap: 10px 18px;
+    padding: 12px 12px 10px;
+    border-top: 1px solid #e8edf7;
+    background: #ffffff;
+  }
+
+  .dashboardMobileMeta dt {
+    color: #64708a;
+    font-size: 0.52rem;
+    font-weight: 800;
+  }
+
+  .dashboardMobileMeta dd {
+    color: #0f172a;
+    font-size: 0.62rem;
+    font-weight: 650;
+    line-height: 1.25;
+  }
+
+  .dashboardMobilePrimaryAction {
+    padding: 8px 12px;
+    background: #ffffff;
+  }
+
+  .dashboardMobilePrimaryAction .button {
+    min-height: 32px;
+    border-radius: 7px;
+    font-size: 0.7rem;
+    line-height: 1.1;
+  }
+
+  .dashboardMobileActions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    padding: 0 12px 12px;
+    background: #ffffff;
+  }
+
+  .dashboardMobileActionButton {
+    min-height: 32px;
+    border-radius: 7px;
+    padding: 0 6px;
+    font-size: 0.62rem;
+    gap: 4px;
+  }
+
+  .dashboardMobileActionButton img {
+    display: none;
   }
 
   .linkBar {
@@ -6599,5 +7098,39 @@
   .accountSettingsActionButtons .buttonSecondary,
   .accountSettingsActionButtons .accessActionButton {
     width: 100%;
+  }
+}
+
+@media (max-width: 900px) {
+  .button,
+  .buttonAccent,
+  .buttonSecondary,
+  .buttonDanger,
+  .buttonWizard,
+  .bulkDeleteButton,
+  .tablePageButton,
+  .tableModeToggleButton,
+  .tableSortButton,
+  .tableFilterButton,
+  .tableFilterClearButton,
+  .tableFilterResetButton,
+  .actionButton,
+  .accessActionButton,
+  .accountPrimaryButton,
+  .accountDeleteButton,
+  .accountEditButton,
+  .adminUserActionButton,
+  .adminUserMobileCardButton,
+  .adminUploadButton,
+  .reportBackButton,
+  .reportToggleButton,
+  .accountToggleButton,
+  .reportMobileFiltersButton,
+  .reportScopeInlineIconButton,
+  .mobileModalClose,
+  .dashboardMobilePrimaryAction .button,
+  .dashboardMobileActionButton {
+    font-size: 0.72rem !important;
+    line-height: 1.1 !important;
   }
 }

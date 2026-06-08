@@ -1181,8 +1181,9 @@ export function CanvasActionButtons({
           </div>
         ) : null}
 
-        <div className="fixed inset-x-0 bottom-0 z-[95] px-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] md:hidden">
-          <div className="mx-auto flex max-w-max items-center gap-2 rounded-[24px] border border-slate-300/80 bg-white/94 px-2.5 py-2.5 shadow-[0_18px_40px_rgba(15,23,42,0.22)] backdrop-blur">
+        <div className="fixed inset-x-0 bottom-0 z-[95] overflow-hidden px-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] md:hidden">
+          <div className="overflow-x-auto overscroll-x-contain">
+          <div className="mx-auto flex w-max min-w-max items-center gap-2 rounded-[24px] border border-slate-300/80 bg-white/94 px-2.5 py-2.5 shadow-[0_18px_40px_rgba(15,23,42,0.22)] backdrop-blur">
             <Link href={leaveHref} aria-label={leaveTitle} title={leaveTitle} className={floatingButtonClass}>
               <span
                 aria-hidden="true"
@@ -1190,22 +1191,6 @@ export function CanvasActionButtons({
                 style={{ WebkitMaskImage: "url('/icons/back.svg')", maskImage: "url('/icons/back.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
               />
             </Link>
-            <button
-              type="button"
-              aria-label="Search components"
-              title="Search components"
-              onClick={() => {
-                onCloseGuestNotesPanel?.();
-                setShowSearchMenu((prev) => !prev);
-              }}
-              className={floatingButtonClass}
-            >
-              <span
-                aria-hidden="true"
-                className="h-6 w-6 bg-current"
-                style={{ WebkitMaskImage: "url('/icons/finddocument.svg')", maskImage: "url('/icons/finddocument.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
-              />
-            </button>
             {isGuestViewer ? (
               <button
                 type="button"
@@ -1224,32 +1209,6 @@ export function CanvasActionButtons({
                 />
               </button>
             ) : null}
-            <button
-              type="button"
-              aria-label="Zoom to fit"
-              title="Zoom to fit"
-              onClick={() => rf?.fitView({ duration: 300, padding: 0.2 })}
-              className={floatingButtonClass}
-            >
-              <span
-                aria-hidden="true"
-                className="h-6 w-6 bg-current"
-                style={{ WebkitMaskImage: "url('/icons/zoomfit.svg')", maskImage: "url('/icons/zoomfit.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
-              />
-            </button>
-            <button
-              type="button"
-              aria-label="Reset zoom"
-              title="Reset zoom"
-              onClick={() => rf?.setViewport({ x: 0, y: 0, zoom: 1 }, { duration: 300 })}
-              className={floatingButtonClass}
-            >
-              <span
-                aria-hidden="true"
-                className="h-6 w-6 bg-current"
-                style={{ WebkitMaskImage: "url('/icons/resetzoom.svg')", maskImage: "url('/icons/resetzoom.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
-              />
-            </button>
             {!isGuestViewer ? (
               <>
                 <span title={!canWriteMap && !canCreateSticky ? addDisabledReason : "Add component"}>
@@ -1283,6 +1242,26 @@ export function CanvasActionButtons({
                     />
                   </button>
                 </span>
+              </>
+            ) : null}
+            <button
+              type="button"
+              aria-label="Search components"
+              title="Search components"
+              onClick={() => {
+                onCloseGuestNotesPanel?.();
+                setShowSearchMenu((prev) => !prev);
+              }}
+              className={floatingButtonClass}
+            >
+              <span
+                aria-hidden="true"
+                className="h-6 w-6 bg-current"
+                style={{ WebkitMaskImage: "url('/icons/finddocument.svg')", maskImage: "url('/icons/finddocument.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
+              />
+            </button>
+            {!isGuestViewer ? (
+              <>
                 <span title={canUseWizard ? "Open wizard" : wizardDisabledReason}>
                   <button
                     type="button"
@@ -1301,6 +1280,33 @@ export function CanvasActionButtons({
                 </span>
               </>
             ) : null}
+            <button
+              type="button"
+              aria-label="Reset zoom"
+              title="Reset zoom"
+              onClick={() => rf?.setViewport({ x: 0, y: 0, zoom: 1 }, { duration: 300 })}
+              className={floatingButtonClass}
+            >
+              <span
+                aria-hidden="true"
+                className="h-6 w-6 bg-current"
+                style={{ WebkitMaskImage: "url('/icons/resetzoom.svg')", maskImage: "url('/icons/resetzoom.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
+              />
+            </button>
+            <button
+              type="button"
+              aria-label="Zoom to fit"
+              title="Zoom to fit"
+              onClick={() => rf?.fitView({ duration: 300, padding: 0.2 })}
+              className={floatingButtonClass}
+            >
+              <span
+                aria-hidden="true"
+                className="h-6 w-6 bg-current"
+                style={{ WebkitMaskImage: "url('/icons/zoomfit.svg')", maskImage: "url('/icons/zoomfit.svg')", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", WebkitMaskSize: "contain", maskSize: "contain" }}
+              />
+            </button>
+          </div>
           </div>
         </div>
       </>

@@ -481,12 +481,13 @@ function SystemMapCanvasInner({
       y: snapToMinorGrid(flowPoint.y),
     };
   }, [rf, snapToMinorGrid]);
-  const passScopedWriteBlocked =
+  const scopedAccessWriteBlocked =
     accessState?.currentAccessStatus === "active" &&
-    accessState.currentAccessType === "pass_30d" &&
+    (accessState.currentAccessType === "pass_30d" || accessState.currentAccessType === "trial_7d") &&
     !hasCurrentPassAssignment;
-  const accessAllowsEditing = !isGuestViewer && !forceReadOnly && (accessState?.canEditMaps ?? true) && !passScopedWriteBlocked;
-  const canSaveTemplate = !forceReadOnly && hasActiveTemplateAccess(accessState);
+  const effectiveForceReadOnly = forceReadOnly && !(!!map && !!userId && map.owner_id === userId);
+  const accessAllowsEditing = !isGuestViewer && !effectiveForceReadOnly && (accessState?.canEditMaps ?? true) && !scopedAccessWriteBlocked;
+  const canSaveTemplate = !effectiveForceReadOnly && hasActiveTemplateAccess(accessState);
   const isTemplateEditor = Boolean(templateEditorTemplateId);
   const isPlatformAdmin = userId === platformAdminUserId || accessState?.userId === platformAdminUserId;
   const canWriteMap = accessAllowsEditing && (mapRole === "partial_write" || mapRole === "full_write");
@@ -495,7 +496,7 @@ function SystemMapCanvasInner({
   const canCreateSticky = accessAllowsEditing && !!userId;
   const allowedNodeKinds = useMemo(() => getAllowedNodeKindsForCategory(mapCategoryId), [mapCategoryId]);
   const canUseWizard = canWriteMap && allowedNodeKinds.some((kind) => kind.startsWith("incident_"));
-  const canUseSuggestionCheck = !isGuestViewer && !forceReadOnly && !!map;
+  const canUseSuggestionCheck = !isGuestViewer && !effectiveForceReadOnly && !!map;
   const {
     isLoadingSuggestions,
     suggestionProgress,
@@ -516,11 +517,13 @@ function SystemMapCanvasInner({
     relations,
     userId,
   });
-  const readOnlyActionReason = forceReadOnly
+  const readOnlyActionReason = effectiveForceReadOnly
     ? "Case studies are read only."
     : !accessAllowsEditing
-    ? passScopedWriteBlocked
-      ? "This map belongs to an older 30 Day Access period. Start monthly access to restore full editing across older pass maps."
+    ? scopedAccessWriteBlocked
+      ? accessState?.currentAccessType === "trial_7d"
+        ? "This map is not the active Free Account map. Start paid access to restore editing across older maps."
+        : "This map is not the active 30 Day Access map. Start monthly access to restore full editing across older maps."
       : accessState?.readOnlyReason || "This map is read only for your current access."
     : undefined;
   const deleteDisabledReason = !canWriteMap
@@ -565,9 +568,9 @@ function SystemMapCanvasInner({
   const relationshipCategoryOptions = useMemo(() => getRelationshipCategoryOptions(mapCategoryId), [mapCategoryId]);
   const canEditElement = useCallback(
     (element: CanvasElementRow) =>
-      !forceReadOnly &&
+      !effectiveForceReadOnly &&
       (canWriteMap || (mapRole === "read" && element.element_type === "sticky_note" && !!userId && element.created_by_user_id === userId)),
-    [canWriteMap, forceReadOnly, mapRole, userId]
+    [canWriteMap, effectiveForceReadOnly, mapRole, userId]
   );
   const mapRoleLabel = useCallback((role: string | null | undefined) => {
     const normalized = (role || "").toLowerCase();
@@ -615,7 +618,7 @@ function SystemMapCanvasInner({
     });
     return m;
   }, [mapMembers]);
-  const displayMapRole = forceReadOnly ? "read" : mapRole;
+  const displayMapRole = effectiveForceReadOnly ? "read" : mapRole;
   const anchorElements = useMemo(
     () => elements.filter((element) => element.element_type === "anchor"),
     [elements]
@@ -2777,7 +2780,7 @@ function SystemMapCanvasInner({
     selectedTextBoxId,
   ]);
   const desktopToolbarSelection = useMemo(() => {
-    if (forceReadOnly) return null;
+    if (effectiveForceReadOnly) return null;
     if (!selectedSingleFlowId) return null;
     if (!selectedSingleFlowId.startsWith("process:")) {
       if (!nodesById.has(selectedSingleFlowId)) return null;
@@ -2823,7 +2826,7 @@ function SystemMapCanvasInner({
           supportsRelationships: true,
         };
     }
-  }, [elementsById, forceReadOnly, nodesById, selectedSingleFlowId]);
+  }, [effectiveForceReadOnly, elementsById, nodesById, selectedSingleFlowId]);
   const availableFactorPeople = useMemo(
     () =>
       elements
@@ -5904,7 +5907,7 @@ function SystemMapCanvasInner({
       event.preventDefault();
       event.stopPropagation();
       armPaneClearSuppression();
-      if (forceReadOnly) {
+      if (effectiveForceReadOnly) {
         selectCanvasNode(event, node);
         return;
       }
@@ -5916,7 +5919,7 @@ function SystemMapCanvasInner({
       armPaneClearSuppression,
       currentSpecificSelectedFlowId,
       desktopNodeAction,
-      forceReadOnly,
+      effectiveForceReadOnly,
       isNodeTextScrollbarDoubleClick,
       isMobile,
       selectCanvasNode,

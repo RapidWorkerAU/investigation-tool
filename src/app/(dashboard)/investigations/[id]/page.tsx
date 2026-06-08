@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import DashboardShell from "@/components/dashboard/DashboardShell";
 import styles from "@/components/dashboard/DashboardShell.module.css";
 import { DashboardPageSkeleton } from "@/components/dashboard/DashboardTableLoadingState";
@@ -448,9 +448,7 @@ const buildCaseStudyAccessState = (userId: string): BillingAccessState => ({
 export default function InvestigationReportPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const supabase = useMemo(() => createSupabaseBrowser(), []);
-  const enteredFromCaseStudies = searchParams.get("from") === "case-studies";
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1493,7 +1491,20 @@ export default function InvestigationReportPage() {
       }
 
       const caseStudyAccess = (((caseStudyRows ?? []) as CaseStudyAccessRow[])[0] ?? null);
-      const nextIsCaseStudyView = Boolean(caseStudyAccess?.id);
+      const { data: ownershipRow, error: ownershipError } = await supabase
+        .schema("ms")
+        .from("system_maps")
+        .select("owner_id")
+        .eq("id", params.id)
+        .single();
+
+      if (ownershipError) {
+        setError(ownershipError.message || "Unable to confirm map ownership.");
+        setLoading(false);
+        return;
+      }
+
+      const nextIsCaseStudyView = Boolean(caseStudyAccess?.id) && ownershipRow?.owner_id !== user.id;
       setIsCaseStudyView(nextIsCaseStudyView);
 
       if (nextIsCaseStudyView) {
@@ -1941,7 +1952,7 @@ export default function InvestigationReportPage() {
     isCaseStudyView
       ? "Report generation is unavailable for read-only case studies."
       : accessState && !accessCanUseReportGeneration(accessState)
-      ? "Report generation is not available on the 7 day free trial."
+      ? "Report generation is not available on the free account."
       : null;
   const canUseReportGeneration = reportGenerationDisabledReason === null;
 
@@ -2027,8 +2038,8 @@ export default function InvestigationReportPage() {
   const pagedEvidence = getPagedRows(filteredEvidenceRows, "evidence");
   const pagedFindings = getPagedRows(filteredFindingRows, "finding");
   const pagedRecommendations = getPagedRows(filteredRecommendationRows, "recommendation");
-  const activeShellNav = isCaseStudyView || enteredFromCaseStudies ? "case-studies" : "dashboard";
-  const backHref = isCaseStudyView || enteredFromCaseStudies ? "/case-studies" : "/dashboard";
+  const activeShellNav = isCaseStudyView ? "case-studies" : "dashboard";
+  const backHref = isCaseStudyView ? "/case-studies" : "/dashboard";
   const openMapHref = isCaseStudyView
     ? `/investigations/${params.id}/canvas?from=case-studies`
     : `/investigations/${params.id}/canvas`;

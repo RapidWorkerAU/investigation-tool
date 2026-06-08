@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
   }
 
   const limit = enforceRateLimit(request, {
-    scope: "trial-start",
+    scope: "free-account-start",
     identifier: user.userId,
     limit: 5,
     windowMs: 60 * 60 * 1000,
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
           accessType: "trial_7d",
         });
       } catch (error) {
-        console.error("Failed to send admin trial signup notification", error);
+        console.error("Failed to send admin free account signup notification", error);
       }
     }
 
@@ -84,11 +84,11 @@ export async function POST(request: NextRequest) {
         text: email.text,
         tags: [
           { name: "category", value: "access" },
-          { name: "template", value: "trial-started" },
+          { name: "template", value: "free-account-started" },
         ],
       });
     } catch (error) {
-      console.error("Failed to send trial started email", error);
+      console.error("Failed to send free account started email", error);
     }
   }
 

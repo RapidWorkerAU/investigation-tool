@@ -202,7 +202,6 @@ export function useSystemMapBootstrap({
 
         if (verifiedCaseStudyReadOnly) {
           nextAccessState = buildCaseStudyAccessState(user.id);
-          setAccessState(nextAccessState);
         } else {
           nextAccessState = await fetchAccessState(session.access_token);
           if (cancelled) return;
@@ -221,9 +220,7 @@ export function useSystemMapBootstrap({
 
         setLoadingStage(50, "Loading map shell, nodes, and canvas data...");
         const [memberRes, mapRes, typeRes, nodeRes, elementRes, relRes, anchorLinkRes, viewRes] = await Promise.all([
-          verifiedCaseStudyReadOnly
-            ? Promise.resolve({ data: null, error: null })
-            : supabaseBrowser.schema("ms").from("map_members").select("role").eq("map_id", mapId).eq("user_id", user.id).maybeSingle(),
+          supabaseBrowser.schema("ms").from("map_members").select("role").eq("map_id", mapId).eq("user_id", user.id).maybeSingle(),
           supabaseBrowser.schema("ms").from("system_maps").select("id,title,description,owner_id,updated_by_user_id,map_code,map_category,updated_at,created_at").eq("id", mapId).maybeSingle(),
           supabaseBrowser.schema("ms").from("document_types").select("id,map_id,name,level_rank,band_y_min,band_y_max,is_active").eq("is_active", true).or(`map_id.eq.${mapId},map_id.is.null`).order("level_rank", { ascending: true }),
           supabaseBrowser.schema("ms").from("document_nodes").select("id,map_id,type_id,title,document_number,discipline,owner_user_id,owner_name,user_group,pos_x,pos_y,width,height,is_archived").eq("map_id", mapId).eq("is_archived", false),
@@ -261,6 +258,26 @@ export function useSystemMapBootstrap({
           loadedMap.owner_id === user.id
             ? "full_write"
             : ((memberRes.data?.role as MapRole | undefined) ?? "read");
+        const applyCaseStudyReadOnly = verifiedCaseStudyReadOnly && loadedMap.owner_id !== user.id;
+        if (verifiedCaseStudyReadOnly) {
+          if (applyCaseStudyReadOnly) {
+            setAccessState(nextAccessState);
+          } else {
+            nextAccessState = await fetchAccessState(session.access_token);
+            if (cancelled) return;
+            setAccessState(nextAccessState);
+
+            if (accessRequiresSelection(nextAccessState)) {
+              window.location.assign("/subscribe");
+              return;
+            }
+
+            if (accessBlocksInvestigationEntry(nextAccessState)) {
+              window.location.assign("/dashboard?mapAccess=blocked");
+              return;
+            }
+          }
+        }
         setMapRole(resolvedMapRole);
         setMap(loadedMap);
         const nextCategory = (loadedMap.map_category || defaultMapCategoryId) as MapCategoryId;
@@ -268,9 +285,9 @@ export function useSystemMapBootstrap({
         setLoadingStage(75, "Loading collaborators and investigation structure...");
         await loadMapMembers(loadedMap.owner_id);
         if (
-          !verifiedCaseStudyReadOnly &&
+          !applyCaseStudyReadOnly &&
           nextAccessState.currentAccessStatus === "active" &&
-          nextAccessState.currentAccessType === "pass_30d" &&
+          (nextAccessState.currentAccessType === "pass_30d" || nextAccessState.currentAccessType === "trial_7d") &&
           nextAccessState.currentAccessPeriodId
         ) {
           const { data: assignment, error: assignmentError } = await supabaseBrowser

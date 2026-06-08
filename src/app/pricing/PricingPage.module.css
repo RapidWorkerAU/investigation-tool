@@ -1,0 +1,456 @@
+.planSection {
+  padding: 82px 28px 44px;
+}
+
+.planGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+  width: min(1280px, 100%);
+  margin: 0 auto;
+}
+
+.planCard {
+  position: relative;
+  display: grid;
+  grid-template-rows: 1fr auto auto;
+  gap: 24px;
+  min-height: 330px;
+  border: 1px solid #dbe4f3;
+  border-radius: 10px;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(56, 189, 248, 0.12), transparent 34%),
+    #fff;
+  box-shadow: 0 16px 42px rgba(16, 22, 64, 0.06);
+}
+
+.planStrip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  max-width: 1044px;
+  margin: 0 auto;
+  border-top: 1px solid #dbe4f3;
+  border-bottom: 1px solid #dbe4f3;
+}
+
+.planStripItem {
+  padding: 32px 28px;
+}
+
+.planStripItem:not(:last-child) {
+  border-right: 1px solid #dbe4f3;
+}
+
+.planStripNote {
+  margin: 20px auto 0;
+  color: #64708a;
+  font-size: 12.5px;
+  line-height: 1.7;
+  text-align: center;
+}
+
+.planCardFeatured {
+  border-color: rgba(37, 99, 235, 0.34);
+  background:
+    radial-gradient(circle at 100% 0%, rgba(56, 189, 248, 0.2), transparent 36%),
+    linear-gradient(180deg, #f5f8ff, #fff);
+}
+
+.planBadge {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: #101640;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.planCard h2 {
+  max-width: 170px;
+  margin: 0 0 12px;
+  color: #12172f;
+  font-size: 22px;
+  font-weight: 750;
+  letter-spacing: -0.45px;
+  line-height: 1.12;
+}
+
+.planCard p {
+  margin: 0;
+  color: #64708a;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.priceBlock {
+  display: grid;
+  gap: 4px;
+}
+
+.priceBlock strong {
+  color: #12172f;
+  font-size: 36px;
+  font-weight: 800;
+  letter-spacing: -1px;
+  line-height: 1;
+}
+
+.priceBlock span {
+  color: #64708a;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.planPrimaryCta,
+.planSecondaryCta {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 750;
+  transition:
+    background-color 180ms ease,
+    box-shadow 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
+}
+
+.planPrimaryCta {
+  background: #2563eb;
+  color: #fff;
+  box-shadow: 0 14px 28px rgba(37, 99, 235, 0.24);
+}
+
+.planPrimaryCta:hover,
+.planSecondaryCta:hover {
+  transform: translateY(-1px);
+}
+
+.planPrimaryCta:hover {
+  background: #1d4ed8;
+  box-shadow: 0 18px 34px rgba(37, 99, 235, 0.3);
+}
+
+.planSecondaryCta {
+  border: 1.5px solid #dbe4f3;
+  background: #fff;
+  color: #101640;
+}
+
+.planSecondaryCta:hover {
+  border-color: #c7d8ff;
+  background: #f5f8ff;
+  color: #1d4ed8;
+}
+
+.compareSection {
+  padding: 36px 28px 82px;
+}
+
+.tableWrap {
+  width: min(1280px, 100%);
+  margin: 0 auto;
+  overflow-x: auto;
+  border: 1px solid #dbe4f3;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 20px 56px rgba(16, 22, 64, 0.07);
+}
+
+.compareTable {
+  width: 100%;
+  min-width: 980px;
+  border-collapse: collapse;
+}
+
+.compareTable th,
+.compareTable td {
+  border-bottom: 1px solid #eef2fb;
+  padding: 15px 16px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.compareTable th:first-child,
+.compareTable td:first-child {
+  text-align: left;
+}
+
+.compareTable th {
+  background: #fff;
+  color: #64708a;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.compareTable td:first-child {
+  color: #12172f;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.featuredCell {
+  background: #f5f8ff;
+}
+
+.groupRow td {
+  background: #f7f8ff;
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.groupRow .featuredCell {
+  background: #eef4ff;
+}
+
+.planHeaderShort {
+  display: none;
+}
+
+.included,
+.notIncluded,
+.valuePill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.included {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  color: #16a34a;
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.notIncluded {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.valuePill {
+  border: 1px solid #dbe4f3;
+  background: #fff;
+  color: #334155;
+}
+
+.footnote {
+  width: min(760px, 100%);
+  margin: 20px auto 0;
+  color: #64708a;
+  font-size: 13px;
+  line-height: 1.7;
+  text-align: center;
+}
+
+@media (max-width: 1100px) {
+  .planGrid,
+  .planStrip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .planStripItem:nth-child(2) {
+    border-right: 0;
+  }
+
+  .planStripItem:nth-child(-n + 2) {
+    border-bottom: 1px solid #dbe4f3;
+  }
+}
+
+@media (max-width: 760px) {
+  .planGrid,
+  .planStrip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .planStrip {
+    max-width: 560px;
+  }
+
+  .planStripItem {
+    display: grid;
+    grid-template-rows: auto minmax(78px, 1fr) auto auto auto;
+    padding: 22px 12px;
+  }
+
+  .planStripItem:not(:last-child) {
+    border-right: 0;
+    border-bottom: 0;
+  }
+
+  .planStripItem:nth-child(odd) {
+    border-right: 1px solid #dbe4f3;
+  }
+
+  .planStripItem:nth-child(-n + 2) {
+    border-bottom: 1px solid #dbe4f3;
+  }
+
+  .planStripItem div[style*="font-size: 13"] {
+    min-height: 0 !important;
+    margin-bottom: 18px !important;
+    font-size: 11.5px !important;
+    line-height: 1.45 !important;
+  }
+
+  .planStripItem div[style*="font-size: 32"] {
+    font-size: 24px !important;
+  }
+
+  .planStripItem div[style*="font-size: 12"] {
+    margin-bottom: 18px !important;
+    font-size: 10.5px !important;
+  }
+
+  .planStripItem a {
+    align-self: end;
+    padding: 9px 6px !important;
+    font-size: 11.5px !important;
+    line-height: 1.25;
+  }
+
+  .tableWrap {
+    border-radius: 8px;
+  }
+
+  .compareTable {
+    min-width: 0;
+    table-layout: fixed;
+  }
+
+  .compareTable th,
+  .compareTable td {
+    padding: 10px 6px;
+    white-space: normal;
+    word-break: normal;
+    overflow-wrap: normal;
+    hyphens: none;
+  }
+
+  .compareTable th:first-child,
+  .compareTable td:first-child {
+    width: 31%;
+  }
+
+  .compareTable th:not(:first-child),
+  .compareTable td:not(:first-child) {
+    width: 17.25%;
+  }
+
+  .compareTable th:nth-child(3),
+  .compareTable td:nth-child(3) {
+    width: 20%;
+  }
+
+  .compareTable th {
+    font-size: 9.5px;
+    font-weight: 750;
+    letter-spacing: 0.04em;
+    line-height: 1.25;
+  }
+
+  .compareTable td:first-child {
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.35;
+  }
+
+  .compareTable td:not(:first-child) {
+    font-size: 10.5px;
+  }
+
+  .groupRow td {
+    width: auto;
+    font-size: 9.5px;
+    letter-spacing: 0.05em;
+    text-align: left;
+  }
+
+  .planHeaderFull {
+    display: none;
+  }
+
+  .planHeaderShort {
+    display: inline;
+  }
+
+  .included,
+  .notIncluded {
+    width: 18px;
+    height: 18px;
+    font-size: 17px;
+  }
+
+  .valuePill {
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: #334155;
+    font-size: 8.75px;
+    font-weight: 500;
+    line-height: 1.25;
+    white-space: normal;
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+}
+
+@media (max-width: 520px) {
+  .planSection,
+  .compareSection {
+    padding-right: 18px;
+    padding-left: 18px;
+  }
+
+  .planStripItem {
+    padding: 20px 10px;
+  }
+
+  .compareTable th,
+  .compareTable td {
+    padding-right: 4px;
+    padding-left: 4px;
+  }
+
+  .compareTable th {
+    font-size: 8.5px;
+  }
+
+  .compareTable td:first-child {
+    font-size: 10px;
+  }
+
+  .valuePill {
+    font-size: 8px;
+  }
+}

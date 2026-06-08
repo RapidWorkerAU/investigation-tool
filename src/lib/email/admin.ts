@@ -39,7 +39,7 @@ function cleanValue(value: string | null | undefined, fallback = "Not provided")
 function formatAccessTypeLabel(accessType: Exclude<AdminAccessType, null>) {
   switch (accessType) {
     case "trial_7d":
-      return "7 day trial";
+      return "Free account";
     case "pass_30d":
       return "30 day pass";
     case "subscription_monthly":

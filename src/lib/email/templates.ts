@@ -405,41 +405,38 @@ export const emailTemplates = {
     });
   },
 
-  trialStarted({ firstName, endsAt, actionUrl }: AccessTemplateArgs): TemplateResult {
-    const endsLabel = formatAccessDateTime(endsAt) ?? "in 7 days";
+  trialStarted({ firstName, actionUrl }: AccessTemplateArgs): TemplateResult {
     return renderTemplate({
-      preheader: "Your 7 day trial is active.",
-      title: "Your 7 day trial is active",
+      preheader: "Your free account is active.",
+      title: "Your free account is active",
       intro: [
         greeting(firstName),
-        `Your free trial is now active and will end on ${endsLabel}.`,
+        "Your free Investigation Tool account is now active.",
       ],
       highlights: [
-        "Your trial includes one investigation map.",
+        "Your free account includes one investigation map.",
+        "Export, sharing, duplication, reporting, and templates remain available on paid or organisation access.",
         "You can start mapping immediately from your dashboard.",
       ],
       ctaLabel: "Open dashboard",
       ctaUrl: actionUrl || absoluteUrl("/dashboard"),
-      note: `Access times shown in Investigation Tool are displayed in ${getAccessTimeZoneLabel()}.`,
     });
   },
 
-  trialEndsToday({ firstName, endsAt, actionUrl }: AccessTemplateArgs): TemplateResult {
-    const endsLabel = formatAccessDateTime(endsAt) ?? "today";
+  trialEndsToday({ firstName, actionUrl }: AccessTemplateArgs): TemplateResult {
     return renderTemplate({
-      preheader: "Your 7 day trial ends today.",
-      title: "Your 7 day trial ends today",
+      preheader: "Your free account is active.",
+      title: "Your free account is active",
       intro: [
         greeting(firstName),
-        `Your free Investigation Tool trial expires ${endsLabel}.`,
+        "Your free Investigation Tool account remains active with restricted access.",
       ],
       highlights: [
-        "Upgrade to paid access to keep working in your current investigation map.",
-        "Monthly access also restores your existing map and removes the single-map cap.",
+        "Paid access unlocks export, reporting, sharing, duplication, and additional map capacity.",
+        "Monthly access removes the single-map cap for ongoing investigation work.",
       ],
       ctaLabel: "View paid access",
       ctaUrl: actionUrl || absoluteUrl("/subscribe"),
-      note: `Access times shown in Investigation Tool are displayed in ${getAccessTimeZoneLabel()}.`,
     });
   },
 

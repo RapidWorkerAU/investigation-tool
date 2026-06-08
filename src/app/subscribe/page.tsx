@@ -84,7 +84,7 @@ function SubscribePageContent() {
     setProcessingTrial(false);
 
     if (!response.ok) {
-      setNotice(data?.error || "Unable to activate the trial.");
+      setNotice(data?.error || "Unable to activate the free account.");
       return;
     }
 
@@ -171,7 +171,7 @@ function SubscribePageContent() {
             <div className={styles.copyBlock}>
               <h1>{userEmail ? `Choose your access for ${userEmail}.` : "Choose your access."}</h1>
               <p>
-                Start with a free trial, buy a single 30 day investigation pass, or enable ongoing monthly access for unrestricted
+                Start with a free account, buy a single 30 day investigation pass, or enable ongoing monthly access for unrestricted
                 incident investigation workflow, mapping, collaboration, and reporting.
               </p>
             </div>
@@ -228,17 +228,17 @@ function SubscribePageContent() {
             <article className={styles.tile}>
               <div className={styles.tileHead}>
                 <div>
-                  <h2>Free Trial</h2>
-                  <p>7 days access to one investigation map with write access and no export.</p>
+                  <h2>Free Account</h2>
+                  <p>Ongoing access to one investigation map with write access and no export.</p>
                 </div>
                 <div className={styles.priceBlock}>
                   <span className={styles.price}>Free</span>
-                  <span className={styles.priceMeta}>7 day access</span>
+                  <span className={styles.priceMeta}>Restricted access</span>
                 </div>
               </div>
               <div className={styles.actions}>
                 <button type="button" className={styles.secondaryButton} onClick={startTrial} disabled={processingTrial || loading}>
-                  {processingTrial ? "Activating..." : "Start free trial"}
+                  {processingTrial ? "Activating..." : "Start free account"}
                 </button>
               </div>
             </article>
@@ -295,7 +295,7 @@ function SubscribePageContent() {
           <div className={styles.visualGlow} />
           <div className={styles.visualLines} />
           <div className={styles.visualBadge}>
-            Start instantly with a free trial, choose a single investigation pass when you need focused access, or enable ongoing coverage
+            Start instantly with a free account, choose a single investigation pass when you need focused access, or enable ongoing coverage
             for your team.
           </div>
         </aside>

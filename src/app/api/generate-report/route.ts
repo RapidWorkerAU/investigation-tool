@@ -386,7 +386,7 @@ export async function POST(request: NextRequest) {
       readOnlyReason: accessState.readOnlyReason,
     });
     return NextResponse.json(
-      { error: "Report generation is not available on the 7 day free trial." },
+      { error: "Report generation is not available on the free account." },
       { status: 403 },
     );
   }

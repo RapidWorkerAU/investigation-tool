@@ -19,7 +19,9 @@ const accountTabs: Array<{ id: AccountSectionId; label: string; description: str
 ];
 
 const formatDateTime = (value: string | null) =>
-  value
+  value === "infinity"
+    ? "Ongoing"
+    : value
     ? new Intl.DateTimeFormat("en-AU", {
         day: "2-digit",
         month: "short",
@@ -58,7 +60,7 @@ function renderAccessDateTimeMobile(value: string | null) {
 const formatAccessType = (value: BillingAccessState["currentAccessType"]) => {
   switch (value) {
     case "trial_7d":
-      return "7 Day Trial";
+      return "Free Account";
     case "pass_30d":
       return "30 Day Access";
     case "subscription_monthly":

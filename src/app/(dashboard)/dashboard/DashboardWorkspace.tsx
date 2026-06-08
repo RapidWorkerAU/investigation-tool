@@ -232,6 +232,8 @@ export default function DashboardWorkspace() {
   const [isLinking, setIsLinking] = useState(false);
   const [showLinkForm, setShowLinkForm] = useState(false);
   const [showCreateInvestigationModal, setShowCreateInvestigationModal] = useState(false);
+  const [showPass30ReplaceMapModal, setShowPass30ReplaceMapModal] = useState(false);
+  const [pass30ReplacementAcknowledged, setPass30ReplacementAcknowledged] = useState(false);
   const [newInvestigationTitle, setNewInvestigationTitle] = useState("");
   const [newInvestigationDescription, setNewInvestigationDescription] = useState("");
   const [newInvestigationTemplateQuery, setNewInvestigationTemplateQuery] = useState("");
@@ -425,6 +427,7 @@ export default function DashboardWorkspace() {
     accessState?.currentAccessType === "pass_30d" &&
     accessState.currentAccessStatus === "active" &&
     !canCreateMaps;
+  const canReplacePass30Map = pass30LimitReached;
   const canShareMaps = (accessState?.canShareMaps ?? false) && !pass30LimitReached;
   const canDuplicateMaps =
     (accessState?.canDuplicateMaps ?? false) &&
@@ -433,10 +436,10 @@ export default function DashboardWorkspace() {
   const accessStatus = accessState?.currentAccessStatus ?? null;
   const expiredTrialAccess = isExpiredTrialAccess(accessState);
   const accountAccessSummary =
-    accessState?.currentPeriodEndsAt
-      ? accessState.currentAccessType === "trial_7d" && accessState.currentAccessStatus === "active"
-        ? `7 Day Trial until ${formatAccessExpiry(accessState.currentPeriodEndsAt)}`
-        : accessState.currentAccessType === "pass_30d" && accessState.currentAccessStatus === "active"
+    accessState?.currentAccessType === "trial_7d" && accessState.currentAccessStatus === "active"
+      ? "Free Account"
+      : accessState?.currentPeriodEndsAt
+        ? accessState.currentAccessType === "pass_30d" && accessState.currentAccessStatus === "active"
           ? `30 Day Access until ${formatAccessExpiry(accessState.currentPeriodEndsAt)}`
           : accessState.currentAccessType === "subscription_monthly" && accessState.cancellationScheduled
             ? `Ongoing Subscription cancels on ${formatAccessExpiry(accessState.currentPeriodEndsAt)}`
@@ -463,7 +466,7 @@ export default function DashboardWorkspace() {
     accessStatus === "payment_failed"
       ? "Your maps are currently read only because the latest subscription payment did not complete. Update your payment information to restore full access."
       : expiredTrialAccess
-        ? "Your 7 day trial has expired. Your investigation data is still retained, but this map is locked until you move to paid access. Choose 30 day access to keep working in this map, or upgrade to monthly access for unlimited maps and continued access to your existing investigation."
+        ? "Your free account access is currently restricted. Your investigation data is still retained, but this map is locked until you move to paid access. Choose 30 day access to keep working in this map, or upgrade to monthly access for unlimited maps and continued access to your existing investigation."
         : "Your maps are currently read only because your access is no longer active. Choose a new access type to restore editing, duplication, sharing, and export.";
   const restrictedModalSecondaryLabel = mapAccessBlocked ? "Back to dashboard" : "Continue read only";
   const totalPages = Math.max(1, Math.ceil(maps.length / pageSize));
@@ -497,7 +500,7 @@ export default function DashboardWorkspace() {
             },
             {
               title: "Data Retained",
-              description: "Your trial map is still stored, but it stays locked until you move to paid access.",
+              description: "Your free account map is still stored, but it stays locked until you move to paid access.",
             },
           ]
         : accessState?.currentAccessType === "pass_30d"
@@ -560,12 +563,15 @@ export default function DashboardWorkspace() {
     if (accessStatus === "expired") return "Map linking is unavailable because your access has expired.";
     if (accessStatus === "payment_failed") return "Map linking is unavailable until your payment details are updated.";
     if (accessStatus === "cancelled") return "Map linking is unavailable because your access has been cancelled.";
-    if (accessState?.currentAccessType === "trial_7d") return "Map linking is not included with 7 Day Trial access.";
+    if (accessState?.currentAccessType === "trial_7d") return "Map linking is not included with Free Account access.";
     return "Map linking is not available for your current access.";
   })();
   const createMapDisabledReason = (() => {
     if (creating) return "An investigation is already being created.";
     if (canCreateMaps) return null;
+    if (canReplacePass30Map) {
+      return "Creating a new 30 Day Access map will make your current 30 Day Access map read only.";
+    }
     if (accessStatus === "expired") return "Map creation is unavailable because your access has expired.";
     if (accessStatus === "payment_failed") return "Map creation is unavailable until your payment details are updated.";
     if (accessStatus === "cancelled") return "Map creation is unavailable because your access has been cancelled.";
@@ -576,7 +582,7 @@ export default function DashboardWorkspace() {
     if (accessStatus === "expired") return "Map code copying is unavailable because your access has expired.";
     if (accessStatus === "payment_failed") return "Map code copying is unavailable until your payment details are updated.";
     if (accessStatus === "cancelled") return "Map code copying is unavailable because your access has been cancelled.";
-    if (accessState?.currentAccessType === "trial_7d") return "Map code copying is not included with 7 Day Trial access.";
+    if (accessState?.currentAccessType === "trial_7d") return "Map code copying is not included with Free Account access.";
     return "Map code copying is not available for your current access.";
   };
   const getDuplicateDisabledReason = (map: MapRecord) => {
@@ -588,7 +594,7 @@ export default function DashboardWorkspace() {
     if (accessStatus === "expired") return "Map duplication is unavailable because your access has expired.";
     if (accessStatus === "payment_failed") return "Map duplication is unavailable until your payment details are updated.";
     if (accessStatus === "cancelled") return "Map duplication is unavailable because your access has been cancelled.";
-    if (accessState?.currentAccessType === "trial_7d") return "Map duplication is not included with 7 Day Trial access.";
+    if (accessState?.currentAccessType === "trial_7d") return "Map duplication is not included with Free Account access.";
     return "You do not have permission to duplicate this map.";
   };
   const getDeleteDisabledReason = (map: MapRecord) => {
@@ -620,6 +626,7 @@ export default function DashboardWorkspace() {
   useEffect(() => {
     const anyDashboardModalOpen =
       showAccessRestrictedModal ||
+      showPass30ReplaceMapModal ||
       showCreateInvestigationModal ||
       !!pendingDuplicateRow ||
       !!pendingDeleteRow ||
@@ -639,6 +646,7 @@ export default function DashboardWorkspace() {
     showAccessRestrictedModal,
     showBulkDeleteModal,
     showCreateInvestigationModal,
+    showPass30ReplaceMapModal,
   ]);
 
   const renderViewportModal = (content: React.ReactNode) =>
@@ -728,6 +736,7 @@ export default function DashboardWorkspace() {
 
   const resetCreateInvestigationState = useCallback(() => {
     setShowCreateInvestigationModal(false);
+    setPass30ReplacementAcknowledged(false);
     setNewInvestigationTitle("");
     setNewInvestigationDescription("");
     setNewInvestigationTemplateQuery("");
@@ -736,6 +745,18 @@ export default function DashboardWorkspace() {
     setTemplateOptions([]);
     setShowTemplateOptions(false);
   }, []);
+
+  const openCreateInvestigationFlow = () => {
+    if (creating) return;
+    if (canCreateMaps) {
+      setPass30ReplacementAcknowledged(false);
+      setShowCreateInvestigationModal(true);
+      return;
+    }
+    if (canReplacePass30Map) {
+      setShowPass30ReplaceMapModal(true);
+    }
+  };
 
   const loadCreateTemplateOptions = useCallback(
     async (query: string) => {
@@ -830,6 +851,7 @@ export default function DashboardWorkspace() {
       } else {
         const { data, error: createError } = await supabase.rpc("create_investigation_map", {
           p_title: normalizedTitle || null,
+          p_replace_current_access_map: pass30LimitReached && pass30ReplacementAcknowledged,
         });
         if (createError) throw createError;
         if (!data) throw new Error("Investigation created, but no map id was returned.");
@@ -1355,8 +1377,8 @@ export default function DashboardWorkspace() {
                 <button
                   type="button"
                   className={`${shellStyles.button} ${shellStyles.buttonAccent}`}
-                  onClick={() => setShowCreateInvestigationModal(true)}
-                  disabled={creating || !canCreateMaps}
+                  onClick={openCreateInvestigationFlow}
+                  disabled={creating || (!canCreateMaps && !canReplacePass30Map)}
                 >
                   <Image src="/icons/addcomponent.svg" alt="" width={18} height={18} className={shellStyles.buttonIcon} />
                   <span className={shellStyles.desktopToolbarLabel}>{creating ? "Creating..." : "Add Investigation"}</span>
@@ -1723,6 +1745,45 @@ export default function DashboardWorkspace() {
                 disabled={openingBillingPortal}
               >
                 {openingBillingPortal ? "Opening..." : restrictedModalActionLabel}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null)}
+
+      {renderViewportModal(showPass30ReplaceMapModal ? (
+        <div className={shellStyles.modalBackdrop}>
+          <div className={`${shellStyles.modalCard} ${shellStyles.dashboardModalCard}`}>
+            {renderBrandedModalHeader("Replace 30 Day Access map?", "One editable map", undefined, undefined, () => {
+              setShowPass30ReplaceMapModal(false);
+            })}
+            <p className={shellStyles.modalText}>
+              Your 30 Day Access currently has one map assigned for editing.
+            </p>
+            <p className={shellStyles.modalText}>
+              If you create a new investigation map now, your current 30 Day Access map will become read only. You will still be able to view it, but you will not be able to edit, duplicate, share, export, or continue using it as the active investigation map for this access period.
+            </p>
+            <p className={shellStyles.modalText}>
+              The new map will become the only editable 30 Day Access map. To keep full editing access to all created maps, use Monthly Access.
+            </p>
+            <div className={shellStyles.modalActions}>
+              <button
+                type="button"
+                className={`${shellStyles.button} ${shellStyles.buttonSecondary}`}
+                onClick={() => setShowPass30ReplaceMapModal(false)}
+              >
+                Keep current map
+              </button>
+              <button
+                type="button"
+                className={`${shellStyles.button} ${shellStyles.buttonAccent}`}
+                onClick={() => {
+                  setPass30ReplacementAcknowledged(true);
+                  setShowPass30ReplaceMapModal(false);
+                  setShowCreateInvestigationModal(true);
+                }}
+              >
+                Create new active map
               </button>
             </div>
           </div>

@@ -816,6 +816,8 @@
   .iconActionButton,
   .generateActionButton {
     width: 100%;
+    font-size: 0.72rem !important;
+    line-height: 1.1;
   }
 
   .iconActionButton {
@@ -826,8 +828,16 @@
 
   .mobileActionLabel {
     display: inline;
-    font-size: 0.9rem;
+    font-size: 0.72rem;
     font-weight: 700;
+  }
+
+  .brandingUploadButton,
+  .brandingResetButtonSuccess,
+  .modalSecondaryButton,
+  .modalPrimaryButton {
+    font-size: 0.72rem !important;
+    line-height: 1.1;
   }
 
   .readOnlyTableDesktop {

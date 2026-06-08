@@ -1144,6 +1144,8 @@
   .readinessContinueButton {
     width: 100%;
     justify-content: center;
+    font-size: 0.72rem !important;
+    line-height: 1.1;
   }
 
   .reportControlsSection {
@@ -1175,6 +1177,8 @@
   .controlIconButton {
     width: 100% !important;
     min-width: 0;
+    font-size: 0.72rem !important;
+    line-height: 1.1;
   }
 
   .emailActionWrap {

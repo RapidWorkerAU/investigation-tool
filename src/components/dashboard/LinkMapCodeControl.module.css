@@ -201,6 +201,10 @@
     gap: 10px;
   }
 
+  .linkPanelInlineOpen .linkExpandTrigger {
+    display: none;
+  }
+
   .linkExpandShell {
     display: contents;
     width: 100%;
@@ -224,9 +228,17 @@
     border: 1px solid #d7dee8;
     border-radius: 12px;
     background: #ffffff;
+    font-size: 0.72rem;
+    font-weight: 700;
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.2),
       0 8px 18px rgba(24, 29, 39, 0.08);
+  }
+
+  .linkExpandTrigger span {
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1;
   }
 
   .linkInput {

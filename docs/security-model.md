@@ -27,7 +27,7 @@ The service role key is server-only. It is used by Next.js API routes after the 
 - signup email-existence checks
 - accepting organisation invites for the authenticated account
 - refreshing billing state
-- starting trial access
+- starting free account access
 - case-study code generation and validation
 
 The service role key must never be exposed to browser code.
@@ -41,7 +41,7 @@ The app includes best-effort server-side rate limits for high-risk or expensive 
 - guest case-study notes
 - report generation
 - map suggestions
-- trial start
+- free account start
 - site-error email reports
 
 These limits protect normal deployments from accidental loops and basic abuse. For enterprise customers, add edge/WAF rate limiting at the hosting layer as well, because in-memory limits are per server instance.

@@ -1,79 +1,117 @@
 .page {
+  --site-max: 1280px;
+  --ink: #12172f;
+  --muted: #64708a;
+  --surface: #f7f8ff;
+  --border: #dbe4f3;
+  --primary: #2563eb;
   width: 100vw;
   min-height: 100dvh;
   margin-left: calc(50% - 50vw);
   margin-right: calc(50% - 50vw);
-  background: linear-gradient(180deg, #eef4ff 0%, #ffffff 22%);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: Inter, system-ui, sans-serif;
+}
+
+.page,
+.page * {
+  box-sizing: border-box;
+}
+
+.page a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.page button {
+  font: inherit;
 }
 
 .header {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(120deg, #1747b9 0%, #2f77df 38%, #5ba1ff 100%);
+  padding-top: 16px;
+  background:
+    radial-gradient(circle at 20% 12%, rgba(72, 91, 255, 0.62), transparent 32%),
+    radial-gradient(circle at 78% 18%, rgba(60, 150, 255, 0.46), transparent 30%),
+    radial-gradient(circle at 50% 102%, rgba(9, 18, 55, 0.92), transparent 44%),
+    linear-gradient(135deg, #15093e 0%, #1c1261 42%, #2643a9 100%);
   color: #ffffff;
-  position: sticky;
-  top: 0;
-  z-index: 20;
 }
 
 .headerInner {
-  max-width: 2400px;
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  width: min(var(--site-max), calc(100% - 56px));
   margin: 0 auto;
-  min-height: 68px;
-  padding: 0 24px;
-  display: grid;
-  grid-template-columns: auto 1fr auto;
+  padding: 8px 10px 8px 18px;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 11px;
+  background:
+    radial-gradient(circle at 18% 0%, rgba(72, 91, 255, 0.28), transparent 28%),
+    linear-gradient(90deg, rgba(8, 10, 28, 0.96) 0%, rgba(15, 20, 58, 0.94) 52%, rgba(23, 43, 112, 0.92) 100%);
+  box-shadow: 0 18px 46px rgba(3, 5, 24, 0.28);
+  backdrop-filter: blur(18px);
 }
 
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: 12px;
-  color: #ffffff;
-  text-decoration: none;
-  font-size: 1.28rem;
+  gap: 9px;
+  color: rgba(255, 255, 255, 0.96);
+  font-size: 14px;
   font-weight: 700;
+  letter-spacing: -0.3px;
+  white-space: nowrap;
 }
 
 .brandImage {
   display: block;
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   object-fit: contain;
 }
 
 .nav {
   display: flex;
   justify-content: center;
-  gap: 34px;
+  gap: 24px;
 }
 
 .nav a {
-  color: rgba(255, 255, 255, 0.88);
-  text-decoration: none;
-  font-size: 0.94rem;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.nav a:hover {
+  color: #ffffff;
 }
 
 .headerActions {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 12px;
 }
 
 .menuButton {
   display: none;
   align-items: center;
   justify-content: center;
-  width: 52px;
-  height: 52px;
-  border: 1px solid rgba(255, 255, 255, 0.24);
-  background: rgba(255, 255, 255, 0.14);
+  width: 40px;
+  height: 40px;
+  border: 1.5px solid rgba(255, 255, 255, 0.18);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.08);
   color: #ffffff;
-  box-shadow:
-    0 14px 28px rgba(16, 38, 95, 0.18),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
 }
 
 .menuButtonIcon {
@@ -88,66 +126,70 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  min-height: 46px;
-  padding: 0 22px;
-  text-decoration: none;
+  border-radius: 9px;
+  font-size: 13px;
   font-weight: 700;
   white-space: nowrap;
-  box-shadow:
-    0 14px 28px rgba(16, 38, 95, 0.18),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    color 180ms ease,
+    transform 180ms ease;
 }
 
 .primaryButton,
 .authActionPrimary {
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  border: 0;
+  padding: 9px 18px;
   background: #ffffff;
-  color: #1747b9;
+  color: #182166;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.22);
 }
 
 .secondaryButton,
 .authActionSecondary {
-  border: 1px solid rgba(255, 255, 255, 0.34);
+  border: 1.5px solid rgba(255, 255, 255, 0.18);
+  padding: 7px 14px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.84);
+  backdrop-filter: blur(12px);
+}
+
+.primaryButton:hover,
+.authActionPrimary:hover {
+  background: #f8fbff;
+  color: #121a58;
+  box-shadow: 0 16px 34px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(255, 255, 255, 0.16);
+  translate: 0 -1px;
+}
+
+.secondaryButton:hover,
+.authActionSecondary:hover {
+  border-color: rgba(255, 255, 255, 0.32);
   background: rgba(255, 255, 255, 0.12);
   color: #ffffff;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.18);
+  translate: 0 -1px;
 }
 
-.authAction {
-  border-radius: 0;
-}
-
-.authActionPrimary {
-  min-width: 220px;
-}
-
-.authActionSecondary {
-  cursor: pointer;
-}
-
-.authIcon {
-  display: block;
-  flex: 0 0 auto;
-}
-
-.authActionPrimary .authIcon {
-  filter: brightness(0) saturate(100%) invert(20%) sepia(92%) saturate(2536%) hue-rotate(215deg) brightness(94%) contrast(93%);
-}
-
-.authActionSecondary .authIcon {
-  filter: brightness(0) invert(1);
+.primaryButton:disabled,
+.secondaryButton:disabled,
+.authAction:disabled {
+  cursor: wait;
+  opacity: 0.7;
 }
 
 .headerCurve {
   position: relative;
-  margin-top: 8px;
-  padding: 16px 24px 20px;
+  padding: 92px 24px 72px;
 }
 
 .headerCurveInner {
   position: relative;
   z-index: 1;
-  max-width: 2400px;
+  max-width: var(--site-max);
   margin: 0 auto;
   text-align: center;
 }
@@ -156,8 +198,8 @@
   margin: 0;
   font-size: clamp(2.45rem, 4.2vw, 4rem);
   line-height: 1;
-  letter-spacing: -0.05em;
-  font-weight: 600;
+  letter-spacing: 0;
+  font-weight: 700;
 }
 
 .effectiveDate {
@@ -169,13 +211,13 @@
 
 .main {
   position: relative;
-  margin-top: 18px;
+  margin-top: -38px;
   z-index: 2;
   padding: 0 24px 32px;
 }
 
 .mainInner {
-  max-width: 2400px;
+  max-width: var(--site-max);
   width: 100%;
   margin: 0 auto;
   display: grid;
@@ -190,9 +232,17 @@
 
 .menuList {
   position: sticky;
-  top: 24px;
+  top: 104px;
   display: grid;
-  gap: 18px;
+  max-height: calc(100dvh - 128px);
+  overflow: auto;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid rgba(219, 228, 243, 0.95);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 18px 36px rgba(24, 41, 76, 0.08);
+  backdrop-filter: blur(14px);
 }
 
 .menuItem {
@@ -232,7 +282,8 @@
   box-shadow:
     0 30px 50px rgba(24, 41, 76, 0.12),
     inset 0 1px 0 rgba(255, 255, 255, 0.54);
-  border-radius: 24px;
+  border-radius: 11px;
+  scroll-margin-top: 112px;
 }
 
 .section {
@@ -240,6 +291,7 @@
   align-content: start;
   gap: 12px;
   padding: 8px 0 20px;
+  scroll-margin-top: 112px;
 }
 
 .section h2 {
@@ -361,9 +413,10 @@
 
 @media (max-width: 1080px) {
   .headerInner {
-    grid-template-columns: 1fr;
-    justify-items: center;
-    padding: 18px 20px;
+    width: min(var(--site-max), calc(100% - 40px));
+    flex-wrap: wrap;
+    justify-content: center;
+    padding: 10px 14px;
   }
 
   .nav {
@@ -399,15 +452,14 @@
   }
 
   .header {
-    position: sticky;
-    top: 0;
-    z-index: 20;
+    padding-top: 12px;
   }
 
   .headerInner {
-    grid-template-columns: auto 1fr auto;
-    justify-items: stretch;
-    padding: 12px 16px;
+    top: 12px;
+    width: calc(100% - 32px);
+    flex-wrap: nowrap;
+    padding: 8px 10px 8px 14px;
     gap: 14px;
   }
 
@@ -428,15 +480,10 @@
 
   .menuButton {
     display: inline-flex;
-    justify-self: end;
-    width: 48px;
-    height: 48px;
-    border-radius: 16px;
   }
 
   .headerCurve {
-    margin-top: 0;
-    padding: 14px 16px 18px;
+    padding: 74px 16px 52px;
   }
 
   .headerCurveInner h1 {
@@ -449,7 +496,7 @@
   }
 
   .main {
-    margin-top: 12px;
+    margin-top: -24px;
     padding: 0 16px 16px;
   }
 
@@ -463,7 +510,7 @@
 
   .viewport {
     padding: 20px 20px 28px;
-    border-radius: 18px;
+    border-radius: 11px;
   }
 
   .section {
@@ -507,8 +554,8 @@
     display: flex;
     flex-direction: column;
     padding: 16px;
-    background: linear-gradient(180deg, #1747b9 0%, #2f77df 42%, #5ba1ff 100%);
-    color: #ffffff;
+    background: var(--surface);
+    color: var(--ink);
   }
 
   .mobileMenuHeader {
@@ -525,13 +572,10 @@
     justify-content: center;
     width: 48px;
     height: 48px;
-    border: 1px solid rgba(255, 255, 255, 0.24);
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.14);
-    color: #ffffff;
-    box-shadow:
-      0 14px 28px rgba(16, 38, 95, 0.18),
-      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    border: 1.5px solid var(--border);
+    border-radius: 9px;
+    background: #ffffff;
+    color: var(--ink);
   }
 
   .mobileMenuCloseIcon {
@@ -551,8 +595,10 @@
   }
 
   .mobileMenuNav a {
-    color: #ffffff;
-    text-decoration: none;
+    width: 100%;
+    border-bottom: 1px solid var(--border);
+    padding: 14px 0;
+    color: var(--ink);
     font-size: clamp(1.7rem, 10vw, 2.5rem);
     line-height: 1.05;
     font-weight: 700;
@@ -576,5 +622,20 @@
   .mobileMenuActions .secondaryButton {
     width: 100%;
     min-width: 0;
+  }
+
+  .mobileMenuActions .secondaryButton,
+  .mobileMenuActions .authActionSecondary {
+    border-color: var(--border);
+    background: #ffffff;
+    color: #555555;
+    box-shadow: none;
+  }
+
+  .mobileMenuActions .primaryButton,
+  .mobileMenuActions .authActionPrimary {
+    background: var(--primary);
+    color: #ffffff;
+    box-shadow: none;
   }
 }

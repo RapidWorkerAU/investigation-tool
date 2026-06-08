@@ -305,13 +305,13 @@ export function buildEmailPreviews(): PreviewCard[] {
     },
     {
       key: "trial-started",
-      title: "Trial started",
+      title: "Free account started",
       ...trialStarted,
       copyHtml: toCopyHtml(trialStarted.html),
     },
     {
       key: "trial-ends-today",
-      title: "Trial ends today",
+      title: "Free account active",
       ...trialEndsToday,
       copyHtml: toCopyHtml(trialEndsToday.html),
     },

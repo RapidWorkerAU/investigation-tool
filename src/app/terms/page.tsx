@@ -48,7 +48,7 @@ const sections: LegalSection[] = [
     id: "subscription-and-payments",
     title: "5. Subscription and Payments",
     paragraphs: [
-      "Access to the service may be provided via a free trial, fixed-term access, or an ongoing subscription.",
+      "Access to the service may be provided via a free account, fixed-term access, or an ongoing subscription.",
       "All payments are processed via Stripe.",
       "Failure to pay may result in suspension or termination of access.",
     ],

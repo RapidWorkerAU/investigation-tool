@@ -124,7 +124,9 @@ const adminUserSections: Array<{ id: AdminUserSectionId; label: string; descript
 ];
 
 const formatDateTime = (value: string | null) =>
-  value
+  value === "infinity"
+    ? "Ongoing"
+    : value
     ? new Intl.DateTimeFormat("en-AU", {
         day: "2-digit",
         month: "short",
@@ -145,7 +147,7 @@ const formatAccessLabel = (value: string | null) => {
   if (!value) return "No access selected";
   switch (value) {
     case "trial_7d":
-      return "7 Day Trial";
+      return "Free Account";
     case "pass_30d":
       return "30 Day Access";
     case "subscription_monthly":
