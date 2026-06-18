@@ -7,6 +7,9 @@ import { useRouter } from "next/navigation";
 import { accessRequiresSelection, fetchAccessState } from "@/lib/access";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
 import styles from "./UseCasesPage.module.css";
+import { Inter } from "next/font/google";
+
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 type UseCase = {
   id: string;
@@ -155,7 +158,7 @@ const useCases: UseCase[] = [
     fit: [
       "The canvas gives every investigation a shared visual record.",
       "Node types keep the investigation structure clear.",
-      "Access rules shape editing, export, duplication and templates.",
+      "Free launch access currently opens editing, export, duplication and templates.",
       "The report workflow turns mapped work into a reviewable output.",
     ],
   },
@@ -261,22 +264,22 @@ export default function UseCasesPageClient() {
 
   const authActions = isAuthed ? (
     <>
-      <button type="button" className={styles.btnPrimary} onClick={() => void goToWorkspace()} disabled={dashboardLoading}>
-        {dashboardLoading ? "Checking access" : "Go to dashboard"}
+      <button type="button" className={styles.btnWorkspace} onClick={() => void goToWorkspace()} disabled={dashboardLoading}>
+        {dashboardLoading ? "Checking access" : "Go to workspace"}
       </button>
-      <button type="button" className={styles.btnGhost} onClick={() => void handleLogout()} disabled={dashboardLoading}>
+      <button type="button" className={styles.btnLogout} onClick={() => void handleLogout()} disabled={dashboardLoading}>
         Logout
       </button>
     </>
   ) : (
     <>
       <Link href="/login" className={styles.btnGhost}>Sign in</Link>
-      <Link href="/subscribe" className={styles.btnPrimary}>Create free account</Link>
+      <Link href="/login?mode=signup&returnTo=%2Fdashboard" className={styles.btnPrimary}>Create free account</Link>
     </>
   );
 
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} ${inter.variable}`}>
       <nav className={styles.navShell}>
         <Link href="/" className={styles.navBrand} aria-label="Investigation Tool home">
           <LogoMark />
@@ -285,7 +288,6 @@ export default function UseCasesPageClient() {
         <div className={styles.navLinks}>
           <Link href="/features">Features</Link>
           <Link href="/use-cases" className={styles.activeLink}>Use cases</Link>
-          <Link href="/pricing">Pricing</Link>
         </div>
         <div className={styles.navActions}>{authActions}</div>
         <button type="button" className={styles.menuButton} aria-label="Open menu" aria-expanded={mobileMenuOpen} onClick={() => setMobileMenuOpen(true)}>
@@ -307,7 +309,6 @@ export default function UseCasesPageClient() {
           <div className={styles.mobileLinks}>
             <Link href="/features" onClick={() => setMobileMenuOpen(false)}>Features</Link>
             <Link href="/use-cases" onClick={() => setMobileMenuOpen(false)}>Use cases</Link>
-            <Link href="/pricing" onClick={() => setMobileMenuOpen(false)}>Pricing</Link>
           </div>
           <div className={styles.mobileActions}>{authActions}</div>
         </div>
@@ -320,9 +321,9 @@ export default function UseCasesPageClient() {
           <div className={styles.heroGlowTwo} />
           <div className={styles.heroInner}>
             <span className={styles.chip}>Use cases</span>
-            <h1>One investigation workspace for the work behind the incident.</h1>
+            <h1>One investigation workspace for every kind of workplace incident.</h1>
             <p>
-              Different teams investigate different events. The need is the same: a clear sequence, connected evidence, visible factors and a report that can be reviewed.
+              Safety teams, operations managers, security leads and compliance officers all run investigations. The structure they need is the same: a clear sequence, connected evidence, visible factors and a report that holds up when it matters.
             </p>
             <div className={styles.heroProofStrip}>
               {[
@@ -349,7 +350,7 @@ export default function UseCasesPageClient() {
             <span className={styles.chip}>Where it fits</span>
             <h2>Choose the investigation type and see how the structure supports it</h2>
             <p>
-              The examples below keep the claims practical. Investigation Tool gives teams a structured workspace. Your team brings the subject matter judgement.
+              The examples below are deliberately practical. Investigation Tool gives teams a structured workspace. Your team brings the subject matter knowledge.
             </p>
           </div>
 
@@ -400,9 +401,9 @@ export default function UseCasesPageClient() {
         <section className={styles.ctaBanner}>
           <div className={styles.ctaGrid} />
           <div>
-            <h2>Start with the use case in front of you.</h2>
-            <p>Create a free account and build one investigation map with the same structure used across the platform.</p>
-            <Link href="/subscribe">Create a free account</Link>
+            <h2>Start with the investigation in front of you.</h2>
+            <p>Create a free account and map it using the same canvas structure used across every investigation type. No credit card required.</p>
+            <Link href="/login?mode=signup&returnTo=%2Fdashboard">Create a free account</Link>
           </div>
         </section>
       </main>
@@ -429,7 +430,7 @@ export default function UseCasesPageClient() {
               <strong>Platform</strong>
               <Link href="/features">Features</Link>
               <Link href="/#how-it-works">How it works</Link>
-              <Link href="/pricing">Pricing</Link>
+              <Link href="/#pricing">Free access</Link>
             </div>
             <div>
               <strong>Use cases</strong>

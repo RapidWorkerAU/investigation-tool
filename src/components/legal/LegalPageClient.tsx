@@ -170,7 +170,6 @@ export function LegalPageClient({
           <nav className={styles.nav} aria-label="Primary">
             <Link href="/features">Features</Link>
             <Link href="/use-cases">Use cases</Link>
-            <Link href="/pricing">Pricing</Link>
           </nav>
 
           <div className={styles.headerActions}>
@@ -188,7 +187,7 @@ export function LegalPageClient({
                 <Link href="/login" className={styles.secondaryButton}>
                   Sign in
                 </Link>
-                <Link href="/subscribe" className={styles.primaryButton}>
+                <Link href="/login?mode=signup&returnTo=%2Fdashboard" className={styles.primaryButton}>
                   Create free account
                 </Link>
               </>
@@ -272,9 +271,6 @@ export function LegalPageClient({
             <Link href="/use-cases" onClick={() => setMobileMenuOpen(false)}>
               Use cases
             </Link>
-            <Link href="/pricing" onClick={() => setMobileMenuOpen(false)}>
-              Pricing
-            </Link>
           </nav>
 
           <div className={styles.mobileMenuActions}>
@@ -289,7 +285,7 @@ export function LegalPageClient({
               </>
             ) : (
               <>
-                <Link href="/subscribe" className={styles.primaryButton} onClick={() => setMobileMenuOpen(false)}>
+                <Link href="/login?mode=signup&returnTo=%2Fdashboard" className={styles.primaryButton} onClick={() => setMobileMenuOpen(false)}>
                   Create free account
                 </Link>
                 <Link href="/login" className={styles.secondaryButton} onClick={() => setMobileMenuOpen(false)}>
@@ -383,7 +379,7 @@ export function LegalPageClient({
             <div className={styles.footerLinks}>
               <Link href="/#features">Features</Link>
               <Link href="/#workflow">Workflow</Link>
-              <Link href="/pricing">Pricing</Link>
+              <Link href="/#pricing">Free access</Link>
               <Link href="/privacy">Privacy</Link>
               <Link href="/terms">Terms</Link>
             </div>

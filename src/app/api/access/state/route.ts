@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { applyFreeAccessMode, freeAccessModeEnabled } from "@/lib/access";
 import { getUserFromAuthHeader } from "@/lib/supabase/auth";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 
@@ -40,6 +41,16 @@ export async function GET(request: NextRequest) {
     orgManagedAccess = Boolean(activeOrganisations?.length);
   }
 
+  if (freeAccessModeEnabled) {
+    const { error: freeAccessError } = await supabase.rpc("start_trial_access", {
+      p_user_id: user.userId,
+    });
+
+    if (freeAccessError) {
+      return NextResponse.json({ error: freeAccessError.message }, { status: 500 });
+    }
+  }
+
   const { data: refreshed, error: refreshError } = await supabase.rpc("refresh_billing_profile_state", {
     p_user_id: user.userId,
   });
@@ -69,7 +80,7 @@ export async function GET(request: NextRequest) {
       period?.stripe_payment_status === "cancel_at_period_end";
   }
 
-  return NextResponse.json({
+  return NextResponse.json(applyFreeAccessMode({
     userId: row.user_id,
     stripeCustomerId: row.stripe_customer_id ?? null,
     orgManagedAccess,
@@ -88,5 +99,5 @@ export async function GET(request: NextRequest) {
     canExport: orgManagedAccess ? true : Boolean(row.can_export),
     canShareMaps: orgManagedAccess ? true : Boolean(row.can_share_maps),
     canDuplicateMaps: orgManagedAccess ? true : Boolean(row.can_duplicate_maps),
-  });
+  }));
 }

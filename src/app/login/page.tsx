@@ -59,9 +59,10 @@ function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const returnTo = searchParams.get("returnTo") || "/dashboard";
+  const initialMode = searchParams.get("mode") === "signup" ? "signup" : "login";
   const supabase = useMemo(() => createSupabaseBrowser(), []);
 
-  const [mode, setMode] = useState<AuthMode>("login");
+  const [mode, setMode] = useState<AuthMode>(initialMode);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

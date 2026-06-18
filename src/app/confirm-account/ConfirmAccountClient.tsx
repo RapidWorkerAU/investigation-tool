@@ -31,7 +31,7 @@ export default function ConfirmAccountClient() {
   const supabase = useMemo(() => createSupabaseBrowser(), []);
   const [status, setStatus] = useState<ConfirmStatus>("working");
   const [message, setMessage] = useState("Confirming your account now.");
-  const [nextPath, setNextPath] = useState("/subscribe");
+  const [nextPath, setNextPath] = useState("/dashboard");
 
   useEffect(() => {
     let active = true;
@@ -40,7 +40,7 @@ export default function ConfirmAccountClient() {
       const { code, type, accessToken, refreshToken } = extractAuthPayload();
 
       try {
-        const resolvedNextPath = type === "email_change" ? "/account" : "/subscribe";
+        const resolvedNextPath = type === "email_change" ? "/account" : "/dashboard";
 
         if (code) {
           const { error } = await supabase.auth.exchangeCodeForSession(code);

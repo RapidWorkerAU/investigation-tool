@@ -5,6 +5,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
 import { accessRequiresSelection, fetchAccessState } from "@/lib/access";
+import { freeAccessModeEnabled } from "@/lib/freeAccessMode";
 import styles from "./SubscribePage.module.css";
 
 function SubscribePageContent() {
@@ -25,6 +26,11 @@ function SubscribePageContent() {
       const {
         data: { session },
       } = await supabase.auth.getSession();
+
+      if (freeAccessModeEnabled) {
+        router.replace(session?.access_token ? "/dashboard" : "/login?mode=signup&returnTo=%2Fdashboard");
+        return;
+      }
 
       if (!session?.access_token) {
         router.push("/login?returnTo=%2Fsubscribe");
@@ -59,6 +65,10 @@ function SubscribePageContent() {
 
     void run();
   }, [checkoutState, router, searchParams, supabase]);
+
+  if (freeAccessModeEnabled) {
+    return null;
+  }
 
   async function startTrial() {
     setProcessingTrial(true);

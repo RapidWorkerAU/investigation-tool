@@ -6,7 +6,7 @@ export default function AccountLoading() {
       activeNav="account"
       eyebrow="Account"
       title="Edit Profile"
-      subtitle="Manage your profile, account data and subscription history."
+      subtitle="Manage your profile, account data and access."
       variant="detail"
     />
   );

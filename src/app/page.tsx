@@ -2,16 +2,19 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { Inter } from "next/font/google";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { accessRequiresSelection, fetchAccessState } from "@/lib/access";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
 import styles from "./LandingPage.module.css";
 
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+
 const stats = [
-  ["8x", "Faster than manual"],
-  ["24/7", "Available"],
-  ["Free", "To get started"],
+  ["Free", "Full access during the launch period"],
+  ["Shared", "One workspace for the whole investigation team"],
+  ["Structured", "Reports generated directly from the investigation canvas"],
 ];
 
 const workflowSteps = [
@@ -89,47 +92,19 @@ const featureTabs = [
 
 const plans = [
   {
-    name: "Free account",
+    name: "Free launch access",
     price: "Free",
     priceSub: "",
-    desc: "Create an account and run one investigation map at no cost.",
+    desc: "Create an account and use the full investigation workspace during the launch period.",
     features: [
-      ["One investigation map", true],
+      ["Create and edit investigations", true],
       ["Full canvas editing", true],
-      ["Guided build wizard", true],
-      ["PDF export not included", false],
+      ["PDF export and reporting", true],
+      ["Sharing, duplication and templates", true],
     ],
     cta: "Create free account",
-    href: "/subscribe",
-  },
-  {
-    name: "30 day access",
-    price: "$19.95",
-    priceSub: "AUD once",
-    desc: "Full access for one live investigation within a defined 30 day window.",
-    features: [
-      ["One investigation map", true],
-      ["Full editing for 30 days", true],
-      ["PDF export and printing", true],
-      ["Sharing and export", true],
-    ],
-    cta: "Buy 30 day access",
-    href: "/subscribe",
+    href: "/login?mode=signup&returnTo=%2Fdashboard",
     featured: true,
-  },
-  {
-    name: "Monthly access",
-    price: "$44.95",
-    priceSub: "AUD per month",
-    desc: "Ongoing access for teams with a continuous volume of investigation work.",
-    features: [
-      ["Unlimited investigation maps", true],
-      ["Full export and sharing", true],
-      ["Enterprise options available", true],
-      ["Active during the subscription period", true],
-    ],
-    cta: "Start monthly access",
-    href: "/subscribe",
   },
 ];
 
@@ -344,22 +319,22 @@ export default function HomePage() {
 
   const authActions = isAuthed ? (
     <>
-      <button type="button" className={styles.btnPrimary} onClick={() => void goToWorkspace()} disabled={dashboardLoading}>
-        {dashboardLoading ? "Checking access" : "Go to dashboard"}
+      <button type="button" className={styles.btnWorkspace} onClick={() => void goToWorkspace()} disabled={dashboardLoading}>
+        {dashboardLoading ? "Checking access" : "Go to workspace"}
       </button>
-      <button type="button" className={styles.btnGhost} onClick={() => void handleLogout()} disabled={dashboardLoading}>
+      <button type="button" className={styles.btnLogout} onClick={() => void handleLogout()} disabled={dashboardLoading}>
         Logout
       </button>
     </>
   ) : (
     <>
       <Link href="/login" className={styles.btnGhost}>Sign in</Link>
-      <Link href="/subscribe" className={styles.btnPrimary}>Create free account</Link>
+      <Link href="/login?mode=signup&returnTo=%2Fdashboard" className={styles.btnPrimary}>Create free account</Link>
     </>
   );
 
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} ${inter.variable}`}>
       <nav className={styles.navShell}>
         <Link href="/" className={styles.navBrand} aria-label="Investigation Tool home">
           <LogoMark />
@@ -368,7 +343,6 @@ export default function HomePage() {
         <div className={styles.navLinks}>
           <Link href="/features">Features</Link>
           <Link href="/use-cases">Use cases</Link>
-          <Link href="/pricing">Pricing</Link>
         </div>
         <div className={styles.navActions}>{authActions}</div>
         <button type="button" className={styles.menuButton} aria-label="Open menu" aria-expanded={mobileMenuOpen} onClick={() => setMobileMenuOpen(true)}>
@@ -390,7 +364,6 @@ export default function HomePage() {
           <div className={styles.mobileLinks}>
             <Link href="/features" onClick={() => setMobileMenuOpen(false)}>Features</Link>
             <Link href="/use-cases" onClick={() => setMobileMenuOpen(false)}>Use cases</Link>
-            <Link href="/pricing" onClick={() => setMobileMenuOpen(false)}>Pricing</Link>
           </div>
           <div className={styles.mobileActions}>{authActions}</div>
         </div>
@@ -398,24 +371,21 @@ export default function HomePage() {
 
       <main>
         <section className={styles.hero}>
-          <div className={styles.heroBlobLeft} />
-          <div className={styles.heroBlobRight} />
-          <div className={styles.heroBlobBottom} />
           <div className={styles.heroContent}>
-            <p className={styles.heroEyebrow}>Incident investigation software for modern teams</p>
+            <p className={styles.heroEyebrow}>Incident investigation software for safety and operations teams</p>
             <h1>
-              Understand what happened. <span>Decide what comes next.</span>
+              One place to run your <span>workplace incident investigation.</span>
             </h1>
             <p className={styles.heroIntro}>
-              Investigation Tool gives your team a shared workspace to map incidents, capture evidence, assign actions and produce clear reports.
+              Map the sequence of events, work through contributing factors and produce a structured report your team can stand behind. The whole investigation stays in one shared workspace from the first notification to the final record.
             </p>
             <div className={styles.heroCtas}>
               {isAuthed ? (
                 <button type="button" className={styles.ctaPrimary} onClick={() => void goToWorkspace()} disabled={dashboardLoading}>
-                  {dashboardLoading ? "Checking access" : "Go to dashboard"}
+                  {dashboardLoading ? "Checking access" : "Go to workspace"}
                 </button>
               ) : (
-                <Link href="/subscribe" className={styles.ctaPrimary}>Create free account</Link>
+                <Link href="/login?mode=signup&returnTo=%2Fdashboard" className={styles.ctaPrimary}>Start your first investigation</Link>
               )}
               <a href="#how-it-works" className={styles.ctaSecondary}>See how it works</a>
             </div>
@@ -471,9 +441,9 @@ export default function HomePage() {
           <div className={styles.sectionBlob} />
           <div className={styles.sectionInner}>
             <span className={styles.chip}>How it works</span>
-            <h2>One workspace. The full picture.</h2>
+            <h2>Four steps from blank canvas to final record.</h2>
             <p className={styles.sectionSub}>
-              Investigation Tool brings every part of your investigation into a single shared canvas so nothing gets missed and nothing has to be rebuilt from scratch.
+              Map the incident in one shared workspace so the sequence, evidence, contributing factors and findings stay connected. When you are ready to report, the structure is already there.
             </p>
             <div className={styles.workflowPanel}>
               <div className={styles.workflowVisual} aria-hidden="true">
@@ -507,9 +477,9 @@ export default function HomePage() {
           <div className={styles.sectionBlobAlt} />
           <div className={styles.sectionInner}>
             <span className={styles.chip}>Features</span>
-            <h2>Built for the way investigations actually work</h2>
+            <h2>The structure that holds up when investigations get complex.</h2>
             <p className={styles.sectionSub}>
-              From the initial blank canvas through to the final report, every step of the investigation workflow is supported in one place.
+              The canvas, the guided setup, the evidence records and the report output all connect so the work stays coherent as the investigation grows.
             </p>
             <div className={styles.featureTabsShell}>
               <div className={styles.featureTabsList} role="tablist" aria-label="Investigation Tool features">
@@ -564,19 +534,19 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section id="pricing" className={styles.section}>
+        <section id="pricing" className={`${styles.section} ${styles.pricingSection}`}>
           <div className={styles.sectionBlob} />
           <div className={styles.sectionBlobLower} />
           <div className={styles.sectionInner}>
-            <span className={styles.chip}>Pricing</span>
-            <h2>Access that fits how your team works</h2>
+            <span className={styles.chip}>Free access</span>
+            <h2>Full access is free during launch</h2>
             <p className={styles.sectionSub}>
-              Start with a free account and upgrade when your investigation workload grows. No commitment required to get started.
+              We have disabled paid access tiers for now so teams can use the platform, test real investigation workflows, and give feedback before subscriptions return.
             </p>
             <div className={styles.pricingGrid}>
               {plans.map((plan) => (
                 <article key={plan.name} className={`${styles.priceCard} ${plan.featured ? styles.priceCardFeatured : ""}`}>
-                  {plan.featured ? <span className={styles.priceBadge}>Most popular</span> : null}
+                  {null}
                   <h3>{plan.name}</h3>
                   <strong>{plan.price}</strong>
                   {plan.priceSub ? <em>{plan.priceSub}</em> : null}
@@ -594,7 +564,7 @@ export default function HomePage() {
               ))}
             </div>
             <p className={styles.pricingNote}>
-              Enterprise options include custom configuration and multi account setups. <a href="mailto:support@investigationtool.com.au">Contact us</a> to discuss.
+              No credit card is required during the launch period. <a href="mailto:support@investigationtool.com.au">Contact us</a> if you need help setting up a team.
             </p>
           </div>
         </section>
@@ -602,9 +572,9 @@ export default function HomePage() {
         <section className={styles.ctaBanner}>
           <div className={styles.ctaGrid} />
           <div>
-            <h2>Investigate clearly. Act with confidence.</h2>
-            <p>Create a free account and run your first investigation map today. No credit card required.</p>
-            <Link href="/subscribe">Create a free account</Link>
+            <h2>Run your first investigation on a workspace built for it.</h2>
+            <p>Create a free account and start mapping. No credit card required during the launch period.</p>
+            <Link href="/login?mode=signup&returnTo=%2Fdashboard">Start your first investigation</Link>
           </div>
         </section>
       </main>
@@ -624,7 +594,7 @@ export default function HomePage() {
               <strong>Platform</strong>
               <Link href="/features">Features</Link>
               <a href="#how-it-works">How it works</a>
-              <Link href="/pricing">Pricing</Link>
+              <a href="#pricing">Free access</a>
             </div>
             <div>
               <strong>Use cases</strong>

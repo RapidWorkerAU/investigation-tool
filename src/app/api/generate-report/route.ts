@@ -1,6 +1,6 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
 import { getOpenAIClient, investigationReportModel } from "@/lib/openai/server";
-import { accessCanUseReportGeneration } from "@/lib/access";
+import { accessCanUseReportGeneration, applyFreeAccessMode } from "@/lib/access";
 import { buildDraftReportText } from "@/lib/investigation-report/helpers";
 import { generateReportSchema } from "@/lib/investigation-report/schema";
 import { enforceRateLimit } from "@/lib/rateLimit";
@@ -358,7 +358,7 @@ export async function POST(request: NextRequest) {
     orgManagedAccess = Boolean(activeOrganisations?.length);
   }
 
-  const accessState = {
+  const accessState = applyFreeAccessMode({
     userId: accessStateRow.user_id,
     stripeCustomerId: accessStateRow.stripe_customer_id ?? null,
     accessSelectionRequired: orgManagedAccess ? false : Boolean(accessStateRow.access_selection_required),
@@ -376,7 +376,7 @@ export async function POST(request: NextRequest) {
     canExport: orgManagedAccess ? true : Boolean(accessStateRow.can_export),
     canShareMaps: orgManagedAccess ? true : Boolean(accessStateRow.can_share_maps),
     canDuplicateMaps: orgManagedAccess ? true : Boolean(accessStateRow.can_duplicate_maps),
-  };
+  });
 
   if (!accessCanUseReportGeneration(accessState)) {
     await recordReportActivity("failed", "Report generation unavailable.", {

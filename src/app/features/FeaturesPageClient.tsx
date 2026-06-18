@@ -7,6 +7,9 @@ import { useRouter } from "next/navigation";
 import { accessRequiresSelection, fetchAccessState } from "@/lib/access";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
 import styles from "./FeaturesPage.module.css";
+import { Inter } from "next/font/google";
+
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 const FEATURE_TILES = [
   {
@@ -93,7 +96,7 @@ const FEATURE_TILES = [
     num: "06",
     category: "Repeatable work",
     title: "Templates and duplication",
-    summary: "Reuse investigation structures when your account supports templates and duplication.",
+    summary: "Reuse investigation structures with templates and duplication during free launch access.",
     color: "#ca8a04",
     darkColor: "#713f12",
     backBg: "#fefce8",
@@ -102,23 +105,23 @@ const FEATURE_TILES = [
       "Duplicate investigation maps to reuse structure across similar incidents.",
       "Save starting templates for investigation types your team runs repeatedly.",
       "Manage multiple active maps from the dashboard without losing context.",
-      "Available on 30-day, monthly and organisation accounts.",
+      "Available during the free launch period.",
     ],
   },
   {
     num: "07",
-    category: "Access control",
-    title: "Account barriers",
-    summary: "Access rules are built in so every account type has clear and appropriate boundaries.",
+    category: "Launch access",
+    title: "Free access",
+    summary: "Subscription barriers are disabled during launch so teams can test the full workflow.",
     color: "#0ea5e9",
     darkColor: "#0c4a6e",
     backBg: "#f0f9ff",
     backColor: "#0ea5e9",
     points: [
-      "Free accounts access one map with full canvas editing and wizard support.",
-      "Paid accounts unlock export, sharing, duplication and reporting features.",
-      "Account type is enforced at the feature level without manual intervention.",
-      "Upgrade at any time to unlock additional capabilities.",
+      "Create maps with full canvas editing and wizard support.",
+      "Use export, sharing, duplication, templates and reporting during launch.",
+      "Paid checkout is disabled while free launch access is active.",
+      "Subscription controls remain preserved for later reinstatement.",
     ],
   },
   {
@@ -143,7 +146,7 @@ const proofItems = [
   ["One canvas", "Map the incident, evidence and investigation outputs together."],
   ["Guided setup", "Use the wizard to create a structured starting point."],
   ["Report ready", "Move from mapped investigation to reviewable report output."],
-  ["Access aware", "Account rules shape editing, export, templates and duplication."],
+  ["Free launch", "Full workflow access is open during the launch period."],
 ];
 
 const proofColors = ["#f97316", "#facc15", "#f43f5e", "#22c55e"];
@@ -251,22 +254,22 @@ export default function FeaturesPageClient() {
 
   const authActions = isAuthed ? (
     <>
-      <button type="button" className={styles.btnPrimary} onClick={() => void goToWorkspace()} disabled={dashboardLoading}>
-        {dashboardLoading ? "Checking access" : "Go to dashboard"}
+      <button type="button" className={styles.btnWorkspace} onClick={() => void goToWorkspace()} disabled={dashboardLoading}>
+        {dashboardLoading ? "Checking access" : "Go to workspace"}
       </button>
-      <button type="button" className={styles.btnGhost} onClick={() => void handleLogout()} disabled={dashboardLoading}>
+      <button type="button" className={styles.btnLogout} onClick={() => void handleLogout()} disabled={dashboardLoading}>
         Logout
       </button>
     </>
   ) : (
     <>
       <Link href="/login" className={styles.btnGhost}>Sign in</Link>
-      <Link href="/subscribe" className={styles.btnPrimary}>Create free account</Link>
+      <Link href="/login?mode=signup&returnTo=%2Fdashboard" className={styles.btnPrimary}>Create free account</Link>
     </>
   );
 
   return (
-    <div className={styles.page}>
+    <div className={`${styles.page} ${inter.variable}`}>
       <nav className={styles.navShell}>
         <Link href="/" className={styles.navBrand} aria-label="Investigation Tool home">
           <LogoMark />
@@ -275,7 +278,6 @@ export default function FeaturesPageClient() {
         <div className={styles.navLinks}>
           <Link href="/features" className={styles.activeLink}>Features</Link>
           <Link href="/use-cases">Use cases</Link>
-          <Link href="/pricing">Pricing</Link>
         </div>
         <div className={styles.navActions}>{authActions}</div>
         <button type="button" className={styles.menuButton} aria-label="Open menu" aria-expanded={mobileMenuOpen} onClick={() => setMobileMenuOpen(true)}>
@@ -297,7 +299,6 @@ export default function FeaturesPageClient() {
           <div className={styles.mobileLinks}>
             <Link href="/features" onClick={() => setMobileMenuOpen(false)}>Features</Link>
             <Link href="/use-cases" onClick={() => setMobileMenuOpen(false)}>Use cases</Link>
-            <Link href="/pricing" onClick={() => setMobileMenuOpen(false)}>Pricing</Link>
           </div>
           <div className={styles.mobileActions}>{authActions}</div>
         </div>
@@ -310,9 +311,9 @@ export default function FeaturesPageClient() {
           <div className={styles.heroGlowTwo} />
           <div className={styles.heroInner}>
             <span className={styles.chip}>Platform features</span>
-            <h1>Everything your investigation needs in one structured workspace.</h1>
+            <h1>The features that carry an investigation from first map to final report.</h1>
             <p>
-              Investigation Tool brings the map, evidence, guided setup, reporting and access rules together so teams can work from one clear record.
+              The canvas, guided setup, evidence records and report output are built to work together. Teams run the full investigation from one shared workspace without losing context between steps.
             </p>
             <div className={styles.heroProofStrip}>
               {proofItems.map(([title, text], index) => (
@@ -395,7 +396,7 @@ export default function FeaturesPageClient() {
                 Why it works
               </div>
               <h2>
-                It keeps investigation thinking visible.
+                It keeps the investigation thinking visible.
               </h2>
             </div>
             <div>
@@ -410,8 +411,8 @@ export default function FeaturesPageClient() {
           <div className={styles.ctaGrid} />
           <div>
             <h2>Start with one investigation map.</h2>
-            <p>Create a free account and test the workflow on a real investigation canvas. No credit card required.</p>
-            <Link href="/subscribe">Create a free account</Link>
+            <p>Create a free account and run a real investigation from blank canvas to structured report. No credit card required during the launch period.</p>
+            <Link href="/login?mode=signup&returnTo=%2Fdashboard">Create a free account</Link>
           </div>
         </section>
       </main>
@@ -438,7 +439,7 @@ export default function FeaturesPageClient() {
               <strong>Platform</strong>
               <Link href="/features">Features</Link>
               <Link href="/#how-it-works">How it works</Link>
-              <Link href="/pricing">Pricing</Link>
+              <Link href="/#pricing">Free access</Link>
             </div>
             <div>
               <strong>Use cases</strong>

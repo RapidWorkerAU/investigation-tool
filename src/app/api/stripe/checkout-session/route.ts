@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
+import { freeAccessModeEnabled } from "@/lib/freeAccessMode";
 import { getUserFromAuthHeader } from "@/lib/supabase/auth";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 
@@ -47,6 +48,13 @@ async function getOrCreateStripeCustomerId(
 
 export async function POST(req: NextRequest) {
   try {
+    if (freeAccessModeEnabled) {
+      return NextResponse.json(
+        { error: "Checkout is disabled while Investigation Tool is in free launch access mode." },
+        { status: 403 },
+      );
+    }
+
     const { plan } = await req.json();
     const authHeader = req.headers.get("authorization");
     const user = await getUserFromAuthHeader(authHeader);

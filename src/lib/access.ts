@@ -1,3 +1,5 @@
+import { freeAccessModeEnabled, freeAccessModeLabel } from "@/lib/freeAccessMode";
+
 export type BillingAccessState = {
   userId: string;
   stripeCustomerId: string | null;
@@ -24,9 +26,30 @@ export type BillingAccessState = {
   canShareMaps: boolean;
   canDuplicateMaps: boolean;
   orgManagedAccess?: boolean;
+  freeAccessMode?: boolean;
 };
 
+export function applyFreeAccessMode(state: BillingAccessState): BillingAccessState {
+  if (!freeAccessModeEnabled) return state;
+
+  return {
+    ...state,
+    accessSelectionRequired: false,
+    currentAccessType: "subscription_monthly",
+    currentAccessStatus: "active",
+    readOnlyReason: null,
+    canCreateMaps: true,
+    canEditMaps: true,
+    canExport: true,
+    canShareMaps: true,
+    canDuplicateMaps: true,
+    orgManagedAccess: state.orgManagedAccess ?? false,
+    freeAccessMode: true,
+  };
+}
+
 export function accessRequiresSelection(state: BillingAccessState | null | undefined) {
+  if (freeAccessModeEnabled) return false;
   if (!state) return true;
 
   return (
@@ -38,6 +61,7 @@ export function accessRequiresSelection(state: BillingAccessState | null | undef
 }
 
 export function accessIsReadOnlyRestricted(state: BillingAccessState | null | undefined) {
+  if (freeAccessModeEnabled) return false;
   if (!state) return false;
 
   return (
@@ -48,11 +72,13 @@ export function accessIsReadOnlyRestricted(state: BillingAccessState | null | un
 }
 
 export function accessBlocksInvestigationEntry(state: BillingAccessState | null | undefined) {
+  if (freeAccessModeEnabled) return false;
   if (!state) return false;
   return state.currentAccessType === "trial_7d" && accessIsReadOnlyRestricted(state);
 }
 
 export function accessCanUseReportGeneration(state: BillingAccessState | null | undefined) {
+  if (freeAccessModeEnabled) return true;
   if (!state) return false;
   if (accessRequiresSelection(state)) return false;
   if (accessBlocksInvestigationEntry(state)) return false;
@@ -60,6 +86,7 @@ export function accessCanUseReportGeneration(state: BillingAccessState | null | 
 }
 
 export function isExpiredTrialAccess(state: BillingAccessState | null | undefined) {
+  if (freeAccessModeEnabled) return false;
   if (!state) return false;
   return state.currentAccessType === "trial_7d" && state.currentAccessStatus === "expired";
 }
@@ -78,5 +105,7 @@ export async function fetchAccessState(accessToken: string) {
     throw new Error(data?.error || "Unable to load access state.");
   }
 
-  return data as BillingAccessState;
+  return applyFreeAccessMode(data as BillingAccessState);
 }
+
+export { freeAccessModeEnabled, freeAccessModeLabel };

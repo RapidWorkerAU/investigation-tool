@@ -16,7 +16,7 @@
   min-height: 100vh;
   background: var(--surface);
   color: var(--ink);
-  font-family: Inter, system-ui, sans-serif;
+  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
 }
 
 .page a {
@@ -103,11 +103,13 @@
 }
 
 .btnGhost,
-.btnPrimary {
+.btnPrimary,
+.btnWorkspace,
+.btnLogout {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 9px;
+  border-radius: 6px;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -156,9 +158,38 @@
 }
 
 .btnGhost:disabled,
-.btnPrimary:disabled {
+.btnPrimary:disabled,
+.btnWorkspace:disabled {
   cursor: wait;
   opacity: 0.7;
+}
+
+.btnWorkspace {
+  border: 1.5px solid rgba(52, 211, 153, 0.35);
+  padding: 7px 14px;
+  background: rgba(16, 185, 129, 0.1);
+  color: #6ee7b7;
+  backdrop-filter: blur(12px);
+}
+
+.btnWorkspace:hover {
+  border-color: rgba(52, 211, 153, 0.55);
+  background: rgba(16, 185, 129, 0.18);
+  color: #a7f3d0;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.14);
+}
+
+.btnLogout {
+  border: 1.5px solid rgba(255, 255, 255, 0.12);
+  padding: 7px 14px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.32);
+}
+
+.btnLogout:hover {
+  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.05);
+  color: rgba(239, 68, 68, 0.65);
 }
 
 .menuButton {
@@ -166,7 +197,7 @@
   width: 40px;
   height: 40px;
   border: 1.5px solid rgba(255, 255, 255, 0.18);
-  border-radius: 9px;
+  border-radius: 6px;
   background: rgba(255, 255, 255, 0.08);
   color: #fff;
 }
@@ -205,7 +236,7 @@
   width: 40px;
   height: 40px;
   border: 1.5px solid var(--border);
-  border-radius: 9px;
+  border-radius: 6px;
   background: #fff;
   color: var(--ink);
   font-size: 24px;
@@ -243,15 +274,28 @@
   box-shadow: none;
 }
 
+.mobileActions .btnWorkspace {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #059669;
+  box-shadow: none;
+}
+
+.mobileActions .btnLogout {
+  border-color: var(--border);
+  background: #fff;
+  color: #9ca3af;
+  box-shadow: none;
+}
+
 .hero {
   position: relative;
   overflow: hidden;
   padding: 150px 28px 76px;
   background:
-    radial-gradient(circle at 20% 12%, rgba(72, 91, 255, 0.62), transparent 32%),
-    radial-gradient(circle at 78% 18%, rgba(60, 150, 255, 0.46), transparent 30%),
-    radial-gradient(circle at 50% 102%, rgba(9, 18, 55, 0.92), transparent 44%),
-    linear-gradient(135deg, #15093e 0%, #1c1261 42%, #2643a9 100%);
+    radial-gradient(circle at 22% 14%, rgba(37, 70, 140, 0.14), transparent 35%),
+    radial-gradient(circle at 76% 20%, rgba(20, 40, 90, 0.1), transparent 32%),
+    linear-gradient(160deg, #060810 0%, #0b1120 55%, #0f172a 100%);
 }
 
 .heroGrid,
@@ -279,8 +323,8 @@
   left: -80px;
   width: 520px;
   height: 420px;
-  background: #3222c6;
-  opacity: 0.45;
+  background: #1a2060;
+  opacity: 0.1;
 }
 
 .heroGlowTwo {
@@ -288,8 +332,8 @@
   bottom: -90px;
   width: 480px;
   height: 360px;
-  background: #38bdf8;
-  opacity: 0.24;
+  background: #1a3060;
+  opacity: 0.07;
 }
 
 .heroInner {
@@ -303,33 +347,33 @@
 .chip {
   display: inline-block;
   margin-bottom: 18px;
-  border: 1px solid rgba(56, 189, 248, 0.4);
-  border-radius: 20px;
-  padding: 6px 16px;
-  background: rgba(56, 189, 248, 0.08);
-  color: #7dd3fc;
-  font-size: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 4px;
+  padding: 5px 12px;
+  background: rgba(255, 255, 255, 0.07);
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
 }
 
 .hero h1 {
-  max-width: 980px;
+  max-width: 860px;
   margin: 0 auto 18px;
   color: #fff;
-  font-size: 58px;
-  font-weight: 800;
-  letter-spacing: -1.7px;
-  line-height: 1.08;
+  font-size: 50px;
+  font-weight: 700;
+  letter-spacing: -0.7px;
+  line-height: 1.1;
 }
 
 .hero p {
-  max-width: 760px;
+  max-width: 700px;
   margin: 0 auto;
-  color: rgba(255, 255, 255, 0.74);
-  font-size: 18px;
-  line-height: 1.75;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 16px;
+  line-height: 1.62;
 }
 
 .heroProofGrid {
@@ -410,17 +454,17 @@
 .sectionIntro h2 {
   margin: 0 0 12px;
   color: var(--ink);
-  font-size: 38px;
-  font-weight: 800;
-  letter-spacing: -1px;
-  line-height: 1.16;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  line-height: 1.2;
 }
 
 .sectionIntro p {
   margin: 0;
   color: var(--muted);
-  font-size: 17px;
-  line-height: 1.7;
+  font-size: 16px;
+  line-height: 1.65;
 }
 
 .caseLayout {
@@ -440,7 +484,7 @@
   align-content: start;
   gap: 8px;
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 8px;
   padding: 12px;
   background: #fff;
   box-shadow: 0 18px 46px rgba(16, 22, 64, 0.06);
@@ -460,8 +504,8 @@
   gap: 4px;
   width: 100%;
   border: 0;
-  border-radius: 10px;
-  padding: 14px;
+  border-radius: 6px;
+  padding: 12px 14px;
   background: transparent;
   color: var(--muted);
   text-align: left;
@@ -493,9 +537,7 @@
 }
 
 .caseTabActive {
-  background:
-    radial-gradient(circle at 0% 0%, rgba(56, 189, 248, 0.18), transparent 36%),
-    linear-gradient(135deg, #eef4ff, #fff);
+  background: #eef4ff;
   color: var(--ink);
 }
 
@@ -505,7 +547,7 @@
   grid-template-rows: auto minmax(0, 1fr);
   height: 100%;
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 8px;
   background: #fff;
   box-shadow: 0 24px 64px rgba(16, 22, 64, 0.08);
 }
@@ -515,9 +557,9 @@
   overflow: hidden;
   padding: 36px;
   background:
-    radial-gradient(circle at 8% 20%, rgba(56, 189, 248, 0.28), transparent 32%),
-    radial-gradient(circle at 88% 10%, rgba(50, 34, 198, 0.32), transparent 34%),
-    linear-gradient(135deg, #090b1d 0%, #101640 46%, #243c9d 100%);
+    radial-gradient(circle at 8% 20%, rgba(20, 40, 80, 0.12), transparent 32%),
+    radial-gradient(circle at 88% 10%, rgba(15, 30, 60, 0.1), transparent 34%),
+    linear-gradient(160deg, #060810 0%, #0b1120 55%, #0f172a 100%);
 }
 
 .casePanelHeader::after {
@@ -552,18 +594,18 @@
   max-width: 620px;
   margin: 0 0 12px;
   color: #fff;
-  font-size: 34px;
-  font-weight: 800;
-  letter-spacing: -0.8px;
-  line-height: 1.12;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  line-height: 1.2;
 }
 
 .casePanelHeader p {
   max-width: 690px;
   margin: 0;
-  color: rgba(255, 255, 255, 0.72);
-  font-size: 15px;
-  line-height: 1.75;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 14px;
+  line-height: 1.65;
 }
 
 .casePanelBody {
@@ -622,9 +664,9 @@
   overflow: hidden;
   padding: 70px 28px;
   background:
-    radial-gradient(circle at 18% 10%, rgba(56, 189, 248, 0.38), transparent 30%),
-    radial-gradient(circle at 76% 22%, rgba(50, 34, 198, 0.38), transparent 34%),
-    linear-gradient(135deg, #090b1d 0%, #101640 38%, #3222c6 68%, #2563eb 100%);
+    radial-gradient(circle at 22% 14%, rgba(37, 70, 140, 0.14), transparent 35%),
+    radial-gradient(circle at 76% 20%, rgba(20, 40, 90, 0.1), transparent 32%),
+    linear-gradient(160deg, #060810 0%, #0b1120 55%, #0f172a 100%);
   text-align: center;
 }
 
@@ -638,24 +680,24 @@
 .ctaBanner h2 {
   margin: 0 0 10px;
   color: #fff;
-  font-size: 34px;
-  font-weight: 800;
-  letter-spacing: -0.8px;
-  line-height: 1.16;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  line-height: 1.2;
 }
 
 .ctaBanner p {
   max-width: 460px;
-  margin: 0 auto 28px;
-  color: rgba(255, 255, 255, 0.76);
+  margin: 0 auto 24px;
+  color: rgba(255, 255, 255, 0.72);
   font-size: 15px;
-  line-height: 1.7;
+  line-height: 1.65;
 }
 
 .ctaBanner a {
   display: inline-block;
-  border-radius: 10px;
-  padding: 13px 30px;
+  border-radius: 5px;
+  padding: 10px 22px;
   background: #fff;
   color: var(--primary-dark);
   font-size: 14px;
@@ -785,7 +827,7 @@
   }
 
   .hero h1 {
-    font-size: 38px;
+    font-size: 34px;
   }
 
   .heroProofGrid,
@@ -833,16 +875,16 @@
   }
 
   .hero h1 {
-    font-size: 33px;
+    font-size: 29px;
   }
 
   .hero p,
   .sectionIntro p {
-    font-size: 15px;
+    font-size: 14.5px;
   }
 
   .sectionIntro h2 {
-    font-size: 29px;
+    font-size: 24px;
   }
 
   .caseTabs {

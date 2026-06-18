@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
+import { freeAccessModeEnabled } from "@/lib/freeAccessMode";
 import PricingPageClient from "./PricingPageClient";
 
 export const metadata: Metadata = {
@@ -8,5 +10,9 @@ export const metadata: Metadata = {
 };
 
 export default function PricingPage() {
+  if (freeAccessModeEnabled) {
+    redirect("/");
+  }
+
   return <PricingPageClient />;
 }

@@ -1,4 +1,5 @@
 import type { BillingAccessState } from "@/lib/access";
+import { freeAccessModeEnabled } from "@/lib/freeAccessMode";
 
 export type InvestigationTemplateVisibility = "private" | "organisation" | "global";
 
@@ -25,6 +26,8 @@ export const templateAccessDisabledReason = "Saving templates is only available 
 export const templateCreateDisabledReason = "Templates are only available when your account can create investigation maps.";
 
 export function hasActiveTemplateAccess(state: BillingAccessState | null | undefined) {
+  if (freeAccessModeEnabled) return true;
+
   return (
     (state?.currentAccessType === "subscription_monthly" && state.currentAccessStatus === "active") ||
     state?.orgManagedAccess === true
@@ -32,6 +35,7 @@ export function hasActiveTemplateAccess(state: BillingAccessState | null | undef
 }
 
 export function hasTemplateBrowseAccess(state: BillingAccessState | null | undefined) {
+  if (freeAccessModeEnabled) return true;
   return Boolean(state?.canCreateMaps);
 }
 

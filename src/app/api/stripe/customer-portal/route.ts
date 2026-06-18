@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
+import { freeAccessModeEnabled } from "@/lib/freeAccessMode";
 import { getUserFromAuthHeader } from "@/lib/supabase/auth";
 import { createServiceRoleClient } from "@/lib/supabase/server";
 
@@ -46,6 +47,13 @@ async function getOrCreateStripeCustomerId(
 }
 
 export async function POST(request: NextRequest) {
+  if (freeAccessModeEnabled) {
+    return NextResponse.json(
+      { error: "The billing portal is disabled while Investigation Tool is in free launch access mode." },
+      { status: 403 },
+    );
+  }
+
   const authHeader = request.headers.get("authorization");
   const user = await getUserFromAuthHeader(authHeader);
 

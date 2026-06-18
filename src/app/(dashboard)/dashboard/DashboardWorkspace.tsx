@@ -18,6 +18,7 @@ import {
   type InvestigationTemplateOption,
 } from "@/lib/investigationTemplates";
 import { formatAccessDateTime } from "@/lib/accessTime";
+import { freeAccessModeEnabled, freeAccessModeLabel } from "@/lib/freeAccessMode";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
 
 type MapRecord = {
@@ -436,7 +437,9 @@ export default function DashboardWorkspace() {
   const accessStatus = accessState?.currentAccessStatus ?? null;
   const expiredTrialAccess = isExpiredTrialAccess(accessState);
   const accountAccessSummary =
-    accessState?.currentAccessType === "trial_7d" && accessState.currentAccessStatus === "active"
+    freeAccessModeEnabled
+      ? freeAccessModeLabel
+      : accessState?.currentAccessType === "trial_7d" && accessState.currentAccessStatus === "active"
       ? "Free Account"
       : accessState?.currentPeriodEndsAt
         ? accessState.currentAccessType === "pass_30d" && accessState.currentAccessStatus === "active"

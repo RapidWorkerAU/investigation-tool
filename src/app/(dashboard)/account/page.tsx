@@ -8,6 +8,7 @@ import styles from "@/components/dashboard/DashboardShell.module.css";
 import { DashboardPageSkeleton } from "@/components/dashboard/DashboardTableLoadingState";
 import { type BillingAccessState, fetchAccessState } from "@/lib/access";
 import { getAccessTimeZoneLabel } from "@/lib/accessTime";
+import { freeAccessModeEnabled, freeAccessModeLabel } from "@/lib/freeAccessMode";
 import { createSupabaseBrowser } from "@/lib/supabase/client";
 
 type AccountSectionId = "user-info" | "my-access" | "delete-account";
@@ -58,6 +59,8 @@ function renderAccessDateTimeMobile(value: string | null) {
 }
 
 const formatAccessType = (value: BillingAccessState["currentAccessType"]) => {
+  if (freeAccessModeEnabled) return freeAccessModeLabel;
+
   switch (value) {
     case "trial_7d":
       return "Free Account";
@@ -219,7 +222,7 @@ export default function AccountPage() {
         activeNav="account"
         eyebrow="Account"
         title="Edit Profile"
-        subtitle="Manage your profile, account data and subscription history."
+        subtitle="Manage your profile, account data and access."
         variant="detail"
       />
     );
@@ -382,13 +385,14 @@ export default function AccountPage() {
     }
   };
 
-  const canOpenBillingPortal = Boolean(accessState);
+  const canOpenBillingPortal = Boolean(accessState) && !freeAccessModeEnabled;
 
   const canPurchasePass30 =
+    !freeAccessModeEnabled &&
     accessState?.currentAccessType === "pass_30d" &&
     accessState.currentAccessStatus !== "active";
 
-  const canChooseAccessType = accessState?.currentAccessType === "trial_7d";
+  const canChooseAccessType = !freeAccessModeEnabled && accessState?.currentAccessType === "trial_7d";
 
   const handleDeleteAccount = async () => {
     setDeleteModalOpen(true);
